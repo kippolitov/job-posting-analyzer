@@ -18,5 +18,5 @@
     }
   },
   "include": [".wxt/types/**", "**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "dist", ".output"]
+  "exclude": ["node_modules", "dist", "output"]
 }

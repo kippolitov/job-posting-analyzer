@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-const extensionPath = path.resolve(dirname, "../../.output/chrome-mv3");
+const extensionPath = path.resolve(dirname, "../../output/chrome-mv3");
 
 export const e2eEnabled = process.env.E2E === "1";
 

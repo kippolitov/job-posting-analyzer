@@ -13,7 +13,7 @@ export default defineConfig({
       reporter: ["text", "html", "lcov", "json-summary", "json"],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
       include: ["services/**", "components/**", "entrypoints/**", "types/**", "lib/**"],
-      exclude: ["node_modules", "tests", ".output"],
+      exclude: ["node_modules", "tests", "output"],
     },
   },
 });

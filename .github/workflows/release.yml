@@ -98,12 +98,12 @@ jobs:
       - name: Verify URL baked into zipped extension
         run: |
           echo "Checking all JS output files for guard string..."
-          if grep -rl 'not configured' extension/.output/chrome-mv3/; then
+          if grep -rl 'not configured' extension/output/chrome-mv3/; then
             echo "ERROR: URL guard string found — WXT_AZURE_FUNCTION_URL was empty during zip/build"
             exit 1
           fi
           echo "Checking background.js contains the function URL..."
-          if ! grep -q 'azurewebsites.net' extension/.output/chrome-mv3/background.js; then
+          if ! grep -q 'azurewebsites.net' extension/output/chrome-mv3/background.js; then
             echo "ERROR: Azure function URL not found in background.js after zip"
             exit 1
           fi
@@ -113,9 +113,9 @@ jobs:
         run: |
           ARCHIVE="job-posting-analyzer-v${{ env.VERSION }}.zip"
           FOLDER="chrome-mv3-v${{ env.VERSION }}"
-          cp -r extension/.output/chrome-mv3 "extension/.output/$FOLDER"
-          (cd extension/.output && 7za a -tzip "../../$ARCHIVE" "$FOLDER")
-          rm -rf "extension/.output/$FOLDER"
+          cp -r extension/output/chrome-mv3 "extension/output/$FOLDER"
+          (cd extension/output && 7za a -tzip "../../$ARCHIVE" "$FOLDER")
+          rm -rf "extension/output/$FOLDER"
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release in private repo
@@ -139,7 +139,7 @@ jobs:
           # $ARCHIVE above wraps it in a versioned folder for the releases
           # repo, so build a second, flat archive just for this upload.
           CWS_ARCHIVE="chrome-web-store-v${{ env.VERSION }}.zip"
-          (cd extension/.output/chrome-mv3 && 7za a -tzip "../../../$CWS_ARCHIVE" .)
+          (cd extension/output/chrome-mv3 && 7za a -tzip "../../../$CWS_ARCHIVE" .)
 
           npx --yes chrome-webstore-upload-cli@3 upload \
             --source "$CWS_ARCHIVE" \

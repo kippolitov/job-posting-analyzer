@@ -9,6 +9,9 @@ loadDotenv({ path: ".env", override: false });
 
 export default defineConfig({
   extensionApi: "chrome",
+  // No leading dot: Finder hides dot-directories by default, and this is
+  // the folder you actually browse to grab built zips.
+  outDir: "output",
   modules: ["@wxt-dev/module-react"],
   manifest: {
     name: "Job Posting Analyzer",
