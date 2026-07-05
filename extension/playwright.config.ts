@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-// E2e tests load the built extension (.output/chrome-mv3) into a persistent
+// E2e tests load the built extension (output/chrome-mv3) into a persistent
 // Chromium context via tests/e2e/fixtures.ts. They are opt-in: see the skip
 // message in fixtures.ts for the required env vars.
 export default defineConfig({

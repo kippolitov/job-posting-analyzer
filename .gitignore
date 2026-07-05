@@ -7,7 +7,7 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
-.output/
+output/
 .wxt/
 func-deploy.zip
 
