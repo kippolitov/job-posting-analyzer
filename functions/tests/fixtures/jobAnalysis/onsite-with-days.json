@@ -1,0 +1,16 @@
+{
+  "isJobPosting": true,
+  "title": "Manufacturing Engineer",
+  "company": "Initech",
+  "location": "Columbus, OH",
+  "arrangement": "onsite",
+  "arrangementConfidence": "explicit",
+  "arrangementEvidence": "This position is fully on-site at our Columbus plant",
+  "daysInOffice": 5,
+  "daysRemote": 0,
+  "remoteRestrictions": null,
+  "salary": null,
+  "seniority": "mid",
+  "techStack": [],
+  "fit": null
+}

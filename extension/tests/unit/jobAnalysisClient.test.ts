@@ -1,0 +1,171 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { postJobAnalysis } from "../../services/jobAnalysisClient";
+import type { JobAnalysis, PageExtract, JobPanelError } from "../../types/job";
+
+const extract: PageExtract = {
+  url: "https://boards.greenhouse.io/acme/jobs/123?gh_src=x",
+  canonicalUrl: "https://boards.greenhouse.io/acme/jobs/123",
+  title: "Senior Backend Engineer - Acme",
+  jsonLd: [{ "@type": "JobPosting", title: "Senior Backend Engineer" }],
+  mainText: "Hybrid, 3 days per week in our Austin office.",
+  extractedAt: "2026-07-04T12:00:00Z",
+};
+
+// Pinned to contracts/analyze-job.md — response example shape.
+const analysis: JobAnalysis = {
+  isJobPosting: true,
+  title: "Senior Backend Engineer",
+  company: "Acme",
+  location: "Austin, TX",
+  arrangement: "hybrid",
+  arrangementConfidence: "explicit",
+  arrangementEvidence: "Hybrid, 3 days per week in our Austin office",
+  daysInOffice: 3,
+  daysRemote: 2,
+  remoteRestrictions: null,
+  salary: { min: 180000, max: 220000, currency: "USD", period: "year" },
+  seniority: "senior",
+  techStack: ["C#", ".NET 8", "Azure"],
+  fit: null,
+  model: "gpt-4o-mini",
+  analyzedAt: "2026-07-04T12:00:04Z",
+};
+
+async function expectJobError(
+  promise: Promise<unknown>,
+  code: JobPanelError["code"],
+  retryable?: boolean
+): Promise<void> {
+  const err = (await promise.then(
+    () => {
+      throw new Error("expected rejection");
+    },
+    (e: unknown) => e
+  )) as JobPanelError;
+  expect(err.code).toBe(code);
+  expect(typeof err.message).toBe("string");
+  expect(typeof err.action).toBe("string");
+  if (retryable !== undefined) expect(err.retryable).toBe(retryable);
+}
+
+describe("jobAnalysisClient — postJobAnalysis", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal("WXT_AZURE_FUNCTION_URL", "http://localhost:7071/api/analyze-job");
+    vi.stubGlobal("WXT_AZURE_FUNCTION_KEY", "test-key");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("POSTs the extract to the configured endpoint and returns the analysis", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(analysis), { status: 200 })
+    );
+
+    await expect(postJobAnalysis({ extract })).resolves.toEqual(analysis);
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain("/api/analyze-job");
+    expect(String(url)).toContain("code=test-key");
+    const body = JSON.parse((init as RequestInit).body as string) as {
+      extract: PageExtract;
+      profile?: string;
+    };
+    expect(body.extract).toEqual(extract);
+    expect(body.profile).toBeUndefined();
+  });
+
+  it("includes profile and assumeJobPosting when provided", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(analysis), { status: 200 })
+    );
+
+    await postJobAnalysis({
+      extract,
+      profile: "Senior .NET engineer",
+      assumeJobPosting: true,
+    });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string
+    ) as Record<string, unknown>;
+    expect(body.profile).toBe("Senior .NET engineer");
+    expect(body.assumeJobPosting).toBe(true);
+  });
+
+  it("rejects with not-configured when no endpoint is available", async () => {
+    vi.stubGlobal("WXT_AZURE_FUNCTION_URL", "");
+    await expectJobError(postJobAnalysis({ extract }), "not-configured", false);
+  });
+
+  it("maps network failure to a retryable network-error", async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError("failed to fetch"));
+    await expectJobError(postJobAnalysis({ extract }), "network-error", true);
+  });
+
+  it("maps a 30s timeout abort to a retryable network-error", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          (init as RequestInit).signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError"))
+          );
+        })
+    );
+
+    const promise = postJobAnalysis({ extract });
+    const assertion = expectJobError(promise, "network-error", true);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await assertion;
+  });
+
+  it("maps 400 to a non-retryable unknown error", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: "INVALID_REQUEST", message: "bad" } }),
+        { status: 400 }
+      )
+    );
+    await expectJobError(postJobAnalysis({ extract }), "unknown", false);
+  });
+
+  it("maps 413 to a non-retryable extract-too-large error", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: "EXTRACT_TOO_LARGE", message: "too big" } }),
+        { status: 413 }
+      )
+    );
+    await expectJobError(postJobAnalysis({ extract }), "extract-too-large", false);
+  });
+
+  it("maps 502 schema failure to a retryable service-error", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: "SCHEMA_PARSE_FAILED", message: "bad output" } }),
+        { status: 502 }
+      )
+    );
+    await expectJobError(postJobAnalysis({ extract }), "service-error", true);
+  });
+
+  it("maps 504 upstream timeout to a retryable service-error", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: "UPSTREAM_TIMEOUT", message: "slow" } }),
+        { status: 504 }
+      )
+    );
+    await expectJobError(postJobAnalysis({ extract }), "service-error", true);
+  });
+
+  it("rejects a 200 response that fails the JobAnalysis shape check", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ nonsense: true }), { status: 200 })
+    );
+    await expectJobError(postJobAnalysis({ extract }), "service-error", true);
+  });
+});

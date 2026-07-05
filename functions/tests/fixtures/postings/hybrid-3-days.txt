@@ -1,0 +1,7 @@
+Senior Backend Engineer — Austin, TX
+
+About the role: We are looking for a senior backend engineer to join our platform team.
+This is a hybrid role: 3 days per week in our Austin office, 2 days remote.
+You will design and operate services in C# and .NET 8 on Azure. We use Kubernetes,
+Terraform, and PostgreSQL. Salary range: $180,000–$220,000 per year plus equity.
+Requirements: 5+ years of backend experience, strong distributed-systems fundamentals.

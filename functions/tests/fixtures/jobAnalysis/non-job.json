@@ -1,0 +1,16 @@
+{
+  "isJobPosting": false,
+  "title": null,
+  "company": null,
+  "location": null,
+  "arrangement": "unspecified",
+  "arrangementConfidence": "none",
+  "arrangementEvidence": null,
+  "daysInOffice": null,
+  "daysRemote": null,
+  "remoteRestrictions": null,
+  "salary": null,
+  "seniority": "unspecified",
+  "techStack": [],
+  "fit": null
+}

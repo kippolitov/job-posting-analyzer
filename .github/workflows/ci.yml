@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  extension-ci:
+    name: Extension CI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: extension
+
+      - name: Lint
+        run: npm run lint
+        working-directory: extension
+
+      - name: Unit tests
+        uses: ./.github/actions/unit-tests
+        with:
+          working-directory: extension
+          name: extension
+
+      - name: Build
+        env:
+          WXT_AZURE_FUNCTION_URL: ${{ secrets.AZURE_FUNCTION_URL || 'https://placeholder.example.com/api/analyze-job' }}
+          WXT_AZURE_FUNCTION_KEY: ${{ secrets.AZURE_FUNCTION_KEY || '' }}
+        run: npm run build
+        working-directory: extension
+
+  functions-ci:
+    name: Functions CI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: functions
+
+      - name: Lint
+        run: npm run lint
+        working-directory: functions
+
+      - name: Unit tests
+        uses: ./.github/actions/unit-tests
+        with:
+          working-directory: functions
+          name: functions
+          test-filter: tests/unit
+
+      - name: Build
+        run: npm run build
+        working-directory: functions

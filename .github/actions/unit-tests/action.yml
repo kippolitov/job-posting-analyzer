@@ -1,0 +1,65 @@
+name: Unit tests with reports
+description: >
+  Run Vitest unit tests with coverage, publish a test-results check run,
+  add a per-file coverage table to the job summary via vitest-coverage-report-action,
+  and upload the full reports as an artifact. Coverage is collected report-only:
+  thresholds are zeroed so the step fails on test failures, never on coverage.
+  (Local `npm run coverage` still enforces the configured thresholds.)
+
+inputs:
+  working-directory:
+    description: Package directory containing the vitest config
+    required: true
+  name:
+    description: Short package name used in report titles and artifact names
+    required: true
+  test-filter:
+    description: Optional positional path filter passed to vitest (e.g. tests/unit)
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+
+    - name: Unit tests with coverage
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        npx vitest run ${{ inputs.test-filter }} \
+          --coverage \
+          --coverage.thresholds.lines=0 \
+          --coverage.thresholds.functions=0 \
+          --coverage.thresholds.branches=0 \
+          --coverage.thresholds.statements=0 \
+          --reporter=default \
+          --reporter=junit \
+          --outputFile.junit=test-results/junit.xml
+
+    # Publishes a check run with the per-test breakdown; runs even when
+    # tests fail so the failures are browsable in the UI.
+    - name: Publish test results
+      if: ${{ !cancelled() }}
+      uses: dorny/test-reporter@v1
+      with:
+        name: ${{ inputs.name }} unit tests
+        path: ${{ inputs.working-directory }}/test-results/junit.xml
+        reporter: java-junit
+
+    - name: Add coverage report to job summary
+      if: ${{ !cancelled() }}
+      uses: davelosert/vitest-coverage-report-action@v2
+      with:
+        name: ${{ inputs.name }}
+        json-summary-path: ${{ inputs.working-directory }}/coverage/coverage-summary.json
+        json-final-path: ${{ inputs.working-directory }}/coverage/coverage-final.json
+
+    - name: Upload test and coverage reports
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.name }}-test-coverage-reports
+        retention-days: 30
+        path: |
+          ${{ inputs.working-directory }}/coverage
+          ${{ inputs.working-directory }}/test-results

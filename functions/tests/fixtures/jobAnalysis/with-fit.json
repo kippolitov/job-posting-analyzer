@@ -1,0 +1,19 @@
+{
+  "isJobPosting": true,
+  "title": "Staff .NET Engineer",
+  "company": "Umbrella",
+  "location": "Remote",
+  "arrangement": "remote",
+  "arrangementConfidence": "explicit",
+  "arrangementEvidence": "Fully remote within the United States",
+  "daysInOffice": null,
+  "daysRemote": null,
+  "remoteRestrictions": "US only",
+  "salary": { "min": 200000, "max": 245000, "currency": "USD", "period": "year" },
+  "seniority": "staff",
+  "techStack": ["C#", ".NET", "Azure"],
+  "fit": {
+    "score": 88,
+    "rationale": "Strong match on .NET and Azure at staff level; fully remote satisfies your no-onsite dealbreaker."
+  }
+}

@@ -1,0 +1,6 @@
+Manufacturing Software Engineer
+
+Join our controls team at the Columbus plant. This role is fully on-site — you will
+work directly with the production line five days a week. You will maintain PLC
+integrations and build monitoring dashboards in Python. Relocation assistance
+available. 3+ years experience with industrial automation preferred.
