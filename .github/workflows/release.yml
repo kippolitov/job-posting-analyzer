@@ -27,6 +27,10 @@ jobs:
       pull-requests: write
     env:
       TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
     steps:
 
       - uses: actions/checkout@v4
@@ -123,6 +127,32 @@ jobs:
             --title "$TAG_NAME" \
             --notes "Built from ${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
             "${{ env.ARCHIVE }}"
+
+      # Skipped until CHROME_EXTENSION_ID etc. are set as repo secrets — the
+      # one-time Chrome Web Store prerequisites are an initial manual listing
+      # (for the item ID) and a Google Cloud OAuth client + refresh token with
+      # the chromewebstore scope.
+      - name: Publish to Chrome Web Store
+        if: env.CHROME_EXTENSION_ID != ''
+        run: |
+          # The Chrome Web Store API requires manifest.json at the zip root;
+          # $ARCHIVE above wraps it in a versioned folder for the releases
+          # repo, so build a second, flat archive just for this upload.
+          CWS_ARCHIVE="chrome-web-store-v${{ env.VERSION }}.zip"
+          (cd extension/.output/chrome-mv3 && 7za a -tzip "../../../$CWS_ARCHIVE" .)
+
+          npx --yes chrome-webstore-upload-cli@3 upload \
+            --source "$CWS_ARCHIVE" \
+            --extension-id "$CHROME_EXTENSION_ID" \
+            --client-id "$CHROME_CLIENT_ID" \
+            --client-secret "$CHROME_CLIENT_SECRET" \
+            --refresh-token "$CHROME_REFRESH_TOKEN"
+
+          npx --yes chrome-webstore-upload-cli@3 publish \
+            --extension-id "$CHROME_EXTENSION_ID" \
+            --client-id "$CHROME_CLIENT_ID" \
+            --client-secret "$CHROME_CLIENT_SECRET" \
+            --refresh-token "$CHROME_REFRESH_TOKEN"
 
   # NOTE: e2e tests intentionally do not run here — run them locally before
   # releasing: cd extension; $env:E2E='1'; npm run test:e2e
