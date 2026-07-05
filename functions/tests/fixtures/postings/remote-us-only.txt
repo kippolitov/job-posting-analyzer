@@ -1,0 +1,7 @@
+Staff Software Engineer, Data Platform
+
+This position is fully remote for candidates located in the United States.
+We are building a streaming data platform in Go and Rust on AWS. You will lead design
+reviews, mentor engineers, and own reliability for ingestion pipelines processing
+billions of events per day. Compensation: $200k–$245k base. We offer flexible hours
+and a home-office stipend. US work authorization required.

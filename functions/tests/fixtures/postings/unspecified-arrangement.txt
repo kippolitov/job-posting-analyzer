@@ -1,0 +1,6 @@
+Full Stack Developer
+
+We are a fast-growing fintech startup seeking a full stack developer to build
+customer-facing features. Our stack is TypeScript, React, Node.js, and PostgreSQL.
+You will ship end-to-end features, participate in code review, and help shape our
+engineering culture. Competitive salary and meaningful equity. Series B, 80 people.

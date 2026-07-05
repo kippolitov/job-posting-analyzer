@@ -1,0 +1,26 @@
+[
+  {
+    "file": "hybrid-3-days.txt",
+    "expected": { "arrangement": "hybrid", "daysInOffice": 3, "stated": true }
+  },
+  {
+    "file": "remote-us-only.txt",
+    "expected": { "arrangement": "remote", "daysInOffice": null, "stated": true }
+  },
+  {
+    "file": "onsite-explicit.txt",
+    "expected": { "arrangement": "onsite", "daysInOffice": null, "stated": true }
+  },
+  {
+    "file": "unspecified-arrangement.txt",
+    "expected": { "arrangement": "unspecified", "daysInOffice": null, "stated": false }
+  },
+  {
+    "file": "hybrid-2-days-inferred.txt",
+    "expected": { "arrangement": "hybrid", "daysInOffice": 2, "stated": false }
+  },
+  {
+    "file": "remote-restricted-timezone.txt",
+    "expected": { "arrangement": "remote", "daysInOffice": null, "stated": true }
+  }
+]

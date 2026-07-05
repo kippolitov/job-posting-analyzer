@@ -1,0 +1,16 @@
+{
+  "isJobPosting": true,
+  "title": "Platform Engineer",
+  "company": "Globex",
+  "location": "Denver, CO",
+  "arrangement": "remote",
+  "arrangementConfidence": "explicit",
+  "arrangementEvidence": "this role is 100% remote forever",
+  "daysInOffice": null,
+  "daysRemote": 5,
+  "remoteRestrictions": "US only",
+  "salary": null,
+  "seniority": "mid",
+  "techStack": ["Go", "Terraform"],
+  "fit": null
+}

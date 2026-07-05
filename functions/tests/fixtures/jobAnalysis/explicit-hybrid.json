@@ -1,0 +1,16 @@
+{
+  "isJobPosting": true,
+  "title": "Senior Backend Engineer",
+  "company": "Acme",
+  "location": "Austin, TX",
+  "arrangement": "hybrid",
+  "arrangementConfidence": "explicit",
+  "arrangementEvidence": "hybrid, 3 days per week in our Austin office",
+  "daysInOffice": 3,
+  "daysRemote": 2,
+  "remoteRestrictions": null,
+  "salary": { "min": 180000, "max": 220000, "currency": "USD", "period": "year" },
+  "seniority": "senior",
+  "techStack": ["C#", ".NET 8", "Azure", "Kubernetes"],
+  "fit": null
+}

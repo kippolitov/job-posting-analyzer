@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to release (e.g. v1.2.3)'
+        required: true
+
+concurrency:
+  group: release-${{ inputs.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Build and Release Extension
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    env:
+      TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag_name || github.ref_name }}
+
+      - name: Validate version matches tag
+        run: |
+          PKG_VERSION=$(jq -r '.version' extension/package.json)
+          TAG_VERSION="${TAG_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "ERROR: package.json version ($PKG_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "VERSION=$PKG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Check for duplicate release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          if gh release view "$TAG_NAME" --repo kippolitov/job-posting-analyzer-releases &>/dev/null; then
+            echo "ERROR: GitHub Release $TAG_NAME already exists in job-posting-analyzer-releases"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: extension
+
+      - name: Lint
+        run: npm run lint
+        working-directory: extension
+
+      - name: Unit tests
+        uses: ./.github/actions/unit-tests
+        with:
+          working-directory: extension
+          name: extension
+
+      - name: Verify required secrets
+        run: |
+          if [ -z "${{ secrets.AZURE_FUNCTION_URL }}" ]; then
+            echo "ERROR: AZURE_FUNCTION_URL secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.RELEASES_REPO_TOKEN }}" ]; then
+            echo "ERROR: RELEASES_REPO_TOKEN secret is not set"
+            exit 1
+          fi
+
+      - name: Build extension
+        env:
+          WXT_AZURE_FUNCTION_URL: ${{ secrets.AZURE_FUNCTION_URL }}
+          WXT_AZURE_FUNCTION_KEY: ${{ secrets.AZURE_FUNCTION_KEY }}
+        run: npm run build
+        working-directory: extension
+
+      - name: Verify URL baked into zipped extension
+        run: |
+          echo "Checking all JS output files for guard string..."
+          if grep -rl 'not configured' extension/.output/chrome-mv3/; then
+            echo "ERROR: URL guard string found — WXT_AZURE_FUNCTION_URL was empty during zip/build"
+            exit 1
+          fi
+          echo "Checking background.js contains the function URL..."
+          if ! grep -q 'azurewebsites.net' extension/.output/chrome-mv3/background.js; then
+            echo "ERROR: Azure function URL not found in background.js after zip"
+            exit 1
+          fi
+          echo "OK: URL correctly baked in after zip rebuild"
+
+      - name: Create archive
+        run: |
+          ARCHIVE="job-posting-analyzer-v${{ env.VERSION }}.zip"
+          FOLDER="chrome-mv3-v${{ env.VERSION }}"
+          cp -r extension/.output/chrome-mv3 "extension/.output/$FOLDER"
+          (cd extension/.output && 7za a -tzip "../../$ARCHIVE" "$FOLDER")
+          rm -rf "extension/.output/$FOLDER"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release in private repo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --repo kippolitov/job-posting-analyzer-releases \
+            --title "$TAG_NAME" \
+            --notes "Built from ${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+            "${{ env.ARCHIVE }}"
+
+  # NOTE: e2e tests intentionally do not run here — run them locally before
+  # releasing: cd extension; $env:E2E='1'; npm run test:e2e
