@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Job Posting Analyzer</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 720px; margin: 0 auto; padding: 48px 24px 96px; color: #1f2937; line-height: 1.65; }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  .updated { color: #6b7280; font-size: 14px; margin-bottom: 40px; }
+  h2 { font-size: 18px; margin-top: 40px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+  ul { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  a { color: #4f46e5; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy — Job Posting Analyzer</h1>
+<p class="updated">Last updated: July 5, 2026</p>
+
+<p>Job Posting Analyzer ("the extension") is a Chrome extension that analyzes job postings for work arrangement, salary, seniority, tech stack, and fit. This page explains what data the extension handles, how it's used, and what choices you have.</p>
+
+<h2>What the extension accesses</h2>
+<p>The extension only reads the page you're actively viewing, and only after you click its toolbar icon (via Chrome's <code>activeTab</code> permission) — it never reads pages in the background and never requests broad access to your browsing.</p>
+<p>When you analyze a page, the extension reads:</p>
+<ul>
+  <li>The page's visible text and any embedded structured job-posting data (schema.org <code>JobPosting</code> JSON-LD)</li>
+  <li>Your candidate profile, if you've chosen to set one up in the extension's options page — a free-text summary of your background and any dealbreakers you specify</li>
+</ul>
+
+<h2>How that data is used</h2>
+<p>The page content (and your candidate profile, if configured) is sent to a backend service (an Azure Function that we operate), which calls Azure OpenAI to extract structured fields — work arrangement, salary, seniority, tech stack — and, if a profile is present, a fit score with a short rationale. This data is processed only to produce that analysis and is not used for any other purpose — not advertising, not profiling, not resale.</p>
+
+<h2>What is stored, and where</h2>
+<ul>
+  <li><strong>In your browser only:</strong>
+    <ul>
+      <li>Your candidate profile is stored in <code>chrome.storage.local</code> and never leaves your browser except as part of an analysis request you initiate.</li>
+      <li>Postings you explicitly save (via the "Save" action) are stored in <code>chrome.storage.local</code> — including the analysis snapshot, your status labels, and any notes you add — until you delete them or export/clear your library.</li>
+      <li>Recent (unsaved) analyses are cached in <code>chrome.storage.session</code>, which Chrome automatically clears when you close the browser.</li>
+      <li>Your theme preference is kept in <code>localStorage</code> until changed or cleared.</li>
+    </ul>
+  </li>
+  <li><strong>On our servers:</strong> nothing is persisted after your request completes. Our backend is a stateless API with no database — page content and profile text are processed in memory to generate a response and then discarded. Standard operational telemetry (request counts, latency, errors) is collected via Azure Application Insights to keep the service running, but this does not include the content of the pages or profiles you submit.</li>
+</ul>
+
+<h2>Third parties</h2>
+<p>The only third-party processor involved is <a href="https://www.microsoft.com/en-us/trust-center/privacy" target="_blank" rel="noopener">Microsoft Azure OpenAI Service</a>, which processes the content described above to generate responses, under Microsoft's own enterprise data handling commitments. We do not use advertising networks, analytics trackers, or any service that profiles or resells your data. We do not sell your data to anyone, under any circumstances.</p>
+
+<h2>Permissions the extension requests</h2>
+<ul>
+  <li><code>activeTab</code> / <code>scripting</code> — to read the content of the page you're actively viewing, only when you click the toolbar icon</li>
+  <li><code>storage</code> — to store your saved job postings, candidate profile, and cached analyses locally in your browser</li>
+  <li><code>sidePanel</code> — to display the extension's UI in Chrome's side panel</li>
+</ul>
+
+<h2>Your choices and control over your data</h2>
+<p>Everything the extension retains beyond a single session lives in your browser, under your control:</p>
+<ul>
+  <li><strong>Export</strong> your entire saved library as a JSON file at any time from the Saved tab.</li>
+  <li><strong>Delete</strong> individual saved postings, or prune archived ones in bulk.</li>
+  <li><strong>Clear your candidate profile</strong> at any time from the options page.</li>
+  <li><strong>Remove everything</strong> by clearing the extension's site data in Chrome settings, or by uninstalling the extension.</li>
+</ul>
+
+<h2>Children's privacy</h2>
+<p>The extension is not directed at children under 13 and does not knowingly collect data from them.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy changes, the updated version will be posted at this same URL with a new "Last updated" date.</p>
+
+<h2>Contact</h2>
+<p>Questions or requests can be filed as an issue at <a href="https://github.com/kippolitov/job-posting-analyzer/issues" target="_blank" rel="noopener">github.com/kippolitov/job-posting-analyzer/issues</a>.</p>
+</body>
+</html>
