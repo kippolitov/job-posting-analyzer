@@ -111,6 +111,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download extension coverage
         uses: actions/download-artifact@v4
         with:
@@ -123,14 +125,25 @@ jobs:
           name: functions-test-coverage-reports
           path: pages/functions
 
+      - name: Copy legal pages
+        run: |
+          mkdir -p pages/legal
+          cp docs/legal/privacy-policy.html pages/legal/
+          cp docs/legal/terms.html pages/legal/
+
       - name: Create index page
         run: |
           cat > pages/index.html << 'EOF'
           <!DOCTYPE html>
           <html>
-          <head><meta charset="utf-8"><title>Coverage Reports</title></head>
+          <head><meta charset="utf-8"><title>Job Posting Analyzer</title></head>
           <body>
-            <h1>Coverage Reports</h1>
+            <h1>Job Posting Analyzer</h1>
+            <ul>
+              <li><a href="legal/privacy-policy.html">Privacy Policy</a></li>
+              <li><a href="legal/terms.html">Terms of Service</a></li>
+            </ul>
+            <h2>Coverage Reports</h2>
             <ul>
               <li><a href="extension/coverage/">Extension</a></li>
               <li><a href="functions/coverage/">Functions</a></li>
