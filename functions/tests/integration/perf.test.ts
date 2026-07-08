@@ -84,7 +84,9 @@ describe("performance budgets (Azurite-backed)", () => {
       expect(res.status).toBe(200);
     }
     const p95Ms = p95(samples);
-    console.log(`auth middleware warm p95: ${p95Ms.toFixed(2)} ms over ${RUNS} runs`);
+    // console.warn (not .log): the repo's no-console lint rule only allows
+    // warn/error, and this budget readout is intentionally surfaced in CI logs.
+    console.warn(`auth middleware warm p95: ${p95Ms.toFixed(2)} ms over ${RUNS} runs`);
     expect(p95Ms).toBeLessThanOrEqual(100);
   }, 60_000);
 
@@ -115,7 +117,7 @@ describe("performance budgets (Azurite-backed)", () => {
       );
     }
     const p95Ms = p95(samples);
-    console.log(
+    console.warn(
       `1,000-record list p95: ${p95Ms.toFixed(2)} ms over 10 runs (incl. auth)`
     );
     expect(p95Ms).toBeLessThanOrEqual(1_500);
