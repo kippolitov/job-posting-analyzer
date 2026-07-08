@@ -62,6 +62,8 @@ jobs:
         env:
           WXT_AZURE_FUNCTION_URL: ${{ secrets.AZURE_FUNCTION_URL }}
           WXT_AZURE_FUNCTION_KEY: ${{ secrets.AZURE_FUNCTION_KEY }}
+          WXT_API_BASE_URL: ${{ secrets.WXT_API_BASE_URL }}
+          WXT_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.WXT_GOOGLE_OAUTH_CLIENT_ID }}
         run: npm run build
         working-directory: extension
 

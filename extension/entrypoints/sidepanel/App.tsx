@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AuthGate } from "../../components/AuthGate";
 import { JobPanel } from "../../components/JobPanel/JobPanel";
 import { useTheme } from "../../hooks/useTheme";
 import { MessageType } from "../../types/messages";
@@ -93,13 +94,15 @@ export function App() {
         </button>
       </header>
 
-      {tabId !== undefined && (
-        <JobPanel
-          tabId={tabId}
-          navigationId={navigationId}
-          analyzeNonce={analyzeNonce}
-        />
-      )}
+      <AuthGate>
+        {tabId !== undefined && (
+          <JobPanel
+            tabId={tabId}
+            navigationId={navigationId}
+            analyzeNonce={analyzeNonce}
+          />
+        )}
+      </AuthGate>
     </main>
   );
 }

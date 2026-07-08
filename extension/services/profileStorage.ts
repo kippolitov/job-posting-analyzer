@@ -1,33 +1,49 @@
 import type { CandidateProfile } from "../types/job";
-
-const PROFILE_KEY = "profile";
+import { ApiError, apiFetch } from "./api/apiClient";
 
 export const PROFILE_TEXT_MAX = 4_000;
 
+/**
+ * Candidate-profile storage. Same exported functions as the original
+ * chrome.storage.local implementation — since 002 the profile lives in the
+ * per-account server store (contracts/storage-api.md) and follows the
+ * signed-in user across devices.
+ */
+
+async function throwUnexpected(response: Response): Promise<never> {
+  let message = "The storage service rejected the request.";
+  try {
+    const body = (await response.json()) as { error?: { message?: string } };
+    if (body.error?.message) message = body.error.message;
+  } catch {
+    // Keep the generic message.
+  }
+  throw new ApiError(response.status, "SERVICE_ERROR", message, false);
+}
+
 export async function getProfile(): Promise<CandidateProfile | null> {
-  const data = await chrome.storage.local.get(PROFILE_KEY);
-  const profile = data[PROFILE_KEY] as CandidateProfile | undefined;
-  return profile && profile.text.length > 0 ? profile : null;
+  const response = await apiFetch("/profile");
+  if (response.status === 404) return null;
+  if (!response.ok) await throwUnexpected(response);
+  const profile = (await response.json()) as CandidateProfile;
+  return profile.text.length > 0 ? profile : null;
 }
 
 export async function setProfile(input: {
   text: string;
   dealbreakers: string[];
 }): Promise<CandidateProfile> {
-  const profile: CandidateProfile = {
-    text: input.text.slice(0, PROFILE_TEXT_MAX),
-    dealbreakers: input.dealbreakers.map((d) => d.trim()).filter(Boolean),
-    updatedAt: new Date().toISOString(),
-  };
-  await chrome.storage.local.set({ [PROFILE_KEY]: profile });
-  return profile;
+  const response = await apiFetch("/profile", { method: "PUT", body: input });
+  if (!response.ok) await throwUnexpected(response);
+  return (await response.json()) as CandidateProfile;
 }
 
 export async function clearProfile(): Promise<void> {
-  await chrome.storage.local.remove(PROFILE_KEY);
+  const response = await apiFetch("/profile", { method: "DELETE" });
+  if (!response.ok && response.status !== 204) await throwUnexpected(response);
 }
 
-/** Serialized form sent with analysis requests (FR-007: transmitted only there). */
+/** Serialized form sent with analysis requests (unchanged; pure function). */
 export function profileToPromptText(profile: CandidateProfile): string {
   if (profile.dealbreakers.length === 0) return profile.text;
   return `${profile.text}\n\nDealbreakers:\n${profile.dealbreakers

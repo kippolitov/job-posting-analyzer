@@ -8,18 +8,24 @@
     "build:production": "npm run build && func pack",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run --reporter=verbose tests/unit",
+    "test:integration": "vitest run --reporter=verbose tests/integration",
+    "azurite": "azurite-table --location .azurite --silent",
+    "allowed-users": "tsx scripts/manage-allowed-users.ts",
     "eval:postings": "npx tsx scripts/evalPostings.ts",
     "coverage": "vitest run --coverage"
   },
   "main": "dist/src/index.js",
   "dependencies": {
+    "@azure/data-tables": "^13.2.2",
     "@azure/functions": "^4.3.0",
+    "google-auth-library": "^9.11.0",
     "openai": "^6.42.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.13.1",
     "@typescript-eslint/parser": "^7.13.1",
     "@vitest/coverage-v8": "^1.6.0",
+    "azurite": "^3.35.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "msw": "^2.3.1",

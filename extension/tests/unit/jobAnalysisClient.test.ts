@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { postJobAnalysis } from "../../services/jobAnalysisClient";
+import {
+  getIdToken,
+  markNotAuthorized,
+  signInSilently,
+  signOut,
+} from "../../services/auth/authService";
 import type { JobAnalysis, PageExtract, JobPanelError } from "../../types/job";
+
+vi.mock("../../services/auth/authService", () => ({
+  getIdToken: vi.fn().mockResolvedValue("test-id-token"),
+  signInSilently: vi.fn().mockResolvedValue(null),
+  signOut: vi.fn().mockResolvedValue(undefined),
+  markNotAuthorized: vi.fn().mockResolvedValue(undefined),
+}));
 
 const extract: PageExtract = {
   url: "https://boards.greenhouse.io/acme/jobs/123?gh_src=x",
@@ -53,6 +66,10 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
     vi.stubGlobal("fetch", vi.fn());
     vi.stubGlobal("WXT_AZURE_FUNCTION_URL", "http://localhost:7071/api/analyze-job");
     vi.stubGlobal("WXT_AZURE_FUNCTION_KEY", "test-key");
+    vi.mocked(getIdToken).mockReset().mockResolvedValue("test-id-token");
+    vi.mocked(signInSilently).mockReset().mockResolvedValue(null);
+    vi.mocked(signOut).mockClear();
+    vi.mocked(markNotAuthorized).mockClear();
   });
 
   afterEach(() => {
@@ -76,6 +93,61 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
     };
     expect(body.extract).toEqual(extract);
     expect(body.profile).toBeUndefined();
+  });
+
+  it("attaches the Google ID token as a Bearer Authorization header", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(analysis), { status: 200 })
+    );
+    await postJobAnalysis({ extract });
+    const init = vi.mocked(fetch).mock.calls[0]![1] as RequestInit;
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      "Bearer test-id-token"
+    );
+  });
+
+  it("on 401: renews silently once, retries, and succeeds with the new token", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED" } }), {
+          status: 401,
+        })
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(analysis), { status: 200 }));
+    vi.mocked(signInSilently).mockResolvedValue({
+      idToken: "renewed-token",
+      expiresAt: Date.now() + 3600_000,
+      signedInAt: Date.now(),
+      user: { sub: "s", email: "e@example.com" },
+    });
+
+    await expect(postJobAnalysis({ extract })).resolves.toEqual(analysis);
+    expect(signInSilently).toHaveBeenCalledTimes(1);
+    const retryInit = vi.mocked(fetch).mock.calls[1]![1] as RequestInit;
+    expect((retryInit.headers as Record<string, string>).Authorization).toBe(
+      "Bearer renewed-token"
+    );
+  });
+
+  it("on 401 with failed renewal: signs out and reports a session-ended error", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "UNAUTHENTICATED" } }), {
+        status: 401,
+      })
+    );
+    await expectJobError(postJobAnalysis({ extract }), "no-access", false);
+    expect(signOut).toHaveBeenCalled();
+  });
+
+  it("on 403: marks the session not-authorized and reports the invitation error", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "NOT_AUTHORIZED" } }), {
+        status: 403,
+      })
+    );
+    await expectJobError(postJobAnalysis({ extract }), "no-access", false);
+    expect(markNotAuthorized).toHaveBeenCalled();
+    expect(signInSilently).not.toHaveBeenCalled();
   });
 
   it("includes profile and assumeJobPosting when provided", async () => {

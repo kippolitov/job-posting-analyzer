@@ -1,5 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { isAnalyzeJobRequest, MAIN_TEXT_CAP } from "../models/job";
+import type { AuthenticatedUser } from "../models/user";
+import { withAuth } from "../services/auth";
 import {
   orchestrateJobAnalysis,
   JobSchemaError,
@@ -7,7 +9,8 @@ import {
 
 export async function analyzeJobHandler(
   request: HttpRequest,
-  context: InvocationContext
+  context: InvocationContext,
+  _user: AuthenticatedUser
 ): Promise<HttpResponseInit> {
   if (request.method === "OPTIONS") {
     return { status: 204, headers: corsHeaders() };
@@ -70,7 +73,7 @@ function corsHeaders(): Record<string, string> {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, x-functions-key",
+    "Access-Control-Allow-Headers": "Content-Type, x-functions-key, Authorization",
   };
 }
 
@@ -78,7 +81,7 @@ app.http("analyze-job", {
   methods: ["POST"],
   authLevel: "function",
   route: "analyze-job",
-  handler: analyzeJobHandler,
+  handler: withAuth(analyzeJobHandler),
 });
 
 app.http("analyze-job-preflight", {

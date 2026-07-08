@@ -17,7 +17,7 @@ export default defineConfig({
     name: "Job Posting Analyzer",
     description:
       "Analyzes job postings for work arrangement, salary, seniority, tech stack, and fit",
-    permissions: ["sidePanel", "storage", "scripting", "activeTab"],
+    permissions: ["sidePanel", "storage", "scripting", "activeTab", "identity"],
     // Localhost: lets the Playwright e2e suite exercise page extraction
     // (it cannot perform the action click that grants activeTab).
     host_permissions: ["http://localhost/*", "http://127.0.0.1/*"],
@@ -33,6 +33,10 @@ export default defineConfig({
       ),
       WXT_AZURE_FUNCTION_KEY: JSON.stringify(
         process.env.WXT_AZURE_FUNCTION_KEY ?? ""
+      ),
+      WXT_API_BASE_URL: JSON.stringify(process.env.WXT_API_BASE_URL ?? ""),
+      WXT_GOOGLE_OAUTH_CLIENT_ID: JSON.stringify(
+        process.env.WXT_GOOGLE_OAUTH_CLIENT_ID ?? ""
       ),
     },
   }),
