@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import type { HttpRequest, InvocationContext } from "@azure/functions";
 import { analyzeJobHandler } from "../../src/analyze-job/index";
+import { withAuth } from "../../src/services/auth";
 import { JobSchemaError } from "../../src/services/jobExtractionOrchestrator";
 import { orchestrateJobAnalysis } from "../../src/services/jobExtractionOrchestrator";
 
@@ -35,6 +36,8 @@ function makeContext(): InvocationContext {
   } as unknown as InvocationContext;
 }
 
+const testUser = { sub: "test-sub", email: "user@example.com" };
+
 const validBody = {
   extract: {
     url: "https://example.com/jobs/1",
@@ -52,21 +55,22 @@ describe("analyze-job handler", () => {
   });
 
   it("returns 204 for OPTIONS preflight", async () => {
-    const res = await analyzeJobHandler(makeRequest(null, "OPTIONS"), makeContext());
+    const res = await analyzeJobHandler(makeRequest(null, "OPTIONS"), makeContext(), testUser);
     expect(res.status).toBe(204);
   });
 
   it("returns 400 INVALID_REQUEST for non-JSON bodies", async () => {
     const res = await analyzeJobHandler(
       makeRequest(new Error("bad json")),
-      makeContext()
+      makeContext(),
+      testUser
     );
     expect(res.status).toBe(400);
     expect(res.jsonBody).toMatchObject({ error: { code: "INVALID_REQUEST" } });
   });
 
   it("returns 400 INVALID_REQUEST when extract is missing or malformed", async () => {
-    const res = await analyzeJobHandler(makeRequest({ profile: "x" }), makeContext());
+    const res = await analyzeJobHandler(makeRequest({ profile: "x" }), makeContext(), testUser);
     expect(res.status).toBe(400);
     expect(res.jsonBody).toMatchObject({ error: { code: "INVALID_REQUEST" } });
   });
@@ -76,7 +80,8 @@ describe("analyze-job handler", () => {
       makeRequest({
         extract: { ...validBody.extract, mainText: "x".repeat(40_001) },
       }),
-      makeContext()
+      makeContext(),
+      testUser
     );
     expect(res.status).toBe(413);
     expect(res.jsonBody).toMatchObject({ error: { code: "EXTRACT_TOO_LARGE" } });
@@ -89,7 +94,7 @@ describe("analyze-job handler", () => {
       analyzedAt: "2026-07-04T12:00:04Z",
     } as never);
 
-    const res = await analyzeJobHandler(makeRequest(validBody), makeContext());
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), testUser);
     expect(res.status).toBe(200);
     expect(res.jsonBody).toMatchObject({ arrangement: "hybrid", daysInOffice: 3 });
   });
@@ -103,7 +108,8 @@ describe("analyze-job handler", () => {
 
     await analyzeJobHandler(
       makeRequest({ ...validBody, profile: "P", assumeJobPosting: true }),
-      makeContext()
+      makeContext(),
+      testUser
     );
     expect(vi.mocked(orchestrateJobAnalysis)).toHaveBeenCalledWith(
       expect.objectContaining({ profile: "P", assumeJobPosting: true }),
@@ -115,15 +121,32 @@ describe("analyze-job handler", () => {
     vi.mocked(orchestrateJobAnalysis).mockRejectedValue(
       new JobSchemaError("model output failed schema")
     );
-    const res = await analyzeJobHandler(makeRequest(validBody), makeContext());
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), testUser);
     expect(res.status).toBe(502);
     expect(res.jsonBody).toMatchObject({ error: { code: "SCHEMA_PARSE_FAILED" } });
   });
 
   it("maps unexpected orchestrator errors to 500 SERVICE_ERROR", async () => {
     vi.mocked(orchestrateJobAnalysis).mockRejectedValue(new Error("boom"));
-    const res = await analyzeJobHandler(makeRequest(validBody), makeContext());
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), testUser);
     expect(res.status).toBe(500);
     expect(res.jsonBody).toMatchObject({ error: { code: "SERVICE_ERROR" } });
+  });
+
+  it("rejects unauthenticated requests before the orchestrator when wrapped in withAuth", async () => {
+    process.env.REQUIRE_AUTH = "true";
+    try {
+      const wrapped = withAuth(analyzeJobHandler);
+      const request = {
+        ...makeRequest(validBody),
+        headers: { get: () => null },
+      } as unknown as HttpRequest;
+      const res = await wrapped(request, makeContext());
+      expect(res.status).toBe(401);
+      expect(res.jsonBody).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
+      expect(vi.mocked(orchestrateJobAnalysis)).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.REQUIRE_AUTH;
+    }
   });
 });

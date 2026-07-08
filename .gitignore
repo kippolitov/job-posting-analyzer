@@ -8,8 +8,12 @@ yarn-error.log*
 dist/
 build/
 output/
+.output/
 .wxt/
 func-deploy.zip
+
+# Azurite table-emulator workspace
+.azurite/
 
 # Env files (contain secrets)
 .env
