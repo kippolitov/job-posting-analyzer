@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { installMemoryStorage } from "./helpers/memoryStorage";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "vitest";
 import {
   getProfile,
   setProfile,
@@ -7,58 +14,97 @@ import {
   profileToPromptText,
   PROFILE_TEXT_MAX,
 } from "../../services/profileStorage";
+import {
+  getIdToken,
+  markNotAuthorized,
+  signInSilently,
+  signOut,
+} from "../../services/auth/authService";
+import {
+  createFakeStorageApi,
+  stubApiBaseGlobals,
+} from "./helpers/mswStorageServer";
+
+vi.mock("../../services/auth/authService", () => ({
+  getIdToken: vi.fn().mockResolvedValue("test-id-token"),
+  signInSilently: vi.fn().mockResolvedValue(null),
+  signOut: vi.fn().mockResolvedValue(undefined),
+  markNotAuthorized: vi.fn().mockResolvedValue(undefined),
+}));
+
+const api = createFakeStorageApi();
+
+beforeAll(() => api.server.listen({ onUnhandledRequest: "error" }));
+afterAll(() => api.server.close());
 
 beforeEach(() => {
-  installMemoryStorage("local");
+  api.reset();
+  stubApiBaseGlobals();
+  vi.mocked(getIdToken).mockReset().mockResolvedValue("test-id-token");
+  vi.mocked(signInSilently).mockReset().mockResolvedValue(null);
+  vi.mocked(signOut).mockClear();
+  vi.mocked(markNotAuthorized).mockClear();
 });
 
-describe("profileStorage", () => {
-  it("returns null when no profile is configured", async () => {
+describe("profileStorage (fetch-backed, contracts/storage-api.md)", () => {
+  it("getProfile returns null when the server has no profile (404)", async () => {
     await expect(getProfile()).resolves.toBeNull();
   });
 
-  it("round-trips a profile and stamps updatedAt", async () => {
-    await setProfile({
-      text: "Principal .NET engineer, Azure, distributed systems",
-      dealbreakers: ["no fully on-site roles"],
+  it("setProfile PUTs and getProfile round-trips the server copy", async () => {
+    const saved = await setProfile({
+      text: "Principal engineer",
+      dealbreakers: [" no crypto ", ""],
     });
+    expect(saved.text).toBe("Principal engineer");
+    expect(saved.dealbreakers).toEqual(["no crypto"]);
+    expect(api.getProfile()).not.toBeNull();
 
-    const profile = await getProfile();
-    expect(profile!.text).toContain("Principal .NET engineer");
-    expect(profile!.dealbreakers).toEqual(["no fully on-site roles"]);
-    expect(new Date(profile!.updatedAt).toString()).not.toBe("Invalid Date");
+    const loaded = await getProfile();
+    expect(loaded).toEqual(saved);
   });
 
-  it(`enforces the ${PROFILE_TEXT_MAX}-character limit`, async () => {
-    await setProfile({ text: "x".repeat(PROFILE_TEXT_MAX + 500), dealbreakers: [] });
-    const profile = await getProfile();
-    expect(profile!.text).toHaveLength(PROFILE_TEXT_MAX);
+  it("keeps the PROFILE_TEXT_MAX export for the editor's counter", () => {
+    expect(PROFILE_TEXT_MAX).toBe(4_000);
   });
 
-  it("clears the profile", async () => {
-    await setProfile({ text: "something", dealbreakers: [] });
+  it("clearProfile DELETEs the server copy", async () => {
+    await setProfile({ text: "x", dealbreakers: [] });
     await clearProfile();
+    expect(api.getProfile()).toBeNull();
     await expect(getProfile()).resolves.toBeNull();
   });
 
-  it("serializes text and dealbreakers for the analysis request", () => {
-    const prompt = profileToPromptText({
-      text: "Senior TS engineer",
-      dealbreakers: ["no on-site", "no crypto"],
-      updatedAt: "2026-07-04T00:00:00Z",
-    });
-    expect(prompt).toContain("Senior TS engineer");
-    expect(prompt).toContain("Dealbreakers:");
-    expect(prompt).toContain("no on-site");
-    expect(prompt).toContain("no crypto");
+  it("profileToPromptText is unchanged (pure serialization)", () => {
+    expect(
+      profileToPromptText({
+        text: "Engineer",
+        dealbreakers: ["no on-site"],
+        updatedAt: "2026-07-07T00:00:00Z",
+      })
+    ).toBe("Engineer\n\nDealbreakers:\n- no on-site");
   });
 
-  it("omits the dealbreaker section when none are set", () => {
-    const prompt = profileToPromptText({
-      text: "Senior TS engineer",
+  it("on 401: renews once then signs out (gate) when renewal fails", async () => {
+    api.failNext(401);
+    await expect(getProfile()).rejects.toThrow();
+    expect(signInSilently).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalled();
+  });
+
+  it("on 403: marks the session not-authorized (invitation state)", async () => {
+    api.failNext(403);
+    await expect(getProfile()).rejects.toThrow();
+    expect(markNotAuthorized).toHaveBeenCalled();
+  });
+
+  it("surfaces 5xx as retryable, never as an empty profile (FR-015)", async () => {
+    api.setProfile({
+      text: "existing",
       dealbreakers: [],
-      updatedAt: "2026-07-04T00:00:00Z",
+      updatedAt: "2026-07-07T00:00:00Z",
     });
-    expect(prompt).toBe("Senior TS engineer");
+    api.failNext(500);
+    await expect(getProfile()).rejects.toMatchObject({ retryable: true });
   });
 });

@@ -2,10 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { installMemoryStorage } from "./helpers/memoryStorage";
+import { installFakeStorageApi } from "./helpers/mswStorageServer";
 import { JobPanel } from "../../components/JobPanel/JobPanel";
 import { MessageType } from "../../types/messages";
 import type { ExtensionMessage } from "../../types/messages";
 import type { JobAnalysis } from "../../types/job";
+
+// jobStorage is server-backed since 002; run it against the contract-faithful
+// fake API instead of chrome.storage.
+installFakeStorageApi();
 
 const analysis: JobAnalysis = {
   isJobPosting: true,
