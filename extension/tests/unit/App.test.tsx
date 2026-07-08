@@ -6,6 +6,15 @@ import type { ExtensionMessage } from "../../types/messages";
 
 import { App } from "../../entrypoints/sidepanel/App";
 
+// These tests cover panel behavior behind the gate; AuthGate has its own suite.
+vi.mock("../../services/auth/authState", () => ({
+  readAuthSnapshot: vi.fn().mockResolvedValue({
+    status: "signed-in",
+    user: { sub: "sub-1", email: "user@example.com" },
+  }),
+  onAuthChange: vi.fn(() => () => {}),
+}));
+
 function getRegisteredListeners(): Array<(message: ExtensionMessage) => void> {
   const addListener = chrome.runtime.onMessage.addListener as ReturnType<typeof vi.fn>;
   return addListener.mock.calls.map((call) => call[0] as (message: ExtensionMessage) => void);

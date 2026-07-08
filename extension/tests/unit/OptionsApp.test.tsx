@@ -1,9 +1,23 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { installMemoryStorage } from "./helpers/memoryStorage";
+import { installFakeStorageApi } from "./helpers/mswStorageServer";
 import { OptionsApp } from "../../entrypoints/options/OptionsApp";
 import { getProfile, setProfile } from "../../services/profileStorage";
+
+// profileStorage is server-backed since 002; run it against the
+// contract-faithful fake API instead of chrome.storage.
+const api = installFakeStorageApi();
+
+// These tests cover the profile editor behind the gate; AuthGate has its own suite.
+vi.mock("../../services/auth/authState", () => ({
+  readAuthSnapshot: vi.fn().mockResolvedValue({
+    status: "signed-in",
+    user: { sub: "sub-1", email: "user@example.com" },
+  }),
+  onAuthChange: vi.fn(() => () => {}),
+}));
 
 beforeEach(() => {
   installMemoryStorage("local");
@@ -62,5 +76,38 @@ describe("OptionsApp", () => {
     expect(
       screen.getByText((_, el) => el?.textContent === "3 / 4,000")
     ).toBeInTheDocument();
+  });
+
+  it("shows a retryable error instead of an empty form when the load fails (FR-015)", async () => {
+    api.setProfile({
+      text: "Existing profile",
+      dealbreakers: [],
+      updatedAt: "2026-07-07T00:00:00Z",
+    });
+    api.failNext(500);
+    render(<OptionsApp />);
+
+    expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Your background/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByLabelText(/Your background/)).toHaveValue(
+      "Existing profile"
+    );
+  });
+
+  it("surfaces a failed save as an alert and keeps the form input (FR-015)", async () => {
+    render(<OptionsApp />);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Your background/)).toBeEnabled()
+    );
+    await userEvent.type(screen.getByLabelText(/Your background/), "My profile");
+
+    api.failNext(500);
+    await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText("Profile saved.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Your background/)).toHaveValue("My profile");
   });
 });

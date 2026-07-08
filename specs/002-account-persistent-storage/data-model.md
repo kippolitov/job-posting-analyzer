@@ -71,7 +71,7 @@ One row per saved posting per user. Soft cap: 1,000 rows per partition (`SAVED_J
 |---|---|---|
 | `profile`, `job:*`, `job:index` | `storage.local` | Legacy. Read only by the migration flow; deleted after a completed migration; untouched on decline. Never written by new code. |
 | `migration:v2` | `storage.local` | NEW — `{ status: "completed" \| "declined", at: string }`. Per-device one-time-offer marker (spec Migration Record entity). |
-| `auth:*` | `storage.local` | NEW — cached ID token + decoded expiry and signed-in identity (`sub`, `email`) for UI display. Survives browser restarts so the session lasts ~30 days via silent renewal (FR-014a, mimicking ytsummary); sign-out removes it explicitly. |
+| `auth:*` | `storage.local` | NEW — cached ID token + decoded expiry, signed-in identity (`sub`, `email`) for UI display, and `signedInAt` (timestamp of the last interactive sign-in). Survives browser restarts; silent renewal keeps the session alive only while `signedInAt` is within ~30 days, after which interactive re-sign-in is required (FR-014a, mimicking ytsummary); sign-out removes it explicitly. |
 | analysis cache | `storage.session` | Unchanged (device-local performance cache, out of persistence scope). |
 
 ## Entity relationships

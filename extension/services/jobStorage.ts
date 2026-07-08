@@ -1,8 +1,6 @@
 import { canonicalKey } from "../lib/canonicalUrl";
 import type { Arrangement, JobStatus, SavedJob } from "../types/job";
-
-const INDEX_KEY = "job:index";
-const JOB_KEY_PREFIX = "job:";
+import { ApiError, apiFetch } from "./api/apiClient";
 
 export const SAVED_JOBS_SOFT_CAP = 1_000;
 
@@ -20,19 +18,11 @@ export interface JobListFilter {
   status?: JobStatus;
 }
 
-interface JobIndexEntry {
-  canonicalUrl: string;
-  savedAt: string;
-  arrangement: Arrangement;
-  status: JobStatus;
-}
-
-type JobIndex = Record<string, JobIndexEntry>;
-
 /**
- * Saved-jobs repository. All access goes through this interface so the
- * chrome.storage.local backing can later swap to a server-side store
- * without touching UI code (see research.md R5).
+ * Saved-jobs repository. Same interface as the original chrome.storage.local
+ * implementation — since 002 it is backed by the per-account server store
+ * (contracts/storage-api.md), so the library follows the signed-in user
+ * across devices. UI code above this interface is unchanged.
  */
 export interface JobRepository {
   get(canonicalUrl: string): Promise<SavedJob | null>;
@@ -44,139 +34,82 @@ export interface JobRepository {
   pruneArchived(count: number): Promise<number>;
 }
 
-async function jobKey(canonicalUrl: string): Promise<string> {
-  return `${JOB_KEY_PREFIX}${await canonicalKey(canonicalUrl)}`;
-}
-
-function isIndex(value: unknown): value is JobIndex {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.values(value as Record<string, unknown>).every(
-      (entry) =>
-        typeof entry === "object" &&
-        entry !== null &&
-        typeof (entry as JobIndexEntry).canonicalUrl === "string"
-    )
-  );
-}
-
-async function readIndex(): Promise<JobIndex> {
-  const data = await chrome.storage.local.get(INDEX_KEY);
-  const index = data[INDEX_KEY];
-  if (isIndex(index)) return index;
-  return rebuildIndex();
-}
-
-/** Recovers the index by scanning job:* records (self-healing invariant). */
-async function rebuildIndex(): Promise<JobIndex> {
-  const all = await chrome.storage.local.get(null);
-  const index: JobIndex = {};
-  for (const [key, value] of Object.entries(all)) {
-    if (!key.startsWith(JOB_KEY_PREFIX) || key === INDEX_KEY) continue;
-    const job = value as SavedJob;
-    if (typeof job?.canonicalUrl !== "string") continue;
-    index[key.slice(JOB_KEY_PREFIX.length)] = indexEntryOf(job);
+async function throwUnexpected(response: Response): Promise<never> {
+  let message = "The storage service rejected the request.";
+  try {
+    const body = (await response.json()) as { error?: { message?: string } };
+    if (body.error?.message) message = body.error.message;
+  } catch {
+    // Keep the generic message.
   }
-  await chrome.storage.local.set({ [INDEX_KEY]: index });
-  return index;
-}
-
-function indexEntryOf(job: SavedJob): JobIndexEntry {
-  return {
-    canonicalUrl: job.canonicalUrl,
-    savedAt: job.savedAt,
-    arrangement: job.analysis.arrangement,
-    status: job.status,
-  };
+  throw new ApiError(response.status, "SERVICE_ERROR", message, false);
 }
 
 async function get(canonicalUrl: string): Promise<SavedJob | null> {
-  const key = await jobKey(canonicalUrl);
-  const data = await chrome.storage.local.get(key);
-  return (data[key] as SavedJob | undefined) ?? null;
+  const key = await canonicalKey(canonicalUrl);
+  const response = await apiFetch(`/jobs/${key}`);
+  if (response.status === 404) return null;
+  if (!response.ok) await throwUnexpected(response);
+  return (await response.json()) as SavedJob;
 }
 
 async function list(filter?: JobListFilter): Promise<SavedJob[]> {
-  const index = await readIndex();
-  const hashes = Object.entries(index)
-    .filter(
-      ([, entry]) =>
-        (!filter?.arrangement || entry.arrangement === filter.arrangement) &&
-        (!filter?.status || entry.status === filter.status)
-    )
-    .sort(([, a], [, b]) => Date.parse(b.savedAt) - Date.parse(a.savedAt))
-    .map(([hash]) => hash);
-
-  if (hashes.length === 0) return [];
-  const keys = hashes.map((hash) => `${JOB_KEY_PREFIX}${hash}`);
-  const records = await chrome.storage.local.get(keys);
-  return keys
-    .map((key) => records[key] as SavedJob | undefined)
-    .filter((job): job is SavedJob => job !== undefined);
+  const params = new URLSearchParams();
+  if (filter?.arrangement) params.set("arrangement", filter.arrangement);
+  if (filter?.status) params.set("status", filter.status);
+  const query = params.toString();
+  const response = await apiFetch(`/jobs${query ? `?${query}` : ""}`);
+  if (!response.ok) await throwUnexpected(response);
+  const body = (await response.json()) as { jobs: SavedJob[] };
+  return body.jobs;
 }
 
 async function save(job: SavedJob): Promise<void> {
-  const key = await jobKey(job.canonicalUrl);
-  const hash = key.slice(JOB_KEY_PREFIX.length);
-  const index = await readIndex();
-
-  const isNew = !(hash in index);
-  if (isNew && Object.keys(index).length >= SAVED_JOBS_SOFT_CAP) {
-    throw new LibraryFullError();
-  }
-
-  index[hash] = indexEntryOf(job);
-  // Single set call keeps the record and index atomic.
-  await chrome.storage.local.set({ [key]: job, [INDEX_KEY]: index });
+  const key = await canonicalKey(job.canonicalUrl);
+  const response = await apiFetch(`/jobs/${key}`, { method: "PUT", body: job });
+  if (response.status === 409) throw new LibraryFullError();
+  if (!response.ok) await throwUnexpected(response);
 }
 
 async function update(
   canonicalUrl: string,
   patch: Partial<SavedJob>
 ): Promise<void> {
-  const existing = await get(canonicalUrl);
-  if (!existing) return;
-  const updated: SavedJob = {
-    ...existing,
-    ...patch,
-    canonicalUrl: existing.canonicalUrl,
-    savedAt: existing.savedAt,
-    updatedAt: new Date().toISOString(),
-  };
-  const key = await jobKey(canonicalUrl);
-  const index = await readIndex();
-  index[key.slice(JOB_KEY_PREFIX.length)] = indexEntryOf(updated);
-  await chrome.storage.local.set({ [key]: updated, [INDEX_KEY]: index });
+  const key = await canonicalKey(canonicalUrl);
+  const response = await apiFetch(`/jobs/${key}`, {
+    method: "PATCH",
+    body: {
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+      ...(patch.analysis !== undefined ? { analysis: patch.analysis } : {}),
+    },
+  });
+  // Matches the previous local semantics: updating a missing record is a no-op.
+  if (response.status === 404) return;
+  if (!response.ok) await throwUnexpected(response);
 }
 
 async function remove(canonicalUrl: string): Promise<void> {
-  const key = await jobKey(canonicalUrl);
-  const index = await readIndex();
-  delete index[key.slice(JOB_KEY_PREFIX.length)];
-  await chrome.storage.local.remove(key);
-  await chrome.storage.local.set({ [INDEX_KEY]: index });
+  const key = await canonicalKey(canonicalUrl);
+  const response = await apiFetch(`/jobs/${key}`, { method: "DELETE" });
+  if (!response.ok && response.status !== 204) await throwUnexpected(response);
 }
 
 async function exportAll(): Promise<string> {
-  const jobs = await list();
-  return JSON.stringify(
-    { schemaVersion: 1, exportedAt: new Date().toISOString(), jobs },
-    null,
-    2
-  );
+  const response = await apiFetch("/jobs/export");
+  if (!response.ok) await throwUnexpected(response);
+  // Raw text: the server emits the byte-exact legacy export format (FR-009).
+  return response.text();
 }
 
 async function pruneArchived(count: number): Promise<number> {
-  const archived = await list({ status: "archived" });
-  const oldestFirst = [...archived].sort(
-    (a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt)
-  );
-  const victims = oldestFirst.slice(0, count);
-  for (const job of victims) {
-    await remove(job.canonicalUrl);
-  }
-  return victims.length;
+  const response = await apiFetch("/jobs/prune", {
+    method: "POST",
+    body: { count },
+  });
+  if (!response.ok) await throwUnexpected(response);
+  const body = (await response.json()) as { pruned: number };
+  return body.pruned;
 }
 
 export const jobStorage: JobRepository = {

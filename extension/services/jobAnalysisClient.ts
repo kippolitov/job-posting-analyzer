@@ -1,4 +1,10 @@
 import type { JobAnalysis, JobErrorCode, JobPanelError, PageExtract } from "../types/job";
+import {
+  getIdToken,
+  markNotAuthorized,
+  signInSilently,
+  signOut,
+} from "./auth/authService";
 
 declare const WXT_AZURE_FUNCTION_URL: string;
 declare const WXT_AZURE_FUNCTION_KEY: string;
@@ -28,30 +34,34 @@ export async function postJobAnalysis(
     endpoint.searchParams.set("code", WXT_AZURE_FUNCTION_KEY);
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let response = await attemptFetch(endpoint, request, await getIdToken());
 
-  let response: Response;
-  try {
-    response = await fetch(endpoint.toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        extract: request.extract,
-        ...(request.profile ? { profile: request.profile } : {}),
-        ...(request.assumeJobPosting ? { assumeJobPosting: true } : {}),
-      }),
-      signal: controller.signal,
-    });
-  } catch {
+  if (response.status === 401) {
+    // One silent renewal, then the sign-in gate (auth contract).
+    const renewed = await signInSilently();
+    if (renewed) {
+      response = await attemptFetch(endpoint, request, renewed.idToken);
+    }
+  }
+
+  if (response.status === 401) {
+    await signOut();
     throw makeJobError(
-      "network-error",
-      "Could not reach the analysis service.",
-      "Check your internet connection and try again.",
-      true
+      "no-access",
+      "Your session ended.",
+      "Sign in to continue.",
+      false
     );
-  } finally {
-    clearTimeout(timeoutId);
+  }
+
+  if (response.status === 403) {
+    await markNotAuthorized();
+    throw makeJobError(
+      "no-access",
+      "Access is by invitation.",
+      "Use “Request access” on the sign-in screen to contact the developer.",
+      false
+    );
   }
 
   if (response.ok) {
@@ -70,6 +80,39 @@ export async function postJobAnalysis(
   throw mapHttpError(response.status);
 }
 
+async function attemptFetch(
+  endpoint: URL,
+  request: JobAnalysisRequest,
+  idToken: string | null
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(endpoint.toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
+      body: JSON.stringify({
+        extract: request.extract,
+        ...(request.profile ? { profile: request.profile } : {}),
+        ...(request.assumeJobPosting ? { assumeJobPosting: true } : {}),
+      }),
+      signal: controller.signal,
+    });
+  } catch {
+    throw makeJobError(
+      "network-error",
+      "Could not reach the analysis service.",
+      "Check your internet connection and try again.",
+      true
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function mapHttpError(status: number): JobPanelError {
   if (status === 413) {
     return makeJobError(
@@ -84,14 +127,6 @@ function mapHttpError(status: number): JobPanelError {
       "unknown",
       "The page could not be analyzed.",
       "Try re-analyzing from the posting page itself.",
-      false
-    );
-  }
-  if (status === 401 || status === 403) {
-    return makeJobError(
-      "not-configured",
-      "The analysis service rejected the request.",
-      "Please reinstall the extension.",
       false
     );
   }

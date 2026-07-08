@@ -42,7 +42,7 @@ Same envelope as existing endpoints: `{ "error": { "code", "message" } }`.
 
 - `chrome.identity.launchWebAuthFlow` OIDC implicit flow: `response_type=id_token`, `scope=openid email`, fresh `nonce` per request (verified against the returned token), `redirect_uri = chrome.identity.getRedirectURL()`.
 - Interactive on explicit sign-in; `interactive: false` for silent renewal when the cached token is near or past `exp`, or a request returns 401.
-- Token + decoded expiry cached in `storage.local` (`auth:*` keys) so the session survives browser restarts, up to ~30 days via silent renewal (FR-014a). Sign-out clears the cache and returns to the gate.
+- Token + decoded expiry + `signedInAt` (interactive sign-in timestamp) cached in `storage.local` (`auth:*` keys) so the session survives browser restarts. Silent renewal preserves `signedInAt` and is attempted only while it is within ~30 days; past that horizon the client skips renewal and shows the interactive gate (FR-014a). Sign-out clears the cache and returns to the gate.
 - **Note**: `chrome.identity.getAuthToken()` was named in the technical direction but returns an access token, which cannot satisfy this contract's JWKS verification; see research.md R1 for the reconciliation.
 
 ## CORS

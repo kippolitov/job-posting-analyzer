@@ -25,6 +25,7 @@ Replace `chrome.storage.local` as the system of record for the candidate profile
 **Project Type**: Web extension + serverless backend (existing two-package repo: `extension/`, `functions/`).
 
 **Performance Goals**: Auth middleware overhead ≤ 100 ms p95 warm (JWKS cached in-process by `google-auth-library`; allowlist point read is single-digit ms); saved-list open ≤ 1.5 s p95 on a 1,000-record library; analyze path stays within the existing ≤ 8 s p50 / 30 s ceiling.
+> **Measured 2026-07-07** (T044, `tests/integration/perf.test.ts` against Azurite + local certs stub): auth middleware warm p95 **2.4 ms** over 40 runs (budget 100 ms); 1,000-record list p95 **26.2 ms** over 10 runs including auth (budget 1,500 ms). Real Table Storage adds network RTT (~single-digit ms intra-region) — comfortably within budget. The perf test asserts both budgets, so CI guards regressions.
 
 **Constraints**: No new Azure resources (same storage account, same Function App); no public admin endpoint (allowlist CLI is local-only); allowlist changes effective without build or deploy (uncached per-request read); client repository interfaces (`JobRepository`, `profileStorage` functions) keep their exact shapes; no user identifier ever accepted as request input (partition key always derived from the verified token); revocation effective on the next request (SC-006).
 
@@ -108,11 +109,11 @@ extension/
 │   ├── options/OptionsApp.tsx       # MODIFIED — wrapped in AuthGate
 │   └── background.ts                # MODIFIED — token attach for analyze flow
 ├── types/
-│   └── auth.ts                      # NEW — AuthSession, AuthError
+│   └── auth.ts                      # NEW — StoredAuth, AuthenticatedUser, AuthError (ytsummary authClient shapes)
 └── wxt.config.ts                    # MODIFIED — identity permission, WXT_API_BASE_URL, client ID define
 ```
 
-**Structure Decision**: Keep the existing two-package layout. Backend additions follow the established folder-per-function pattern (`profile/`, `jobs/` beside `analyze-job/`); shared concerns land in `middleware/` and `services/`. Extension changes are dominated by two in-place implementation swaps (the point of mirroring the interfaces) plus additive auth/migration modules.
+**Structure Decision**: Keep the existing two-package layout. Backend additions follow the established folder-per-function pattern (`profile/`, `jobs/` beside `analyze-job/`); shared concerns land in `services/`. Extension changes are dominated by two in-place implementation swaps (the point of mirroring the interfaces) plus additive auth/migration modules.
 
 ## Architecture
 

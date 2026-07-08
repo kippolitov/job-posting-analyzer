@@ -36,6 +36,10 @@ const chromeMock = {
       set: vi.fn(),
       remove: vi.fn(),
     },
+    onChanged: {
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    },
   },
   runtime: {
     sendMessage: vi.fn(),
@@ -54,6 +58,10 @@ const chromeMock = {
   },
   scripting: {
     executeScript: vi.fn(),
+  },
+  identity: {
+    getRedirectURL: vi.fn(() => "https://extension-id.chromiumapp.org/"),
+    launchWebAuthFlow: vi.fn(),
   },
   sidePanel: {
     setPanelBehavior: vi.fn().mockResolvedValue(undefined),

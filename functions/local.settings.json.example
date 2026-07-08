@@ -1,11 +1,19 @@
 {
   "IsEncrypted": false,
   "Values": {
-    "AzureWebJobsStorage": "",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "AZURE_OPENAI_ENDPOINT": "https://job-posting-analyzer-openai.openai.azure.com/",
     "AZURE_OPENAI_API_KEY": "",
-    "AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini"
+    "AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini",
+
+    "//GOOGLE_OAUTH_CLIENT_ID": "OAuth Web-application client ID — the expected `aud` of incoming Google ID tokens (quickstart.md step 1). Same value as the extension's WXT_GOOGLE_OAUTH_CLIENT_ID.",
+    "GOOGLE_OAUTH_CLIENT_ID": "<client-id>.apps.googleusercontent.com",
+
+    "//TABLES_CONNECTION_STRING": "Optional override: Table Storage connection for tables only (falls back to AzureWebJobsStorage). UseDevelopmentStorage=true points tables at Azurite (npm run azurite).",
+
+    "//REQUIRE_AUTH": "Auth middleware enforcement. Defaults to false (bypass) until the gated extension version ships — plan.md Rollout. Set \"true\" for local dev per quickstart.md.",
+    "REQUIRE_AUTH": "true"
   },
   "Host": {
     "CORS": "chrome-extension://REPLACE_WITH_EXTENSION_ID"

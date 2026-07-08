@@ -27,7 +27,7 @@ A person opens the extension. Before they can analyze a posting, view or save re
 
 **Acceptance Scenarios**:
 
-1. **Given** a signed-out user, **When** they open any extension surface (side panel, popup, or analysis trigger), **Then** they see a sign-in prompt instead of the feature, and no analysis, saved-postings view, or profile editor is reachable.
+1. **Given** a signed-out user, **When** they open any extension surface (side panel, options page, or analysis trigger), **Then** they see a sign-in prompt instead of the feature, and no analysis, saved-postings view, or profile editor is reachable.
 2. **Given** a user whose Google account is on the authorized list, **When** they complete Google sign-in, **Then** they land in the extension with all features available and their identity visibly associated with the session (e.g., account email shown, sign-out available).
 3. **Given** a user whose Google account is NOT on the authorized list, **When** they complete Google sign-in, **Then** they see a message stating access is by invitation and how to request it, and they cannot reach any analysis, saving, or profile feature.
 4. **Given** a signed-in authorized user, **When** they sign out, **Then** the session ends, locally displayed personal data is cleared from view, and the sign-in gate is restored.
@@ -143,7 +143,7 @@ The developer adds or removes an authorized Google account through an administra
 
 ## Assumptions
 
-- "Any feature of the extension" is taken literally: the sign-in/authorization gate covers all extension features, including the pre-existing YouTube analysis and chat features, not only the job-posting features — those features' internal behavior is otherwise unchanged.
+- "Any feature of the extension" is taken literally: the sign-in/authorization gate covers every extension surface — the side panel, the options page (profile editor), and the background-triggered posting analysis flow — and gated features' internal behavior is otherwise unchanged.
 - Google sign-in is the only supported identity mechanism; there is no email/password or other provider, and no self-service sign-up — access is granted solely by the developer adding an account to the authorized list.
 - The existing analysis backend is extended to host per-user storage and identity verification; this feature does not introduce a separate user-facing service.
 - The analysis cache (LRU, 200 entries, 14 days, keyed by canonical URL) remains device-local and is not part of the server-side persistence scope; it is a performance cache, not user data.

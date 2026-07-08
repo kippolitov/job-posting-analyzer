@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { installMemoryStorage } from "./helpers/memoryStorage";
+import { installFakeStorageApi } from "./helpers/mswStorageServer";
 import { analyzeJobPage } from "../../services/jobFlow";
 import { jobStorage } from "../../services/jobStorage";
 import { setCached } from "../../services/jobAnalysisCache";
@@ -14,6 +15,10 @@ import type { JobAnalysis, SavedJob } from "../../types/job";
 vi.mock("../../services/jobAnalysisClient", () => ({
   postJobAnalysis: vi.fn(),
 }));
+
+// jobStorage is server-backed since 002; run it against the contract-faithful
+// fake API instead of chrome.storage.
+installFakeStorageApi();
 
 const POSTING_TEXT =
   "We are hiring a senior engineer. Fully remote within the US. ".repeat(10);
