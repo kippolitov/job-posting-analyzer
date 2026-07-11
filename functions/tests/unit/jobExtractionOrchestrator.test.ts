@@ -191,9 +191,16 @@ describe("jobExtractionOrchestrator", () => {
     };
     await mockCreateWith(fixture("with-fit"));
     const result = await orchestrateJobAnalysis(withProfile);
-    expect(result.fit).toEqual({
+    expect(result.fit).toMatchObject({
       score: 88,
       rationale: expect.stringContaining(".NET") as unknown as string,
+      matching: expect.arrayContaining([
+        expect.stringContaining(".NET"),
+      ]) as unknown as string[],
+      missing: ["Kubernetes operations"],
+      desired: ["Terraform"],
+      strengths: expect.any(Array) as unknown as string[],
+      weaknesses: expect.any(Array) as unknown as string[],
     });
   });
 

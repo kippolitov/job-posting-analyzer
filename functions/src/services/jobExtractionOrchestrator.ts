@@ -72,10 +72,23 @@ const JOB_ANALYSIS_SCHEMA = {
     fit: {
       type: ["object", "null"],
       additionalProperties: false,
-      required: ["score", "rationale"],
+      required: [
+        "score",
+        "rationale",
+        "matching",
+        "missing",
+        "desired",
+        "strengths",
+        "weaknesses",
+      ],
       properties: {
         score: { type: "integer", minimum: 0, maximum: 100 },
-        rationale: { type: "string", maxLength: 400 },
+        rationale: { type: "string", maxLength: 600 },
+        matching: { type: "array", items: { type: "string" }, maxItems: 10 },
+        missing: { type: "array", items: { type: "string" }, maxItems: 10 },
+        desired: { type: "array", items: { type: "string" }, maxItems: 10 },
+        strengths: { type: "array", items: { type: "string" }, maxItems: 5 },
+        weaknesses: { type: "array", items: { type: "string" }, maxItems: 5 },
       },
     },
   },
@@ -103,7 +116,13 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   if (hasProfile) {
     lines.push(
       "Fit scoring (a candidate profile is provided):",
-      "- fit.score is 0-100 for how well the posting matches the profile; fit.rationale is one to two sentences.",
+      "- fit.score is 0-100 for how well the posting matches the profile; fit.rationale is two to three sentences summarizing the match.",
+      "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first).",
+      "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of.",
+      "- fit.desired: nice-to-have / preferred qualifications from the posting that the profile does not cover.",
+      "- fit.strengths: what makes this specific role a strong choice for this candidate (e.g. seniority alignment, domain overlap, growth direction).",
+      "- fit.weaknesses: risks or downsides of this role for this candidate (e.g. skill gaps to close, seniority mismatch, unstated arrangement, below-preference salary).",
+      "- Base every item on the posting and profile text only; never invent skills or requirements.",
       "- If the posting violates any stated dealbreaker in the profile, cap fit.score at 20 or below and name the dealbreaker in the rationale."
     );
   } else {
@@ -213,7 +232,9 @@ export async function orchestrateJobAnalysis(
         },
       },
       temperature: 0,
-      max_tokens: 1500,
+      // Sized for the full fit breakdown (matching/missing/desired lists) on
+      // top of the extraction fields.
+      max_tokens: 3000,
     });
 
     const content = completion.choices[0]?.message?.content;

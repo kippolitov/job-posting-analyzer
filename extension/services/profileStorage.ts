@@ -1,7 +1,10 @@
 import type { CandidateProfile } from "../types/job";
 import { ApiError, apiFetch } from "./api/apiClient";
 
-export const PROFILE_TEXT_MAX = 4_000;
+// Sized for a full pasted resume (a dense multi-page resume is ~15k chars).
+// Must match PROFILE_TEXT_MAX in functions/src/models/user.ts — the server
+// silently truncates at its own limit.
+export const PROFILE_TEXT_MAX = 20_000;
 
 /**
  * Candidate-profile storage. Same exported functions as the original

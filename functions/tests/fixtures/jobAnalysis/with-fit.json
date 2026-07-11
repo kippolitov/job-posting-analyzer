@@ -14,6 +14,11 @@
   "techStack": ["C#", ".NET", "Azure"],
   "fit": {
     "score": 88,
-    "rationale": "Strong match on .NET and Azure at staff level; fully remote satisfies your no-onsite dealbreaker."
+    "rationale": "Strong match on .NET and Azure at staff level; fully remote satisfies your no-onsite dealbreaker.",
+    "matching": ["C# / .NET platform work", "Azure cloud services", "Staff-level scope"],
+    "missing": ["Kubernetes operations"],
+    "desired": ["Terraform"],
+    "strengths": ["Seniority aligns with staff-level responsibilities"],
+    "weaknesses": ["No Kubernetes evidence in the profile"]
   }
 }

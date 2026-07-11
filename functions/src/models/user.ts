@@ -6,7 +6,8 @@ export interface AuthenticatedUser {
   email: string;
 }
 
-export const PROFILE_TEXT_MAX = 4_000;
+// Sized for a full pasted resume; must match the extension's PROFILE_TEXT_MAX.
+export const PROFILE_TEXT_MAX = 20_000;
 export const NOTES_MAX = 10_000;
 export const SAVED_JOBS_SOFT_CAP = 1_000;
 

@@ -201,18 +201,20 @@ async function lookupStored(
 }
 
 /**
- * A stored analysis with no fit score is stale once the profile has been
- * created or updated after it ran: the default lookup never reaches the
- * backend again, so recomputing here is the only way the fit ever appears.
+ * A stored analysis is fit-stale when recomputing is the only way the current
+ * fit UI ever appears — the default lookup never reaches the backend again:
+ * - fit is null but the profile was created/updated after the analysis ran;
+ * - fit predates the breakdown fields (matching/missing/…), a one-time
+ *   upgrade per stored analysis (fresh results always carry the breakdown,
+ *   so this cannot loop).
  */
 async function needsFitRefresh(analysis: JobAnalysis): Promise<boolean> {
-  if (analysis.fit) return false;
+  if (analysis.fit && analysis.fit.matching !== undefined) return false;
   try {
     const profile = await getProfile();
-    return (
-      profile !== null &&
-      Date.parse(analysis.analyzedAt) < Date.parse(profile.updatedAt)
-    );
+    if (profile === null) return false;
+    if (analysis.fit) return true;
+    return Date.parse(analysis.analyzedAt) < Date.parse(profile.updatedAt);
   } catch {
     // Can't tell — serve the stored copy rather than fail the revisit.
     return false;

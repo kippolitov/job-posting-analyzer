@@ -57,13 +57,13 @@ describe("OptionsApp", () => {
     expect(screen.getByDisplayValue("no crypto")).toBeInTheDocument();
   });
 
-  it("clears the stored profile", async () => {
+  it("deletes the stored profile", async () => {
     await setProfile({ text: "Senior TS engineer", dealbreakers: [] });
     render(<OptionsApp />);
     await screen.findByDisplayValue("Senior TS engineer");
 
-    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
-    expect(await screen.findByText("Profile cleared.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Delete profile" }));
+    expect(await screen.findByText("Profile deleted.")).toBeInTheDocument();
     await expect(getProfile()).resolves.toBeNull();
   });
 
@@ -74,8 +74,18 @@ describe("OptionsApp", () => {
     );
     await userEvent.type(screen.getByLabelText(/Your background/), "abc");
     expect(
-      screen.getByText((_, el) => el?.textContent === "3 / 4,000")
+      screen.getByText((_, el) => el?.textContent === "3 / 20,000")
     ).toBeInTheDocument();
+  });
+
+  it("does not offer sign-out on the profile screen", async () => {
+    render(<OptionsApp />);
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Your background/)).toBeEnabled()
+    );
+    expect(
+      screen.queryByRole("button", { name: "Sign out" })
+    ).not.toBeInTheDocument();
   });
 
   it("shows a retryable error instead of an empty form when the load fails (FR-015)", async () => {

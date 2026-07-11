@@ -81,7 +81,7 @@ export function createFakeStorageApi(): FakeStorageApi {
         );
       }
       profile = {
-        text: body.text.slice(0, 4_000),
+        text: body.text.slice(0, 20_000),
         dealbreakers: (body.dealbreakers as string[])
           .map((d) => d.trim())
           .filter(Boolean),

@@ -19,7 +19,14 @@ const REQUEST_ACCESS_MAILTO =
  * re-authentication (FR-014). Explicit sign-out and revocation unmount
  * children — personal data leaves the view.
  */
-export function AuthGate({ children }: { children: ReactNode }) {
+export function AuthGate({
+  children,
+  showSignOut = true,
+}: {
+  children: ReactNode;
+  /** The options page hides sign-out — the side panel is the account surface. */
+  showSignOut?: boolean;
+}) {
   const [snapshot, setSnapshot] = useState<AuthSnapshot | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +171,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
           >
             {expired ? "Signed out" : snapshot.user?.email}
           </span>
-          {!expired && (
+          {!expired && showSignOut && (
             <button
               onClick={() => void handleSignOut()}
               aria-label="Sign out"
