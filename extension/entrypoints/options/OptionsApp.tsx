@@ -9,7 +9,7 @@ import {
 
 export function OptionsApp() {
   return (
-    <AuthGate>
+    <AuthGate showSignOut={false}>
       <ProfileEditor />
     </AuthGate>
   );
@@ -68,7 +68,7 @@ function ProfileEditor() {
       setText("");
       setDealbreakers("");
       setError(null);
-      setFeedback("Profile cleared.");
+      setFeedback("Profile deleted.");
     } catch (err) {
       setFeedback(null);
       setError(
@@ -111,14 +111,14 @@ function ProfileEditor() {
         </h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Used to compute the fit score when you analyze a job posting. Stored
-          only in this browser and sent only with analysis requests.
+          in your account and sent only with analysis requests.
         </p>
 
         <label
           htmlFor="profile-text"
           className="mt-6 block text-sm font-medium text-gray-700 dark:text-gray-200"
         >
-          Your background (skills, seniority, domains)
+          Your background — paste your entire resume here
         </label>
         <textarea
           id="profile-text"
@@ -128,9 +128,9 @@ function ProfileEditor() {
             setText(e.target.value);
             setFeedback(null);
           }}
-          rows={8}
-          placeholder="e.g. Principal-level .NET engineer; 10 years building distributed systems on Azure; strong in C#, Kubernetes, event-driven architecture; prefer product companies."
-          className="mt-1 w-full rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+          rows={24}
+          placeholder="Paste your full resume, or describe your background: skills, seniority, domains, preferences."
+          className="mt-1 w-full resize-y rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
           disabled={!loaded}
         />
         <p className="mt-1 text-right text-xs text-gray-400 dark:text-gray-500">
@@ -168,9 +168,9 @@ function ProfileEditor() {
           </button>
           <button
             onClick={() => void handleClear()}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
           >
-            Clear
+            Delete profile
           </button>
           {feedback && (
             <span role="status" className="text-sm text-green-700 dark:text-green-400">

@@ -49,6 +49,16 @@ export interface Salary {
 export interface Fit {
   score: number;
   rationale: string;
+  /** Required responsibilities/skills the profile covers. Absent on pre-breakdown snapshots. */
+  matching?: string[];
+  /** Required responsibilities/skills the profile shows no evidence of. */
+  missing?: string[];
+  /** Nice-to-have qualifications from the posting the profile does not cover. */
+  desired?: string[];
+  /** Why this role is a strong choice for this candidate. */
+  strengths?: string[];
+  /** Risks or downsides of this role for this candidate. */
+  weaknesses?: string[];
 }
 
 /** Client-side extraction payload; never persisted. */

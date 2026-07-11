@@ -64,8 +64,8 @@ describe("profileStorage (fetch-backed, contracts/storage-api.md)", () => {
     expect(loaded).toEqual(saved);
   });
 
-  it("keeps the PROFILE_TEXT_MAX export for the editor's counter", () => {
-    expect(PROFILE_TEXT_MAX).toBe(4_000);
+  it("keeps the PROFILE_TEXT_MAX export for the editor's counter, sized for a full resume", () => {
+    expect(PROFILE_TEXT_MAX).toBe(20_000);
   });
 
   it("clearProfile DELETEs the server copy", async () => {

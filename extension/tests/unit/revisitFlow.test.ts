@@ -410,6 +410,40 @@ describe("revisit flow — lookup order saved → cached → backend", () => {
     expect(stored!.notes).toBe("recruiter: Dana");
   });
 
+  it("upgrades a pre-breakdown fit snapshot to the richer breakdown once", async () => {
+    const { setProfile } = await import("../../services/profileStorage");
+    await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
+    // Old-format fit: score + rationale only, and newer than the profile.
+    await setCached("https://boards.greenhouse.io/acme/jobs/12", {
+      ...makeAnalysis("Old Fit Role"),
+      fit: { score: 70, rationale: "Old summary." },
+      analyzedAt: "2099-01-01T00:00:00Z",
+    });
+    const refreshed = {
+      ...makeAnalysis("Old Fit Role"),
+      fit: {
+        score: 74,
+        rationale: "New summary.",
+        matching: ["C#"],
+        missing: [],
+        desired: [],
+        strengths: [],
+        weaknesses: [],
+      },
+      analyzedAt: new Date().toISOString(),
+    };
+    vi.mocked(postJobAnalysis).mockResolvedValue(refreshed);
+
+    const first = await runFlow("https://boards.greenhouse.io/acme/jobs/12");
+    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
+    expect((first[0] as JobAnalysisResultMessage).analysis.fit?.matching).toEqual(["C#"]);
+
+    // The refreshed snapshot has the breakdown — no second backend call.
+    const second = await runFlow("https://boards.greenhouse.io/acme/jobs/12");
+    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
+    expect((second[0] as JobAnalysisResultMessage).cached).toBe(true);
+  });
+
   it("keeps serving the cache when the fit-less analysis is newer than the profile", async () => {
     const { setProfile } = await import("../../services/profileStorage");
     await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });

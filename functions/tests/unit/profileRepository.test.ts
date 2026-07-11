@@ -36,13 +36,13 @@ describe("profileRepository", () => {
     await expect(getProfile(subB)).resolves.toBeNull();
   });
 
-  it("truncates text at 4,000 characters", async () => {
+  it("truncates text at 20,000 characters (full-resume sized)", async () => {
     const sub = uniqueSub();
     const saved = await putProfile(sub, {
-      text: "x".repeat(5_000),
+      text: "x".repeat(21_000),
       dealbreakers: [],
     });
-    expect(saved.text).toHaveLength(4_000);
+    expect(saved.text).toHaveLength(20_000);
   });
 
   it("trims dealbreakers and drops empties", async () => {
