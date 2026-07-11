@@ -81,7 +81,7 @@ function ProfileEditor() {
 
   if (loadFailed) {
     return (
-      <main className="min-h-screen bg-gray-50 px-6 py-8 dark:bg-gray-950">
+      <main className="h-full bg-gray-50 px-6 py-8 dark:bg-gray-950">
         <div
           role="alert"
           className="mx-auto max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-center dark:border-red-900/60 dark:bg-red-950/40"
@@ -104,19 +104,25 @@ function ProfileEditor() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-6 py-8 dark:bg-gray-950">
-      <div className="mx-auto max-w-xl">
-        <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
-          Candidate profile
-        </h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Used to compute the fit score when you analyze a job posting. Stored
-          in your account and sent only with analysis requests.
-        </p>
+    // Full-height column (inside AuthGate's flex body): the resume editor
+    // absorbs all spare height and scrolls internally, so the action buttons
+    // in the footer never leave the viewport no matter how long the pasted
+    // resume is.
+    <main className="flex h-full flex-col bg-gray-50 dark:bg-gray-950">
+      <div className="mx-auto flex h-full w-full max-w-4xl min-h-0 flex-col px-8 py-6">
+        <div className="shrink-0">
+          <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">
+            Candidate profile
+          </h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Used to compute the fit score when you analyze a job posting.
+            Stored in your account and sent only with analysis requests.
+          </p>
+        </div>
 
         <label
           htmlFor="profile-text"
-          className="mt-6 block text-sm font-medium text-gray-700 dark:text-gray-200"
+          className="mt-5 block shrink-0 text-sm font-medium text-gray-700 dark:text-gray-200"
         >
           Your background — paste your entire resume here
         </label>
@@ -128,47 +134,48 @@ function ProfileEditor() {
             setText(e.target.value);
             setFeedback(null);
           }}
-          rows={24}
           placeholder="Paste your full resume, or describe your background: skills, seniority, domains, preferences."
-          className="mt-1 w-full resize-y rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+          className="mt-1 min-h-48 w-full flex-1 resize-none overflow-y-auto rounded-lg border border-gray-200 bg-white p-4 text-sm leading-relaxed text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
           disabled={!loaded}
         />
-        <p className="mt-1 text-right text-xs text-gray-400 dark:text-gray-500">
+        <p className="mt-1 shrink-0 text-right text-xs text-gray-400 dark:text-gray-500">
           {text.length.toLocaleString()} / {PROFILE_TEXT_MAX.toLocaleString()}
         </p>
 
-        <label
-          htmlFor="profile-dealbreakers"
-          className="mt-4 block text-sm font-medium text-gray-700 dark:text-gray-200"
-        >
-          Dealbreakers (one per line)
-        </label>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          A posting that violates a dealbreaker is capped at a fit score of 20.
-        </p>
-        <textarea
-          id="profile-dealbreakers"
-          value={dealbreakers}
-          onChange={(e) => {
-            setDealbreakers(e.target.value);
-            setFeedback(null);
-          }}
-          rows={3}
-          placeholder={"no fully on-site roles\nno defense industry"}
-          className="mt-1 w-full rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-          disabled={!loaded}
-        />
+        <div className="shrink-0">
+          <label
+            htmlFor="profile-dealbreakers"
+            className="mt-2 block text-sm font-medium text-gray-700 dark:text-gray-200"
+          >
+            Dealbreakers (one per line)
+          </label>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            A posting that violates a dealbreaker is capped at a fit score of 20.
+          </p>
+          <textarea
+            id="profile-dealbreakers"
+            value={dealbreakers}
+            onChange={(e) => {
+              setDealbreakers(e.target.value);
+              setFeedback(null);
+            }}
+            rows={3}
+            placeholder={"no fully on-site roles\nno defense industry"}
+            className="mt-1 w-full resize-none rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+            disabled={!loaded}
+          />
+        </div>
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-4 flex shrink-0 items-center gap-3 border-t border-gray-200/70 pt-4 dark:border-gray-800">
           <button
             onClick={() => void handleSave()}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
           >
             Save profile
           </button>
           <button
             onClick={() => void handleClear()}
-            className="rounded-lg px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+            className="rounded-lg px-5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
           >
             Delete profile
           </button>

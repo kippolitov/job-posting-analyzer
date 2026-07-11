@@ -24,6 +24,16 @@ describe("FitScore", () => {
     expect(screen.getByText("Strong match on .NET and Azure.")).toBeInTheDocument();
   });
 
+  it("opens the profile page from the My profile button beside the score", async () => {
+    render(
+      <FitScore
+        fit={{ score: 84, rationale: "Strong match on .NET and Azure." }}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: "My profile" }));
+    expect(chrome.runtime.openOptionsPage).toHaveBeenCalled();
+  });
+
   it("renders the full breakdown: matching, missing, desired, strengths, weaknesses", () => {
     render(
       <FitScore
