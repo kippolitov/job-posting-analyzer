@@ -14,7 +14,14 @@ import type {
   AnalyzeJobPageMessage,
   ExtensionMessage,
 } from "../types/messages";
-import type { JobPanelError, PageExtract } from "../types/job";
+import type {
+  CandidateProfile,
+  JobAnalysis,
+  JobErrorCode,
+  JobPanelError,
+  PageExtract,
+  SavedJob,
+} from "../types/job";
 
 /**
  * Most-recently-active candidate content tabs, newest first. Only ids are
@@ -24,6 +31,43 @@ import type { JobPanelError, PageExtract } from "../types/job";
  */
 const MAX_TRACKED_TABS = 5;
 let recentContentTabs: number[] = [];
+
+/**
+ * Last successfully extracted URL per tab, kept in session storage so it
+ * survives service-worker restarts. The activeTab grant dies on every tab
+ * switch, but a revisited tab's analysis is usually still in the saved
+ * library or session cache — this URL is what lets it be served without any
+ * page access. Cleared when the tab navigates or closes.
+ */
+function tabUrlKey(tabId: number): string {
+  return `taburl:${tabId}`;
+}
+
+async function rememberTabUrl(tabId: number, url: string): Promise<void> {
+  try {
+    await chrome.storage.session.set({ [tabUrlKey(tabId)]: url });
+  } catch {
+    // Session storage unavailable; revisits will need a toolbar click.
+  }
+}
+
+async function recallTabUrl(tabId: number): Promise<string | null> {
+  try {
+    const key = tabUrlKey(tabId);
+    const data = await chrome.storage.session.get(key);
+    return typeof data[key] === "string" ? (data[key] as string) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function forgetTabUrl(tabId: number): Promise<void> {
+  try {
+    await chrome.storage.session.remove(tabUrlKey(tabId));
+  } catch {
+    // Nothing to clean up if storage is unavailable.
+  }
+}
 
 /**
  * Tracks recent non-extension tabs so the panel's target can be resolved even
@@ -39,22 +83,29 @@ export function trackContentTabs(
   broadcast?: (message: ExtensionMessage) => void
 ): void {
   chrome.tabs.onActivated.addListener(({ tabId }) => {
-    void rememberTab(tabId, broadcast);
+    void rememberTab(tabId, broadcast, "tab-switch");
   });
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (!tab.active) return;
-    // Only navigation signals warrant a broadcast: "loading" fires once per
-    // page load even on hosts whose URL we cannot read; `url` covers SPA
-    // history updates on readable hosts.
+    // Only navigation signals matter: "loading" fires once per page load even
+    // on hosts whose URL we cannot read; `url` covers SPA history updates on
+    // readable hosts.
     const navigated =
       changeInfo.status === "loading" || changeInfo.url !== undefined;
-    void rememberTab(tabId, navigated ? broadcast : undefined);
+    // A navigation invalidates the tab's remembered URL even in a background
+    // tab — whatever was analyzed there no longer describes the page.
+    if (navigated) void forgetTabUrl(tabId);
+    if (!tab.active) return;
+    void rememberTab(tabId, navigated ? broadcast : undefined, "navigation");
+  });
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    void forgetTabUrl(tabId);
   });
 }
 
 async function rememberTab(
   tabId: number,
-  broadcast?: (message: ExtensionMessage) => void
+  broadcast: ((message: ExtensionMessage) => void) | undefined,
+  trigger: "navigation" | "tab-switch"
 ): Promise<void> {
   try {
     const tab = await chrome.tabs.get(tabId);
@@ -67,7 +118,7 @@ async function rememberTab(
     broadcast?.({
       type: MessageType.ACTIVE_TAB_CHANGED,
       tabId,
-      trigger: "navigation",
+      trigger,
     });
   } catch {
     // Tab may already be gone.
@@ -138,25 +189,83 @@ export async function resolveActiveTab(
   return { tabId: tab.id ?? null };
 }
 
+/** FR-011/FR-012 stored-result lookup: saved library first, then session cache. */
+async function lookupStored(
+  canonicalUrl: string
+): Promise<{ analysis: JobAnalysis; saved: SavedJob | null } | null> {
+  const saved = await jobStorage.get(canonicalUrl);
+  if (saved) return { analysis: saved.analysis, saved };
+  const cached = await getCached(canonicalUrl);
+  if (cached) return { analysis: cached, saved: null };
+  return null;
+}
+
+/**
+ * A stored analysis with no fit score is stale once the profile has been
+ * created or updated after it ran: the default lookup never reaches the
+ * backend again, so recomputing here is the only way the fit ever appears.
+ */
+async function needsFitRefresh(analysis: JobAnalysis): Promise<boolean> {
+  if (analysis.fit) return false;
+  try {
+    const profile = await getProfile();
+    return (
+      profile !== null &&
+      Date.parse(analysis.analyzedAt) < Date.parse(profile.updatedAt)
+    );
+  } catch {
+    // Can't tell — serve the stored copy rather than fail the revisit.
+    return false;
+  }
+}
+
 export async function analyzeJobPage(
   message: AnalyzeJobPageMessage,
   broadcast: (m: ExtensionMessage) => void
 ): Promise<void> {
   let raw: RawPageExtract | undefined;
-  try {
-    const [injection] = await chrome.scripting.executeScript({
-      target: { tabId: message.tabId },
-      func: extractPage,
-    });
-    raw = injection?.result as RawPageExtract | undefined;
-  } catch {
-    raw = undefined;
+  if (!message.cachedOnly) {
+    try {
+      const [injection] = await chrome.scripting.executeScript({
+        target: { tabId: message.tabId },
+        func: extractPage,
+      });
+      raw = injection?.result as RawPageExtract | undefined;
+    } catch {
+      raw = undefined;
+    }
   }
 
   if (!raw) {
-    // executeScript failed: the activeTab grant is missing (it only exists
-    // after a toolbar-icon click and dies on navigation) or the page is one
-    // Chrome never allows extensions to read (chrome://, Web Store).
+    // No page access: either this is a cachedOnly probe, or executeScript
+    // failed because the activeTab grant is missing (it only exists after a
+    // toolbar-icon click and dies on navigation) or the page is one Chrome
+    // never allows extensions to read (chrome://, Web Store). A revisited tab
+    // can still be served from the library/cache via its remembered URL.
+    if (!message.bypassCache) {
+      const rememberedUrl = await recallTabUrl(message.tabId);
+      if (rememberedUrl) {
+        const canonicalUrl = canonicalize(rememberedUrl);
+        try {
+          const stored = await lookupStored(canonicalUrl);
+          if (stored) {
+            broadcast({
+              type: MessageType.JOB_ANALYSIS_RESULT,
+              analysis: stored.analysis,
+              canonicalUrl,
+              sourceUrl: rememberedUrl,
+              multiplePostings: false,
+              cached: true,
+              saved: stored.saved,
+            });
+            return;
+          }
+        } catch {
+          // Storage unreachable — fall through to the error (or silence).
+        }
+      }
+    }
+    if (message.cachedOnly) return; // Silent probe: leave the panel as-is.
     broadcast({
       type: MessageType.JOB_ANALYSIS_ERROR,
       error: {
@@ -177,6 +286,7 @@ export async function analyzeJobPage(
 
   const canonicalUrl = canonicalize(raw.url);
   const extract: PageExtract = { ...raw, canonicalUrl };
+  void rememberTabUrl(message.tabId, raw.url);
 
   if (extract.jsonLd.length === 0 && extract.mainText.length < MIN_TEXT_CHARS) {
     broadcast({
@@ -196,38 +306,36 @@ export async function analyzeJobPage(
 
   // FR-011/FR-012 lookup order: saved library → session cache → backend.
   if (!message.bypassCache) {
-    const saved = await jobStorage.get(canonicalUrl);
-    if (saved) {
-      broadcast({
-        type: MessageType.JOB_ANALYSIS_RESULT,
-        analysis: saved.analysis,
-        canonicalUrl,
-        sourceUrl: raw.url,
-        multiplePostings: extract.jsonLd.length > 1,
-        cached: true,
-        saved,
-      });
-      return;
-    }
-
-    const cached = await getCached(canonicalUrl);
-    if (cached) {
-      broadcast({
-        type: MessageType.JOB_ANALYSIS_RESULT,
-        analysis: cached,
-        canonicalUrl,
-        sourceUrl: raw.url,
-        multiplePostings: extract.jsonLd.length > 1,
-        cached: true,
-        saved: null,
-      });
-      return;
+    try {
+      const stored = await lookupStored(canonicalUrl);
+      if (stored && !(await needsFitRefresh(stored.analysis))) {
+        broadcast({
+          type: MessageType.JOB_ANALYSIS_RESULT,
+          analysis: stored.analysis,
+          canonicalUrl,
+          sourceUrl: raw.url,
+          multiplePostings: extract.jsonLd.length > 1,
+          cached: true,
+          saved: stored.saved,
+        });
+        return;
+      }
+    } catch {
+      // Storage unreachable — fall through to a fresh analysis.
     }
   }
 
   try {
     // FR-007: the profile leaves the browser only inside analysis requests.
-    const profile = await getProfile();
+    // The profile is an enhancement: when it cannot be fetched, analyze
+    // without it (fit stays null and refreshes on a later revisit) instead
+    // of failing the whole analysis.
+    let profile: CandidateProfile | null = null;
+    try {
+      profile = await getProfile();
+    } catch {
+      profile = null;
+    }
     const analysis = await postJobAnalysis({
       extract,
       profile: profile ? profileToPromptText(profile) : undefined,
@@ -235,14 +343,18 @@ export async function analyzeJobPage(
     });
     await setCached(canonicalUrl, analysis);
 
-    // Re-analysis of a saved posting replaces its snapshot (status/notes survive).
-    let saved = null;
-    if (message.bypassCache) {
+    // A fresh analysis of an already-saved posting replaces its snapshot
+    // (status/notes survive) — explicit Re-analyze and the automatic fit
+    // refresh both land here.
+    let saved: SavedJob | null = null;
+    try {
       const existing = await jobStorage.get(canonicalUrl);
       if (existing) {
         await jobStorage.update(canonicalUrl, { analysis });
         saved = await jobStorage.get(canonicalUrl);
       }
+    } catch {
+      // Library unreachable — still deliver the analysis itself.
     }
 
     broadcast({
@@ -266,6 +378,15 @@ export async function analyzeJobPage(
   }
 }
 
+/** ApiError codes (storage API) mapped onto the panel's error vocabulary. */
+const API_ERROR_CODES: Record<string, JobErrorCode> = {
+  NOT_CONFIGURED: "not-configured",
+  NETWORK_ERROR: "network-error",
+  UNAUTHENTICATED: "no-access",
+  NOT_AUTHORIZED: "no-access",
+  SERVICE_ERROR: "service-error",
+};
+
 function toJobPanelError(err: unknown): JobPanelError {
   if (
     typeof err === "object" &&
@@ -274,7 +395,21 @@ function toJobPanelError(err: unknown): JobPanelError {
     "message" in err &&
     "retryable" in err
   ) {
-    return err as JobPanelError;
+    const e = err as {
+      code: string;
+      message: string;
+      retryable: boolean;
+      action?: string;
+    };
+    // Rebuild as a plain object: on an Error subclass (e.g. ApiError),
+    // `message` is non-enumerable and would be dropped by the JSON
+    // serialization in chrome.runtime.sendMessage, leaving a blank error box.
+    return {
+      code: API_ERROR_CODES[e.code] ?? (e.code as JobErrorCode),
+      message: e.message,
+      action: e.action ?? "Try again.",
+      retryable: e.retryable,
+    };
   }
   return {
     code: "unknown",

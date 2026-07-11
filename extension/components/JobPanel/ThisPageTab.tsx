@@ -1,3 +1,4 @@
+import { formatSalary } from "../../lib/formatSalary";
 import type { JobAnalysis, JobPanelError, SavedJob } from "../../types/job";
 import { ArrangementBadge } from "./ArrangementBadge";
 import { FitScore } from "./FitScore";
@@ -299,17 +300,6 @@ function Field({ label, value }: { label: string; value: string }) {
       <dd className="text-gray-700 dark:text-gray-200">{value}</dd>
     </div>
   );
-}
-
-function formatSalary(salary: NonNullable<Partial<JobAnalysis>["salary"]>): string {
-  const fmt = (n: number) => n.toLocaleString("en-US");
-  const range =
-    salary.min !== null && salary.max !== null && salary.min !== salary.max
-      ? `${fmt(salary.min)}–${fmt(salary.max)}`
-      : fmt(salary.min ?? salary.max ?? 0);
-  const currency = salary.currency ? `${salary.currency} ` : "";
-  const period = salary.period ? ` / ${salary.period}` : "";
-  return `${currency}${range}${period}`;
 }
 
 function capitalize(value: string): string {

@@ -61,23 +61,30 @@ describe("jobFlow — trackContentTabs broadcasts", () => {
   function install(broadcast: (m: unknown) => void): {
     activated: Array<(info: { tabId: number }) => void>;
     updated: UpdatedListener[];
+    removed: Array<(tabId: number) => void>;
   } {
     const activated: Array<(info: { tabId: number }) => void> = [];
     const updated: UpdatedListener[] = [];
+    const removed: Array<(tabId: number) => void> = [];
     vi.mocked(chrome.tabs.onActivated.addListener).mockImplementation(((
       listener: (info: { tabId: number }) => void
     ) => activated.push(listener)) as never);
     vi.mocked(chrome.tabs.onUpdated.addListener).mockImplementation(((
       listener: UpdatedListener
     ) => updated.push(listener)) as never);
+    vi.mocked(chrome.tabs.onRemoved.addListener).mockImplementation(((
+      listener: (tabId: number) => void
+    ) => removed.push(listener)) as never);
     trackContentTabs(broadcast as never);
-    return { activated, updated };
+    return { activated, updated, removed };
   }
 
   beforeEach(() => {
     vi.mocked(chrome.tabs.get).mockReset();
     vi.mocked(chrome.tabs.onActivated.addListener).mockReset();
     vi.mocked(chrome.tabs.onUpdated.addListener).mockReset();
+    vi.mocked(chrome.tabs.onRemoved.addListener).mockReset();
+    vi.mocked(chrome.storage.session.remove).mockClear();
   });
 
   it("broadcasts ACTIVE_TAB_CHANGED when the active tab starts a navigation", async () => {
@@ -97,7 +104,7 @@ describe("jobFlow — trackContentTabs broadcasts", () => {
     });
   });
 
-  it("broadcasts on activation of a tracked tab", async () => {
+  it("broadcasts a tab-switch trigger on activation of a tracked tab", async () => {
     const broadcasts: unknown[] = [];
     const { activated } = install((m) => broadcasts.push(m));
     vi.mocked(chrome.tabs.get).mockResolvedValue({
@@ -110,7 +117,7 @@ describe("jobFlow — trackContentTabs broadcasts", () => {
     expect(broadcasts[0]).toEqual({
       type: "ACTIVE_TAB_CHANGED",
       tabId: 3,
-      trigger: "navigation",
+      trigger: "tab-switch",
     });
   });
 
@@ -190,6 +197,26 @@ describe("jobFlow — trackContentTabs broadcasts", () => {
     await expect(resolveActiveTab()).resolves.toEqual({
       tabId: 4,
     });
+  });
+
+  it("forgets the tab's remembered URL when it navigates, even in the background", async () => {
+    const { updated } = install(() => {});
+
+    updated[0]!(12, { status: "loading" }, { active: false } as chrome.tabs.Tab);
+
+    await vi.waitFor(() =>
+      expect(chrome.storage.session.remove).toHaveBeenCalledWith("taburl:12")
+    );
+  });
+
+  it("forgets the tab's remembered URL when it closes", async () => {
+    const { removed } = install(() => {});
+
+    removed[0]!(15);
+
+    await vi.waitFor(() =>
+      expect(chrome.storage.session.remove).toHaveBeenCalledWith("taburl:15")
+    );
   });
 
   it("does not track explicit about:blank tabs", async () => {

@@ -37,12 +37,19 @@ interface JobPanelProps {
    * Each bump is a cue to (re-)analyze while the grant is fresh.
    */
   analyzeNonce?: number;
+  /**
+   * Bumped on every tab switch. Each bump is a cue to silently probe the
+   * saved library / session cache for the revisited tab's analysis — the
+   * background only answers if it has one, so idle stays idle.
+   */
+  probeNonce?: number;
 }
 
 export function JobPanel({
   tabId,
   navigationId = 0,
   analyzeNonce = 0,
+  probeNonce = 0,
 }: JobPanelProps) {
   const [view, setView] = useState<JobView>(INITIAL_VIEW);
   const [activeTab, setActiveTab] = useState<string>("this-page");
@@ -52,15 +59,26 @@ export function JobPanel({
   viewStatusRef.current = view.status;
 
   const requestAnalysis = useCallback(
-    (options: { assumeJobPosting?: boolean; bypassCache?: boolean } = {}) => {
+    (
+      options: {
+        assumeJobPosting?: boolean;
+        bypassCache?: boolean;
+        cachedOnly?: boolean;
+      } = {}
+    ) => {
       if (tabId === null) return;
       cancelledRef.current = false;
-      setView((prev) => ({ ...prev, status: "analyzing", error: null }));
+      if (!options.cachedOnly) {
+        // A cachedOnly probe may go unanswered, so it must not enter the
+        // "analyzing" state it could never leave.
+        setView((prev) => ({ ...prev, status: "analyzing", error: null }));
+      }
       void chrome.runtime.sendMessage({
         type: MessageType.ANALYZE_JOB_PAGE,
         tabId,
         assumeJobPosting: options.assumeJobPosting ?? false,
         bypassCache: options.bypassCache ?? false,
+        cachedOnly: options.cachedOnly ?? false,
       });
     },
     [tabId]
@@ -100,6 +118,18 @@ export function JobPanel({
     if (viewStatusRef.current === "analyzing") return;
     requestAnalysis();
   }, [analyzeNonce, requestAnalysis]);
+
+  // Tab switch: after the navigation reset above, silently ask the background
+  // for a stored analysis of the revisited tab. It answers only from the
+  // library/cache (no page access, so no permission error); on a miss the
+  // panel simply stays idle. Declared after the reset effect so the probe's
+  // un-cancelling runs last.
+  const probeNonceRef = useRef(probeNonce);
+  useEffect(() => {
+    if (probeNonce === probeNonceRef.current) return;
+    probeNonceRef.current = probeNonce;
+    requestAnalysis({ cachedOnly: true });
+  }, [probeNonce, requestAnalysis]);
 
   useEffect(() => {
     const listener = (message: ExtensionMessage) => {

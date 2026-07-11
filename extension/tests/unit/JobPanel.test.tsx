@@ -53,6 +53,7 @@ describe("JobPanel", () => {
       tabId: 7,
       assumeJobPosting: false,
       bypassCache: false,
+      cachedOnly: false,
     });
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
@@ -158,6 +159,7 @@ describe("JobPanel", () => {
           tabId: 4,
           assumeJobPosting: false,
           bypassCache: false,
+          cachedOnly: false,
         });
       });
   });
