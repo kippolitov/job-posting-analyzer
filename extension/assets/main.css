@@ -8,6 +8,13 @@
   line-height: 1.5;
 }
 
+/* Full height chain so AuthGate/page layouts can flex to the viewport. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   padding: 0;
