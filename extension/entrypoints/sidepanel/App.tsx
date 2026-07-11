@@ -12,6 +12,7 @@ export function App() {
   const [tabId, setTabId] = useState<number | null | undefined>(undefined);
   const [navigationId, setNavigationId] = useState(0);
   const [analyzeNonce, setAnalyzeNonce] = useState(0);
+  const [probeNonce, setProbeNonce] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -44,6 +45,11 @@ export function App() {
           // Navigation or tab switch: any activeTab grant is gone, so
           // state from before is stale.
           setNavigationId((n) => n + 1);
+          if (message.trigger === "tab-switch") {
+            // The revisited tab's analysis may still be stored — probe for it
+            // (served without page access) instead of demanding a re-analyze.
+            setProbeNonce((n) => n + 1);
+          }
         }
       }
     };
@@ -100,6 +106,7 @@ export function App() {
             tabId={tabId}
             navigationId={navigationId}
             analyzeNonce={analyzeNonce}
+            probeNonce={probeNonce}
           />
         )}
       </AuthGate>

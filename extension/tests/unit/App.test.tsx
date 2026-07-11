@@ -62,6 +62,7 @@ describe("App", () => {
         tabId: 4,
         assumeJobPosting: false,
         bypassCache: false,
+        cachedOnly: false,
       });
     });
   });
@@ -84,8 +85,37 @@ describe("App", () => {
         tabId: 4,
         assumeJobPosting: false,
         bypassCache: false,
+        cachedOnly: false,
       });
     });
+  });
+
+  it("silently probes for a stored analysis on a tab-switch ACTIVE_TAB_CHANGED", async () => {
+    render(<App />);
+    await screen.findByText("Analyze the current page as a job posting");
+
+    act(() => {
+      dispatchToAll({
+        type: MessageType.ACTIVE_TAB_CHANGED,
+        tabId: 6,
+        trigger: "tab-switch",
+      });
+    });
+
+    await waitFor(() => {
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        type: MessageType.ANALYZE_JOB_PAGE,
+        tabId: 6,
+        assumeJobPosting: false,
+        bypassCache: false,
+        cachedOnly: true,
+      });
+    });
+    // The probe may go unanswered, so the panel must stay idle, not spin.
+    expect(
+      screen.getByText("Analyze the current page as a job posting")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("drops stale state on a navigation ACTIVE_TAB_CHANGED", async () => {

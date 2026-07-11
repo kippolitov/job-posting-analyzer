@@ -30,6 +30,7 @@ module.exports = {
   ignorePatterns: [
     "node_modules/",
     ".output/",
+    "output/",
     ".wxt/",
     "dist/",
     "*.config.ts",

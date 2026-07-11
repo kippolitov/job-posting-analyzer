@@ -65,6 +65,41 @@ describe("SavedTab", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
+  it("shows fit score, salary range, and tech stack for a saved posting", async () => {
+    await jobStorage.save(
+      makeJob({
+        analysis: {
+          ...analysis,
+          salary: { min: 150_000, max: 180_000, currency: "USD", period: "year" },
+          techStack: ["C#", ".NET", "Azure", "Kubernetes", "React", "SQL", "Kafka"],
+          fit: { score: 82, rationale: "Strong overlap with the profile." },
+        },
+      })
+    );
+    render(<SavedTab />);
+
+    expect(
+      await screen.findByLabelText("Fit score: 82 out of 100")
+    ).toHaveTextContent("Fit 82");
+    expect(screen.getByText("USD 150,000–180,000 / year")).toBeInTheDocument();
+    const stack = screen.getByRole("list", { name: "Tech stack" });
+    expect(stack).toHaveTextContent("C#");
+    expect(stack).toHaveTextContent("SQL");
+    expect(stack).toHaveTextContent("+1 more");
+    expect(stack).not.toHaveTextContent("Kafka");
+  });
+
+  it("omits fit, salary, and tech stack rows when the analysis has none", async () => {
+    await jobStorage.save(makeJob());
+    render(<SavedTab />);
+    await screen.findByText("Senior Backend Engineer");
+
+    expect(screen.queryByLabelText(/Fit score/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Tech stack" })
+    ).not.toBeInTheDocument();
+  });
+
   it("filters by status", async () => {
     await jobStorage.save(makeJob({ canonicalUrl: "https://a.example/1" }));
     await jobStorage.save(

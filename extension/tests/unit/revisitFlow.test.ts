@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { http, HttpResponse } from "msw";
 import { installMemoryStorage } from "./helpers/memoryStorage";
-import { installFakeStorageApi } from "./helpers/mswStorageServer";
+import { installFakeStorageApi, TEST_API_BASE } from "./helpers/mswStorageServer";
 import { analyzeJobPage } from "../../services/jobFlow";
 import { jobStorage } from "../../services/jobStorage";
 import { setCached } from "../../services/jobAnalysisCache";
@@ -8,6 +9,7 @@ import { postJobAnalysis } from "../../services/jobAnalysisClient";
 import { MessageType } from "../../types/messages";
 import type {
   ExtensionMessage,
+  JobAnalysisErrorMessage,
   JobAnalysisResultMessage,
 } from "../../types/messages";
 import type { JobAnalysis, SavedJob } from "../../types/job";
@@ -18,7 +20,7 @@ vi.mock("../../services/jobAnalysisClient", () => ({
 
 // jobStorage is server-backed since 002; run it against the contract-faithful
 // fake API instead of chrome.storage.
-installFakeStorageApi();
+const api = installFakeStorageApi();
 
 const POSTING_TEXT =
   "We are hiring a senior engineer. Fully remote within the US. ".repeat(10);
@@ -179,6 +181,59 @@ describe("analyze flow — error paths", () => {
     });
   });
 
+  it("analyzes without the profile when the profile fetch fails", async () => {
+    // Profile endpoint down; the analysis itself must still go through.
+    api.server.use(
+      http.get(
+        `${TEST_API_BASE}/profile`,
+        () =>
+          HttpResponse.json(
+            { error: { code: "SERVICE_ERROR", message: "boom" } },
+            { status: 500 }
+          ),
+        { once: true }
+      )
+    );
+    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Role"));
+
+    const messages = await runFlow("https://boards.greenhouse.io/acme/jobs/11");
+
+    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
+    const [request] = vi.mocked(postJobAnalysis).mock.calls[0]!;
+    expect(request.profile).toBeUndefined();
+    expect(messages[0]!.type).toBe(MessageType.JOB_ANALYSIS_RESULT);
+  });
+
+  it("keeps the message of Error-subclass failures readable after sendMessage JSON serialization", async () => {
+    class FakeApiError extends Error {
+      readonly code = "SERVICE_ERROR";
+      readonly retryable = true;
+      constructor() {
+        super("The storage service encountered an error. Try again.");
+      }
+    }
+    stubExtraction("https://a.example/jobs/3");
+    vi.mocked(postJobAnalysis).mockRejectedValue(new FakeApiError());
+
+    const broadcasts: ExtensionMessage[] = [];
+    await analyzeJobPage(
+      { type: MessageType.ANALYZE_JOB_PAGE, tabId: 7 },
+      (m) => broadcasts.push(m)
+    );
+
+    // chrome.runtime.sendMessage JSON-serializes: Error#message is
+    // non-enumerable and vanishes unless the flow rebuilds a plain object.
+    const wire = JSON.parse(
+      JSON.stringify(broadcasts[0])
+    ) as JobAnalysisErrorMessage;
+    expect(wire.error.message).toBe(
+      "The storage service encountered an error. Try again."
+    );
+    expect(wire.error.code).toBe("service-error");
+    expect(wire.error.action).toBe("Try again.");
+    expect(wire.error.retryable).toBe(true);
+  });
+
   it("wraps non-typed failures into a generic retryable error", async () => {
     const broadcasts: ExtensionMessage[] = [];
     stubExtraction("https://a.example/jobs/2");
@@ -193,6 +248,57 @@ describe("analyze flow — error paths", () => {
       type: MessageType.JOB_ANALYSIS_ERROR,
       error: { code: "unknown", retryable: true },
     });
+  });
+});
+
+describe("revisit without page access — remembered tab URL", () => {
+  it("serves the stored analysis when executeScript fails after a prior analysis on the same tab", async () => {
+    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Remembered Role"));
+    await runFlow("https://boards.greenhouse.io/acme/jobs/7");
+
+    // Tab switch killed the activeTab grant: extraction now fails.
+    vi.mocked(chrome.scripting.executeScript).mockRejectedValue(
+      new Error("no activeTab grant")
+    );
+    const broadcasts: ExtensionMessage[] = [];
+    await analyzeJobPage(
+      { type: MessageType.ANALYZE_JOB_PAGE, tabId: 7 },
+      (m) => broadcasts.push(m)
+    );
+
+    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
+    const result = broadcasts[0] as JobAnalysisResultMessage;
+    expect(result.type).toBe(MessageType.JOB_ANALYSIS_RESULT);
+    expect(result.analysis.title).toBe("Remembered Role");
+    expect(result.cached).toBe(true);
+  });
+
+  it("a cachedOnly probe restores the stored analysis without touching the page", async () => {
+    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Probe Role"));
+    await runFlow("https://boards.greenhouse.io/acme/jobs/8");
+    vi.mocked(chrome.scripting.executeScript).mockClear();
+
+    const broadcasts: ExtensionMessage[] = [];
+    await analyzeJobPage(
+      { type: MessageType.ANALYZE_JOB_PAGE, tabId: 7, cachedOnly: true },
+      (m) => broadcasts.push(m)
+    );
+
+    expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
+    const result = broadcasts[0] as JobAnalysisResultMessage;
+    expect(result.type).toBe(MessageType.JOB_ANALYSIS_RESULT);
+    expect(result.analysis.title).toBe("Probe Role");
+  });
+
+  it("a cachedOnly probe stays silent when nothing is stored for the tab", async () => {
+    const broadcasts: ExtensionMessage[] = [];
+    await analyzeJobPage(
+      { type: MessageType.ANALYZE_JOB_PAGE, tabId: 42, cachedOnly: true },
+      (m) => broadcasts.push(m)
+    );
+
+    expect(broadcasts).toEqual([]);
+    expect(chrome.scripting.executeScript).not.toHaveBeenCalled();
   });
 });
 
@@ -260,6 +366,62 @@ describe("revisit flow — lookup order saved → cached → backend", () => {
     const second = await runFlow("https://boards.greenhouse.io/acme/jobs/3");
     expect(postJobAnalysis).toHaveBeenCalledTimes(1);
     expect((second[0] as JobAnalysisResultMessage).cached).toBe(true);
+  });
+
+  it("re-analyzes a cached posting whose fit is missing once a newer profile exists", async () => {
+    await setCached(
+      "https://boards.greenhouse.io/acme/jobs/5",
+      makeAnalysis("Cached, no fit") // fit: null, analyzedAt in the past
+    );
+    const { setProfile } = await import("../../services/profileStorage");
+    await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
+    vi.mocked(postJobAnalysis).mockResolvedValue({
+      ...makeAnalysis("Cached, no fit"),
+      fit: { score: 82, rationale: "Strong match" },
+      analyzedAt: new Date().toISOString(),
+    });
+
+    const messages = await runFlow("https://boards.greenhouse.io/acme/jobs/5");
+
+    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
+    const result = messages[0] as JobAnalysisResultMessage;
+    expect(result.analysis.fit).toEqual({ score: 82, rationale: "Strong match" });
+    expect(result.cached).toBe(false);
+  });
+
+  it("refreshes a saved posting's snapshot with the newly computed fit (status/notes survive)", async () => {
+    const canonicalUrl = "https://boards.greenhouse.io/acme/jobs/1";
+    await jobStorage.save(makeSavedJob(canonicalUrl));
+    const { setProfile } = await import("../../services/profileStorage");
+    await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
+    vi.mocked(postJobAnalysis).mockResolvedValue({
+      ...makeAnalysis("Saved Role"),
+      fit: { score: 45, rationale: "Partial match" },
+      analyzedAt: new Date().toISOString(),
+    });
+
+    const messages = await runFlow(canonicalUrl);
+
+    const result = messages[0] as JobAnalysisResultMessage;
+    expect(result.analysis.fit?.score).toBe(45);
+    expect(result.saved?.status).toBe("applied");
+    const stored = await jobStorage.get(canonicalUrl);
+    expect(stored!.analysis.fit?.score).toBe(45);
+    expect(stored!.notes).toBe("recruiter: Dana");
+  });
+
+  it("keeps serving the cache when the fit-less analysis is newer than the profile", async () => {
+    const { setProfile } = await import("../../services/profileStorage");
+    await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
+    await setCached("https://boards.greenhouse.io/acme/jobs/6", {
+      ...makeAnalysis("Recent, genuinely no fit"),
+      analyzedAt: "2099-01-01T00:00:00Z",
+    });
+
+    const messages = await runFlow("https://boards.greenhouse.io/acme/jobs/6");
+
+    expect(postJobAnalysis).not.toHaveBeenCalled();
+    expect((messages[0] as JobAnalysisResultMessage).cached).toBe(true);
   });
 
   it("Re-analyze bypasses saved and cache, replaces the saved snapshot, and bumps updatedAt", async () => {

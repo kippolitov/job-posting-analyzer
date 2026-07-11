@@ -4,7 +4,7 @@ interface FitScoreProps {
   fit: Fit | null;
 }
 
-function scoreStyle(score: number): string {
+export function scoreStyle(score: number): string {
   if (score >= 70)
     return "bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300";
   if (score > 20)

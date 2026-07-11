@@ -55,6 +55,7 @@ const chromeMock = {
     get: vi.fn(),
     onActivated: { addListener: vi.fn(), removeListener: vi.fn() },
     onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
+    onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
   },
   scripting: {
     executeScript: vi.fn(),

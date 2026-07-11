@@ -1,7 +1,11 @@
 import { useState } from "react";
+import { formatSalary } from "../../lib/formatSalary";
 import type { JobStatus, SavedJob } from "../../types/job";
 import { JOB_STATUSES } from "../../types/job";
 import { ArrangementBadge } from "./ArrangementBadge";
+import { scoreStyle } from "./FitScore";
+
+const TECH_STACK_PREVIEW = 6;
 
 interface SavedJobRowProps {
   job: SavedJob;
@@ -47,6 +51,46 @@ export function SavedJobRow({
           </svg>
         </button>
       </div>
+
+      {(job.analysis.fit || job.analysis.salary) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {job.analysis.fit && (
+            <span
+              aria-label={`Fit score: ${job.analysis.fit.score} out of 100`}
+              title={job.analysis.fit.rationale}
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${scoreStyle(job.analysis.fit.score)}`}
+            >
+              Fit {job.analysis.fit.score}
+            </span>
+          )}
+          {job.analysis.salary && (
+            <span className="text-xs text-gray-600 dark:text-gray-300">
+              {formatSalary(job.analysis.salary)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {job.analysis.techStack.length > 0 && (
+        <ul aria-label="Tech stack" className="mt-2 flex flex-wrap gap-1">
+          {job.analysis.techStack.slice(0, TECH_STACK_PREVIEW).map((tech) => (
+            <li
+              key={tech}
+              className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+            >
+              {tech}
+            </li>
+          ))}
+          {job.analysis.techStack.length > TECH_STACK_PREVIEW && (
+            <li
+              title={job.analysis.techStack.slice(TECH_STACK_PREVIEW).join(", ")}
+              className="px-1 py-0.5 text-[10px] text-gray-400 dark:text-gray-500"
+            >
+              +{job.analysis.techStack.length - TECH_STACK_PREVIEW} more
+            </li>
+          )}
+        </ul>
+      )}
 
       <div className="mt-2 flex items-center gap-2">
         <ArrangementBadge
