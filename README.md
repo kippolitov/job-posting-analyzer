@@ -128,7 +128,7 @@ Tests:
 
 ```bash
 cd extension && npm test                    # vitest unit + msw contract tests
-cd extension && npm run test:e2e           # playwright e2e (opt-in: E2E=1 + a live backend)
+cd extension && npm run test:e2e           # playwright e2e (opt-in: E2E=1 + a live backend; build with `npm run build:e2e` first — it adds the localhost host permissions the fixtures need, which store builds omit)
 cd functions && npm test                    # vitest unit tests (starts Azurite automatically)
 cd functions && npm run test:integration   # endpoint/auth/perf tests against Azurite
 ```

@@ -16,8 +16,8 @@ export const e2eEnabled = process.env.E2E === "1";
 
 export const skipReason =
   "E2e tests are opt-in: build the extension against a live backend " +
-  "(set WXT_AZURE_FUNCTION_URL in .env.local, then `npm run build`) and run " +
-  "with E2E=1, e.g. PowerShell: $env:E2E='1'; npm run test:e2e";
+  "(set WXT_AZURE_FUNCTION_URL in .env.local, then `npm run build:e2e`) and " +
+  "run with E2E=1, e.g. PowerShell: $env:E2E='1'; npm run test:e2e";
 
 export const test = base.extend<{
   context: BrowserContext;
@@ -26,10 +26,22 @@ export const test = base.extend<{
 }>({
   // eslint-disable-next-line no-empty-pattern
   context: async ({}, use, testInfo) => {
-    if (!fs.existsSync(path.join(extensionPath, "manifest.json"))) {
+    const manifestPath = path.join(extensionPath, "manifest.json");
+    if (!fs.existsSync(manifestPath)) {
       throw new Error(
-        `Built extension not found at ${extensionPath}. Run \`npm run build\` first ` +
+        `Built extension not found at ${extensionPath}. Run \`npm run build:e2e\` first ` +
           "(with WXT_AZURE_FUNCTION_URL set, since the backend URL is baked in at build time)."
+      );
+    }
+    // Localhost host permissions are e2e-only (stripped from store builds);
+    // without them extraction silently fails on the 127.0.0.1 fixture pages.
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
+      host_permissions?: string[];
+    };
+    if (!manifest.host_permissions?.includes("http://127.0.0.1/*")) {
+      throw new Error(
+        `Built extension at ${extensionPath} lacks localhost host permissions. ` +
+          "Rebuild with `npm run build:e2e` (a plain `npm run build` produces the store manifest)."
       );
     }
     const userDataDir = fs.mkdtempSync(

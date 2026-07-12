@@ -18,9 +18,13 @@ export default defineConfig({
     description:
       "Analyzes job postings for work arrangement, salary, seniority, tech stack, and fit",
     permissions: ["sidePanel", "storage", "scripting", "activeTab", "identity"],
-    // Localhost: lets the Playwright e2e suite exercise page extraction
-    // (it cannot perform the action click that grants activeTab).
-    host_permissions: ["http://localhost/*", "http://127.0.0.1/*"],
+    // Localhost host permissions let the Playwright e2e suite exercise page
+    // extraction (it cannot perform the action click that grants activeTab).
+    // They are e2e-only (`npm run build:e2e`): store/release builds must not
+    // request any host permissions, or Web Store review deepens.
+    ...(process.env.E2E === "1"
+      ? { host_permissions: ["http://localhost/*", "http://127.0.0.1/*"] }
+      : {}),
     side_panel: {
       default_path: "sidepanel.html",
     },
