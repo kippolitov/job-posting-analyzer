@@ -39,3 +39,6 @@ test-results/
 
 # Logs
 *.log
+
+# Chrome Web Store submission materials (not for the repo)
+store-submission/
