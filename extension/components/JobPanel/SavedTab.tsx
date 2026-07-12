@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { importFromJson } from "../../services/importService";
 import { jobStorage } from "../../services/jobStorage";
 import type { Arrangement, JobStatus, SavedJob } from "../../types/job";
 import { ARRANGEMENTS, JOB_STATUSES } from "../../types/job";
@@ -17,6 +18,9 @@ export function SavedTab() {
   // Retry, never as an empty library (FR-015).
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [importSummary, setImportSummary] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
     setLoadState((prev) => (prev === "ready" ? prev : "loading"));
@@ -75,6 +79,41 @@ export function SavedTab() {
       URL.revokeObjectURL(url);
     }, "The export could not be downloaded. Try again.");
 
+  const readFileText = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+
+  const handleImportFile = async (file: File) => {
+    setImporting(true);
+    setImportSummary(null);
+    setActionError(null);
+    try {
+      const result = await importFromJson(await readFileText(file));
+      const counts = `Imported ${result.importedJobs} posting${
+        result.importedJobs === 1 ? "" : "s"
+      }, skipped ${result.skippedDuplicates} duplicate${
+        result.skippedDuplicates === 1 ? "" : "s"
+      }${result.invalidEntries > 0 ? ` (${result.invalidEntries} unreadable entries ignored)` : ""}.`;
+      if (result.status === "completed") {
+        setImportSummary(counts);
+      } else {
+        // Partial imports are safe to retry: existing records are skipped.
+        setActionError(
+          result.status === "invalid-file"
+            ? (result.errorMessage ?? "This file could not be imported.")
+            : `${result.errorMessage ?? "The import could not finish."} ${counts}`
+        );
+      }
+      await reload();
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const displayed =
     sortOrder === "newest"
       ? jobs
@@ -125,13 +164,42 @@ export function SavedTab() {
           {sortOrder === "newest" ? "Newest ↓" : "Oldest ↑"}
         </button>
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          aria-label="Import saved postings file"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // Allow re-selecting the same file after a failed attempt.
+            e.target.value = "";
+            if (file) void handleImportFile(file);
+          }}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={importing}
+          className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+        >
+          {importing ? "Importing…" : "Import"}
+        </button>
         <button
           onClick={() => void handleExport()}
-          className="ml-auto rounded-md px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+          className="rounded-md px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
         >
           Export
         </button>
       </div>
+
+      {importSummary && (
+        <div
+          role="status"
+          className="shrink-0 border-b border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700 dark:border-green-900/60 dark:bg-green-950/40 dark:text-green-300"
+        >
+          {importSummary}
+        </div>
+      )}
 
       {actionError && (
         <div

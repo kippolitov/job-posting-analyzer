@@ -222,6 +222,56 @@ describe("SavedTab", () => {
     vi.unstubAllGlobals();
   });
 
+  it("imports an export file and reports imported and skipped counts", async () => {
+    await jobStorage.save(makeJob({ notes: "keep these notes" }));
+    const file = new File(
+      [
+        JSON.stringify({
+          schemaVersion: 1,
+          exportedAt: "2026-07-10T00:00:00Z",
+          jobs: [
+            makeJob({ notes: "stale exported notes" }),
+            makeJob({
+              canonicalUrl: "https://a.example/2",
+              analysis: { ...analysis, title: "Imported Role" },
+            }),
+          ],
+        }),
+      ],
+      "saved-jobs-2026-07-10.json",
+      { type: "application/json" }
+    );
+
+    render(<SavedTab />);
+    await screen.findByText("Senior Backend Engineer");
+    await userEvent.upload(
+      screen.getByLabelText("Import saved postings file"),
+      file
+    );
+
+    expect(
+      await screen.findByText("Imported 1 posting, skipped 1 duplicate.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Imported Role")).toBeInTheDocument();
+    // The existing record was not overwritten by the stale export copy.
+    const kept = await jobStorage.get("https://a.example/1");
+    expect(kept!.notes).toBe("keep these notes");
+  });
+
+  it("shows an alert when the selected file is not a saved-jobs export", async () => {
+    render(<SavedTab />);
+    await screen.findByText(/No saved postings yet/);
+
+    await userEvent.upload(
+      screen.getByLabelText("Import saved postings file"),
+      new File(["[1, 2, 3]"], "random.json", { type: "application/json" })
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /not a saved-jobs export/
+    );
+  });
+
   it("shows a retryable error instead of an empty library when the load fails (FR-015)", async () => {
     await jobStorage.save(makeJob());
     api.failNext(500);
