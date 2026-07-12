@@ -18,51 +18,62 @@
 </head>
 <body>
 <h1>Privacy Policy — Job Posting Analyzer</h1>
-<p class="updated">Last updated: July 5, 2026</p>
+<p class="updated">Last updated: July 12, 2026</p>
 
-<p>Job Posting Analyzer ("the extension") is a Chrome extension that analyzes job postings for work arrangement, salary, seniority, tech stack, and fit. This page explains what data the extension handles, how it's used, and what choices you have.</p>
+<p>Job Posting Analyzer ("the extension") is a Chrome extension that analyzes job postings for work arrangement, salary, seniority, tech stack, and fit. Access is by invitation: features require signing in with a Google account the developer has allowlisted. This page explains what data the extension handles, how it's used, and what choices you have.</p>
+
+<h2>Sign-in and invitation</h2>
+<p>When you sign in, Google issues an ID token containing your email address and basic profile information. That token accompanies every request to our backend, which verifies it and checks your email against the invitation allowlist before doing any work. Your email address is stored server-side as the key for your account data. The extension never sees or stores your Google password.</p>
 
 <h2>What the extension accesses</h2>
 <p>The extension only reads the page you're actively viewing, and only after you click its toolbar icon (via Chrome's <code>activeTab</code> permission) — it never reads pages in the background and never requests broad access to your browsing.</p>
 <p>When you analyze a page, the extension reads:</p>
 <ul>
-  <li>The page's visible text and any embedded structured job-posting data (schema.org <code>JobPosting</code> JSON-LD)</li>
+  <li>The page's visible text (capped at 40,000 characters), any embedded structured job-posting data (schema.org <code>JobPosting</code> JSON-LD), and the page's URL and title</li>
   <li>Your candidate profile, if you've chosen to set one up in the extension's options page — a free-text summary of your background and any dealbreakers you specify</li>
 </ul>
 
 <h2>How that data is used</h2>
-<p>The page content (and your candidate profile, if configured) is sent to a backend service (an Azure Function that we operate), which calls Azure OpenAI to extract structured fields — work arrangement, salary, seniority, tech stack — and, if a profile is present, a fit score with a short rationale. This data is processed only to produce that analysis and is not used for any other purpose — not advertising, not profiling, not resale.</p>
+<p>The page content (and your candidate profile, if configured) is sent to a backend service (an Azure Function that we operate), which calls Azure OpenAI to extract structured fields — work arrangement, salary, seniority, tech stack — and, if a profile is present, a fit score with a short rationale. This data is processed only to produce that analysis and to provide the sync features described below — not advertising, not profiling, not resale.</p>
 
 <h2>What is stored, and where</h2>
 <ul>
-  <li><strong>In your browser only:</strong>
+  <li><strong>In your account (on our servers):</strong>
     <ul>
-      <li>Your candidate profile is stored in <code>chrome.storage.local</code> and never leaves your browser except as part of an analysis request you initiate.</li>
-      <li>Postings you explicitly save (via the "Save" action) are stored in <code>chrome.storage.local</code> — including the analysis snapshot, your status labels, and any notes you add — until you delete them or export/clear your library.</li>
-      <li>Recent (unsaved) analyses are cached in <code>chrome.storage.session</code>, which Chrome automatically clears when you close the browser.</li>
-      <li>Your theme preference is kept in <code>localStorage</code> until changed or cleared.</li>
+      <li>Your candidate profile, stored under your account so it follows you across devices and browsers, and included in analysis requests you initiate.</li>
+      <li>Postings you explicitly save (via the "Save" action) — the analysis snapshot, the posting's URL and title, your status labels, and any notes you add — until you delete them.</li>
+      <li>Your email address on the invitation allowlist.</li>
+      <li>All of this lives in Azure Table Storage, keyed by your account, and is transmitted only over HTTPS.</li>
     </ul>
   </li>
-  <li><strong>On our servers:</strong> nothing is persisted after your request completes. Our backend is a stateless API with no database — page content and profile text are processed in memory to generate a response and then discarded. Standard operational telemetry (request counts, latency, errors) is collected via Azure Application Insights to keep the service running, but this does not include the content of the pages or profiles you submit.</li>
+  <li><strong>In your browser:</strong>
+    <ul>
+      <li>Recent analyses are cached locally (<code>chrome.storage</code>) so re-opening the panel is fast; session caches are cleared when you close the browser.</li>
+      <li>Your sign-in session and theme preference are kept locally until you sign out or clear them.</li>
+    </ul>
+  </li>
+  <li><strong>Operational telemetry:</strong> standard service metrics (request counts, latency, errors) are collected via Azure Application Insights to keep the service running. This does not include the content of the pages or profiles you submit.</li>
 </ul>
 
 <h2>Third parties</h2>
-<p>The only third-party processor involved is <a href="https://www.microsoft.com/en-us/trust-center/privacy" target="_blank" rel="noopener">Microsoft Azure OpenAI Service</a>, which processes the content described above to generate responses, under Microsoft's own enterprise data handling commitments. We do not use advertising networks, analytics trackers, or any service that profiles or resells your data. We do not sell your data to anyone, under any circumstances.</p>
+<p>Two third-party processors are involved: <a href="https://www.microsoft.com/en-us/trust-center/privacy" target="_blank" rel="noopener">Microsoft Azure</a> (hosting, storage, and the Azure OpenAI Service, which processes content under Microsoft's enterprise data handling commitments — Azure OpenAI does not use your data to train models) and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google</a> (sign-in). We do not use advertising networks, analytics trackers, or any service that profiles or resells your data. We do not sell your data to anyone, under any circumstances, and we do not use it to determine creditworthiness or for lending purposes.</p>
 
 <h2>Permissions the extension requests</h2>
 <ul>
   <li><code>activeTab</code> / <code>scripting</code> — to read the content of the page you're actively viewing, only when you click the toolbar icon</li>
-  <li><code>storage</code> — to store your saved job postings, candidate profile, and cached analyses locally in your browser</li>
+  <li><code>storage</code> — to cache analyses and keep session state locally in your browser</li>
   <li><code>sidePanel</code> — to display the extension's UI in Chrome's side panel</li>
+  <li><code>identity</code> — to sign you in with your Google account</li>
+  <li>Localhost host permissions (<code>http://localhost/*</code>, <code>http://127.0.0.1/*</code>) — used only by our automated test suite; they grant no access to any real website</li>
 </ul>
 
 <h2>Your choices and control over your data</h2>
-<p>Everything the extension retains beyond a single session lives in your browser, under your control:</p>
 <ul>
   <li><strong>Export</strong> your entire saved library as a JSON file at any time from the Saved tab.</li>
   <li><strong>Delete</strong> individual saved postings, or prune archived ones in bulk.</li>
-  <li><strong>Clear your candidate profile</strong> at any time from the options page.</li>
-  <li><strong>Remove everything</strong> by clearing the extension's site data in Chrome settings, or by uninstalling the extension.</li>
+  <li><strong>Delete your candidate profile</strong> at any time from the options page.</li>
+  <li><strong>Sign out</strong> at any time; the extension makes no backend requests when signed out.</li>
+  <li><strong>Full deletion:</strong> if your access is revoked (removal from the allowlist), your stored data is retained so it's available if access is restored. To have all data associated with your account permanently deleted, email <a href="mailto:kippolitov@gmail.com">kippolitov@gmail.com</a> from the affected account or file an issue at the address below.</li>
 </ul>
 
 <h2>Children's privacy</h2>
@@ -72,6 +83,6 @@
 <p>If this policy changes, the updated version will be posted at this same URL with a new "Last updated" date.</p>
 
 <h2>Contact</h2>
-<p>Questions or requests can be filed as an issue at <a href="https://github.com/kippolitov/job-posting-analyzer/issues" target="_blank" rel="noopener">github.com/kippolitov/job-posting-analyzer/issues</a>.</p>
+<p>Questions or requests can be sent to <a href="mailto:kippolitov@gmail.com">kippolitov@gmail.com</a> or filed as an issue at <a href="https://github.com/kippolitov/job-posting-analyzer/issues" target="_blank" rel="noopener">github.com/kippolitov/job-posting-analyzer/issues</a>.</p>
 </body>
 </html>
