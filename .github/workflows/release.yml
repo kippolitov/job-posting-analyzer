@@ -138,13 +138,29 @@ jobs:
             --notes "Built from ${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
             "${{ env.ARCHIVE }}"
 
-      # Skipped until CHROME_EXTENSION_ID etc. are set as repo secrets — the
-      # one-time Chrome Web Store prerequisites are an initial manual listing
-      # (for the item ID) and a Google Cloud OAuth client + refresh token with
-      # the chromewebstore scope.
+      # Publishes to the live listing (item kbdecogbebgmeefjkppickfgegbheipc).
+      # Requires all four CHROME_* secrets: the item id plus a Google Cloud
+      # OAuth client + refresh token with the chromewebstore scope. With the
+      # item id unset the step is skipped entirely (forks / private-repo-only
+      # releases); with the id set but credentials incomplete it warns and
+      # skips rather than failing — a failed release cannot simply be re-run,
+      # because the duplicate-release guard above rejects the existing tag.
       - name: Publish to Chrome Web Store
         if: env.CHROME_EXTENSION_ID != ''
         run: |
+          if [ -z "$CHROME_CLIENT_ID" ] || [ -z "$CHROME_CLIENT_SECRET" ] || [ -z "$CHROME_REFRESH_TOKEN" ]; then
+            echo "::warning title=Chrome Web Store publish skipped::CHROME_EXTENSION_ID is set but CHROME_CLIENT_ID / CHROME_CLIENT_SECRET / CHROME_REFRESH_TOKEN are missing. v${VERSION} was NOT submitted to the store."
+            exit 0
+          fi
+
+          # Store builds must never carry the e2e-only localhost host
+          # permissions (npm run build:e2e); they trigger a manual review
+          # justification. A plain `npm run build` omits them.
+          if grep -q '127\.0\.0\.1' extension/output/chrome-mv3/manifest.json; then
+            echo "ERROR: built manifest contains localhost host permissions (e2e build?); refusing to upload"
+            exit 1
+          fi
+
           # The Chrome Web Store API requires manifest.json at the zip root;
           # $ARCHIVE above wraps it in a versioned folder for the releases
           # repo, so build a second, flat archive just for this upload.
