@@ -57,17 +57,47 @@ export function extractPage(): RawPageExtract {
       .trim();
   }
 
-  let mainText = "";
-  for (const selector of ["main", "[role=main]", "article"]) {
-    const candidate = document.querySelector(selector);
-    if (candidate) {
-      const text = textOf(candidate);
-      if (text.length > mainText.length) mainText = text;
+  // Google's job-detail overlay: the SERP itself is a list page, but the
+  // selected posting is rendered inside a visible [role=dialog]. Prefer that
+  // dialog's text — read via innerText on the LIVE node, whose layout-aware
+  // semantics skip the hidden preloaded detail views of *neighboring* jobs
+  // stacked in the same dialog. textOf would leak them: it works on a
+  // detached clone, where innerText degrades to textContent and hidden
+  // subtrees come back. Scoped to Google search pages: elsewhere a visible
+  // dialog is more likely a cookie-consent or chat widget than the posting.
+  let overlayText = "";
+  if (
+    /(^|\.)google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(location.hostname) &&
+    location.pathname === "/search"
+  ) {
+    for (const dialog of Array.from(document.querySelectorAll('[role="dialog"]'))) {
+      const rect = dialog.getBoundingClientRect();
+      if (rect.width < 100 || rect.height < 100) continue;
+      const raw: string =
+        (dialog as { innerText?: string }).innerText ?? dialog.textContent ?? "";
+      const text = raw
+        .replace(/[ \t]+/g, " ")
+        .replace(/\s*\n\s*/g, "\n")
+        .trim();
+      if (text.length > overlayText.length) overlayText = text;
     }
   }
-  if (mainText.length < 300 && document.body) {
-    const bodyText = textOf(document.body);
-    if (bodyText.length > mainText.length) mainText = bodyText;
+
+  let mainText = "";
+  if (overlayText.length >= 300) {
+    mainText = overlayText;
+  } else {
+    for (const selector of ["main", "[role=main]", "article"]) {
+      const candidate = document.querySelector(selector);
+      if (candidate) {
+        const text = textOf(candidate);
+        if (text.length > mainText.length) mainText = text;
+      }
+    }
+    if (mainText.length < 300 && document.body) {
+      const bodyText = textOf(document.body);
+      if (bodyText.length > mainText.length) mainText = bodyText;
+    }
   }
 
   return {

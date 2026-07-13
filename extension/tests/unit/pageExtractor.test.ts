@@ -112,6 +112,20 @@ describe("pageExtractor — extractPage", () => {
     }
   });
 
+  it("does not prefer visible dialogs off Google (e.g. cookie banners)", () => {
+    setPage(
+      `<main>The actual job description. ${"Role details. ".repeat(30)}</main>
+       <div role="dialog" id="consent">We value your privacy. ${"Cookie policy details. ".repeat(20)}</div>`
+    );
+    const consent = document.getElementById("consent")!;
+    consent.getBoundingClientRect = () =>
+      ({ width: 500, height: 400, top: 0, left: 0, right: 500, bottom: 400, x: 0, y: 0 }) as DOMRect;
+
+    const { mainText } = extractPage();
+    expect(mainText).toContain("The actual job description.");
+    expect(mainText).not.toContain("Cookie policy details");
+  });
+
   it(`caps mainText at ${MAIN_TEXT_CAP} characters`, () => {
     setPage(`<main>${"word ".repeat(20_000)}</main>`);
     expect(extractPage().mainText.length).toBeLessThanOrEqual(MAIN_TEXT_CAP);

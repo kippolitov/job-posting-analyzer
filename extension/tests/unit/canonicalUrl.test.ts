@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { canonicalize, canonicalKey } from "../../lib/canonicalUrl";
 
+/** Base64 protobuf-ish blob as found in Google's #sv= job-viewer fragment. */
+function svFragment(docid: string): string {
+  return encodeURIComponent(
+    btoa(`$vt=20/docid=${docid}*jobs-detail-viewer`)
+  );
+}
+
 describe("canonicalUrl — canonicalize", () => {
   const cases: Array<{ name: string; input: string; expected: string }> = [
     {
@@ -37,6 +44,29 @@ describe("canonicalUrl — canonicalize", () => {
       input:
         "https://jobs.ashbyhq.com/acme/91b2c3d4?utm_campaign=launch&utm_content=cta",
       expected: "https://jobs.ashbyhq.com/acme/91b2c3d4",
+    },
+    {
+      name: "Google SERP job overlay keys on the docid inside #sv=",
+      input: `https://www.google.com/search?q=senior+engineer&sei=xyz#sv=${svFragment("kbsnyj4aXc8Y0pMMAAAAAA==")}`,
+      expected:
+        "https://www.google.com/search?jobdocid=kbsnyj4aXc8Y0pMMAAAAAA%3D%3D",
+    },
+    {
+      name: "classic Google jobs UI keys on htidocid",
+      input:
+        "https://www.google.com/search?q=engineer&ibp=htl;jobs#htivrt=jobs&htidocid=AbC-123_x%3D%3D&htiq=engineer",
+      expected: "https://www.google.com/search?jobdocid=AbC-123_x%3D%3D",
+    },
+    {
+      name: "Google ccTLD hosts normalize the same way",
+      input:
+        "https://www.google.co.uk/search?q=engineer#htivrt=jobs&htidocid=Xy9",
+      expected: "https://www.google.com/search?jobdocid=Xy9",
+    },
+    {
+      name: "Google search without a job fragment falls through unchanged",
+      input: "https://www.google.com/search?q=senior+engineer",
+      expected: "https://www.google.com/search?q=senior+engineer",
     },
     {
       name: "host and scheme are lowercased",

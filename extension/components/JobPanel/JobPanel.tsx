@@ -224,7 +224,12 @@ export function JobPanel({
               saveError={saveError}
               onAnalyze={() => requestAnalysis()}
               onCancel={handleCancel}
-              onForceAnalyze={() => requestAnalysis({ assumeJobPosting: true })}
+              onForceAnalyze={() =>
+                // bypassCache is load-bearing: the "not a job posting" verdict
+                // was just cached, and without it the lookup replays that
+                // verdict before assumeJobPosting ever reaches the backend.
+                requestAnalysis({ assumeJobPosting: true, bypassCache: true })
+              }
               onReanalyze={() => requestAnalysis({ bypassCache: true })}
               onSave={() => void handleSave()}
               onExport={() => void handleExport()}

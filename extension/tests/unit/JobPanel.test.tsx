@@ -119,6 +119,28 @@ describe("JobPanel", () => {
     expect(screen.queryByText("Senior Backend Engineer")).not.toBeInTheDocument();
   });
 
+  it("Analyze anyway bypasses the cache so the stored verdict cannot replay", async () => {
+    render(<JobPanel tabId={7} />);
+    dispatch({
+      type: MessageType.JOB_ANALYSIS_RESULT,
+      analysis: { ...analysis, isJobPosting: false },
+      canonicalUrl: "https://example.com/jobs/1",
+      sourceUrl: "https://example.com/jobs/1",
+      multiplePostings: false,
+      cached: false,
+      saved: null,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Analyze anyway" }));
+    expect(chrome.runtime.sendMessage).toHaveBeenLastCalledWith({
+      type: MessageType.ANALYZE_JOB_PAGE,
+      tabId: 7,
+      assumeJobPosting: true,
+      bypassCache: true,
+      cachedOnly: false,
+    });
+  });
+
   it("resets to idle on navigation and ignores results from the previous page", () => {
     const { rerender } = render(<JobPanel tabId={7} navigationId={0} />);
     expect(screen.getByRole("status")).toBeInTheDocument();
