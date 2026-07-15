@@ -92,6 +92,25 @@ describe("AccountBar", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows Free plan (not a stale Premium label) once a canceled subscription's period has actually ended", async () => {
+    // The backend keeps returning a subscription record after full
+    // cancellation (subscriptionStatus stays a truthy "canceled" string) —
+    // the label must key off account.tier, not merely subscription presence.
+    api.setAccount({
+      email: "user@example.com",
+      tier: "free",
+      usage: { count: 5, limit: 50, resetsAt: "2026-08-01T00:00:00Z" },
+      subscription: { status: "canceled", renewsAt: null, endsAt: null },
+    });
+    render(<AccountBar />);
+    expect(await screen.findByLabelText("Plan: Free")).toBeInTheDocument();
+    expect(screen.getByText("Free plan")).toBeInTheDocument();
+    expect(screen.queryByText("Premium")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /upgrade to premium/i })
+    ).toBeInTheDocument();
+  });
+
   it("Upgrade opens the checkout URL in a new tab", async () => {
     render(<AccountBar />);
     await screen.findByLabelText("Plan: Free");
@@ -152,6 +171,57 @@ describe("AccountBar", () => {
     });
     act(() => window.dispatchEvent(new Event("focus")));
     expect(await screen.findByText("5 of 50 analyses this month")).toBeInTheDocument();
+  });
+
+  it("does not show a stale load-error banner on top of an already-loaded, correct account bar", async () => {
+    render(<AccountBar />);
+    await screen.findByLabelText("Plan: Free");
+
+    // A later background refresh (window focus) fails transiently — the
+    // panel already has good data to show, so this should retry quietly
+    // rather than alarm the user with an unrelated red banner.
+    api.failNext(500);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.getByLabelText("Plan: Free")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load your account.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  describe("initial-load resilience", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("offers a manual Retry action when the initial load fails, which recovers immediately", async () => {
+      api.failNext(500);
+      render(<AccountBar />);
+
+      expect(await screen.findByText("Couldn't load your account.")).toBeInTheDocument();
+      const retryButton = screen.getByRole("button", { name: /retry/i });
+
+      await userEvent.click(retryButton);
+      expect(await screen.findByLabelText("Plan: Free")).toBeInTheDocument();
+    });
+
+    it("automatically retries a transient initial-load failure without user action", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      api.failNext(500);
+      render(<AccountBar />);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText("Couldn't load your account.")).toBeInTheDocument();
+
+      // failNext was single-shot, so the auto-retry hits the (now healthy) fake API.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+      expect(await screen.findByLabelText("Plan: Free")).toBeInTheDocument();
+    });
   });
 
   describe("loading states (>300ms feedback contract)", () => {

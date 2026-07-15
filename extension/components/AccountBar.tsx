@@ -9,6 +9,11 @@ import {
   type AccountState,
 } from "../services/accountService";
 
+/** Auto-retry delay for a failed initial load — transient blips (a brief
+ * local backend restart, a dropped connection) self-heal without the user
+ * having to reload the whole panel. */
+const RETRY_DELAY_MS = 5000;
+
 /**
  * Plan, usage, and renewal state — always visible, never requiring the user
  * to hunt for it (contracts/billing-api.md, FR-013). Fetched on mount and on
@@ -21,27 +26,44 @@ export function AccountBar() {
   const [error, setError] = useState<string | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const stopPollRef = useRef<(() => void) | null>(null);
 
   const checkoutPending = useDelayedPending(checkoutBusy);
   const portalPending = useDelayedPending(portalBusy);
 
   useEffect(() => {
+    let mounted = true;
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
     const load = () => {
       fetchAccount()
         .then((next) => {
+          if (!mounted) return;
           setAccount(next);
           setError(null);
         })
-        .catch(() => setError("Couldn't load your account."));
+        .catch(() => {
+          if (!mounted) return;
+          // Only surface a blocking error when there's no cached data to
+          // fall back on. Once the panel has loaded successfully once, a
+          // later background refresh failure (focus/retry) retries quietly
+          // instead of alarming the user over data that's still correct.
+          setAccount((current) => {
+            if (current === null) setError("Couldn't load your account.");
+            return current;
+          });
+          retryTimeout = setTimeout(load, RETRY_DELAY_MS);
+        });
     };
     load();
     window.addEventListener("focus", load);
     return () => {
+      mounted = false;
       window.removeEventListener("focus", load);
       stopPollRef.current?.();
+      if (retryTimeout) clearTimeout(retryTimeout);
     };
-  }, []);
+  }, [retryTick]);
 
   const handleUpgrade = async () => {
     setCheckoutBusy(true);
@@ -84,9 +106,17 @@ export function AccountBar() {
       <div
         role="status"
         aria-label="Loading account"
-        className="border-b border-gray-200/70 bg-white px-3 py-1.5 text-xs text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500"
+        className="flex items-center gap-2 border-b border-gray-200/70 bg-white px-3 py-1.5 text-xs text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-500"
       >
         {error ?? "Loading…"}
+        {error && (
+          <button
+            onClick={() => setRetryTick((tick) => tick + 1)}
+            className="font-medium text-blue-600 underline hover:text-blue-700 dark:text-blue-400"
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }
@@ -150,10 +180,15 @@ export function AccountBar() {
   );
 }
 
-/** Stable display vocabulary (Principle III, contracts/billing-api.md). */
+/** Stable display vocabulary (Principle III, contracts/billing-api.md).
+ * Keyed off account.tier first — the backend keeps a subscription record
+ * around after full cancellation (subscriptionStatus stays a truthy
+ * "canceled" string), so subscription presence alone can't distinguish a
+ * downgraded account from an active one. */
 function describeSubscription(account: AccountState): string {
   const sub = account.subscription;
-  if (!sub) return "Free plan";
+  if (account.tier !== "premium") return "Free plan";
+  if (!sub) return "Premium";
   if (sub.status === "past_due") {
     return "Payment problem — update your payment method";
   }
