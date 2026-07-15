@@ -85,5 +85,17 @@ replay the same fixture twice → single `PaddleEvents` row, single state write.
 - Compliance set live: privacy policy URL updated in the CWS dashboard, prominent-disclosure
   consent in the extension, terms of sale naming the developer as seller, listing copy states
   free vs paid, Limited Use certification re-submitted (research.md R9).
-- Azure OpenAI deployments: premium deployment TPM sized, **dynamic quota off** on both;
-  budget alerts configured (alerts only — they never stop spend).
+- Azure OpenAI deployments (done 2026-07-15, `job-posting-analyzer-openai`/eastus2): free
+  `gpt-4o-mini` resized from 250K→20K TPM; premium deployment created at 10K TPM using
+  **`gpt-5.4-nano`**, not the spec's original `gpt-4.1-mini` pick — Azure now refuses new
+  deployments of the entire gpt-4.1/gpt-4o/o4-mini family (`ServiceModelDeprecating`; inference
+  cutoff ~Oct 2026 across that whole generation, `gpt-4o-mini` included). gpt-5.4-nano:
+  $0.20/$1.25 per 1M in/out, worst-case 300 analyses/mo ≈ $1.28, margin ≈ $2.97/mo after Paddle's
+  cut (healthier than the original gpt-4.1-mini plan). **Re-run T028's SC-008 eval against
+  gpt-5.4-nano before shipping premium** — the existing eval only validated gpt-4.1-mini, which
+  can no longer be deployed. Dynamic quota confirmed off (default; never opted in) on both.
+  Combined worst-case ceiling ≈ $483/mo (20K× gpt-4o-mini blend + 10K× gpt-5.4-nano blend).
+  Budget alert `job-posting-analyzer-monthly`: $50/mo, 80%/100% email thresholds to
+  kippolitov@gmail.com (alerts only — they never stop spend, confirmed via Microsoft Learn).
+  **Follow-up needed ~Sept 2026**: `gpt-4o-mini` (free) hits its inference cutoff 2026-10-01 —
+  plan a model migration for the free deployment well before then.

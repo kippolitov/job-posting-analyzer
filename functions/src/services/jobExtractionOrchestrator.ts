@@ -243,8 +243,10 @@ export async function orchestrateJobAnalysis(
       },
       temperature: 0,
       // Sized for the full fit breakdown (matching/missing/desired lists) on
-      // top of the extraction fields.
-      max_tokens: 3000,
+      // top of the extraction fields. max_completion_tokens (not max_tokens)
+      // — required by the gpt-5.x deployment generation, and accepted by
+      // gpt-4o-mini too.
+      max_completion_tokens: 3000,
     });
 
     const content = completion.choices[0]?.message?.content;
