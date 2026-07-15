@@ -299,4 +299,95 @@ describe("SavedTab", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.getByText("Senior Backend Engineer")).toBeInTheDocument();
   });
+
+  describe("over-cap read-only banner (FR-021/022 downgrade)", () => {
+    async function seedBulk(count: number): Promise<void> {
+      await Promise.all(
+        Array.from({ length: count }, async (_, i) => {
+          const canonicalUrl = `https://a.example/bulk-${i}`;
+          const job = makeJob({
+            canonicalUrl,
+            analysis: { ...analysis, title: `Bulk Job ${i}` },
+          });
+          const key = await api.seededKey(canonicalUrl);
+          api.jobs.set(key, job);
+        })
+      );
+    }
+
+    beforeEach(() => {
+      vi.spyOn(window, "open").mockImplementation(() => null);
+    });
+
+    it("shows no banner for a free-tier library under the 100 cap", async () => {
+      await seedBulk(5);
+      render(<SavedTab />);
+      expect(await screen.findByText("Bulk Job 4")).toBeInTheDocument();
+      expect(screen.queryByText(/posting limit/i)).not.toBeInTheDocument();
+    });
+
+    it(
+      "shows a read-only banner with an Upgrade action once the free-tier library exceeds 100",
+      async () => {
+        await seedBulk(101);
+        render(<SavedTab />);
+        await screen.findByText("Bulk Job 100");
+
+        expect(
+          await screen.findByText(/101 postings, over the 100-posting free limit/i)
+        ).toBeInTheDocument();
+        expect(screen.getByText(/existing postings are safe/i)).toBeInTheDocument();
+
+        await userEvent.click(
+          screen.getByRole("button", { name: /upgrade to premium/i })
+        );
+        await waitFor(() =>
+          expect(window.open).toHaveBeenCalledWith(
+            "https://sandbox-checkout.paddle.test/txn_1",
+            "_blank",
+            "noopener,noreferrer"
+          )
+        );
+      },
+      20_000
+    );
+
+    it("shows a read-only banner without an Upgrade action for an over-cap premium library", async () => {
+      api.setAccountTier("premium");
+      await seedBulk(3);
+      render(<SavedTab />);
+      await screen.findByText("Bulk Job 2");
+      // Premium's cap is 1,000 — 3 seeded jobs never trigger the banner;
+      // this pins that premium accounts don't see a free-tier Upgrade CTA
+      // even when (hypothetically) over their own, much higher cap.
+      expect(
+        screen.queryByRole("button", { name: /upgrade to premium/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it(
+      "existing postings stay fully viewable, editable, and deletable while over the cap",
+      async () => {
+        await seedBulk(101);
+        render(<SavedTab />);
+        await screen.findByText("Bulk Job 100");
+        await screen.findByText(/over the 100-posting free limit/i);
+
+        const select = screen.getByLabelText(/Status for Bulk Job 0/);
+        await userEvent.selectOptions(select, "applied");
+        await waitFor(async () => {
+          const stored = await jobStorage.get("https://a.example/bulk-0");
+          expect(stored!.status).toBe("applied");
+        });
+
+        await userEvent.click(
+          screen.getByRole("button", { name: "Delete saved posting: Bulk Job 0" })
+        );
+        await waitFor(() =>
+          expect(screen.queryByText("Bulk Job 0")).not.toBeInTheDocument()
+        );
+      },
+      20_000
+    );
+  });
 });

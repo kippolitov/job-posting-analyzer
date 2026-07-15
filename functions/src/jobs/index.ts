@@ -84,13 +84,17 @@ export async function jobsItemHandler(
           return errorResponse(400, "INVALID_REQUEST", "Malformed saved-job record.");
         }
         try {
-          return jsonResponse(200, await saveJob(user.sub, key, body));
+          return jsonResponse(200, await saveJob(user.sub, key, body, user.tier));
         } catch (err) {
           if (err instanceof KeyMismatchError) {
             return errorResponse(400, "INVALID_REQUEST", err.message);
           }
           if (err instanceof LibraryCapError) {
-            return errorResponse(409, "LIBRARY_FULL", err.message);
+            const action =
+              user.tier === "premium"
+                ? "Prune archived postings or export your library to free up space."
+                : "Upgrade to Premium for a 1,000-job library, or remove a posting to save this one.";
+            return errorResponse(409, "LIBRARY_FULL", `${err.message} ${action}`);
           }
           throw err;
         }

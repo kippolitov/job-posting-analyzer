@@ -22,7 +22,7 @@
 
 **Purpose**: Configuration surface for everything that follows
 
-- [ ] T001 Add new settings to `functions/local.settings.json` (dev values) and document them in `specs/003-freemium-premium-tier/quickstart.md` table: `PADDLE_API_BASE_URL`, `PADDLE_API_KEY`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PREMIUM_PRICE_ID`, `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM`, `METERING_ENFORCED`
+- [X] T001 Add new settings to `functions/local.settings.json` (dev values) and document them in `specs/003-freemium-premium-tier/quickstart.md` table: `PADDLE_API_BASE_URL`, `PADDLE_API_KEY`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PREMIUM_PRICE_ID`, `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM`, `METERING_ENFORCED`
 
 ---
 
@@ -32,10 +32,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 Write failing unit tests in `functions/tests/unit/userModels.test.ts` for new model surface: `Tier` guard, per-tier constants (`MONTHLY_ANALYSES` 50/300, `SAVED_JOBS_CAP` 100/1000), `UserEntity`/`UsageEntity`/`PaddleEventEntity` codecs (data-model.md tables)
-- [ ] T003 Extend `functions/src/models/user.ts`: `Tier`, per-tier entitlement constants, `UserEntity`, `UsageEntity`, `PaddleEventEntity`, `AuthenticatedUser` gains `tier` **with default `"free"`** (populated at the middleware boundary — until T008 lands, `withAuth` supplies the default, so US2's metering compiles and fail-safes to free-tier limits); make T002 pass
-- [ ] T004 Write failing integration tests in `functions/tests/integration/usersStore.test.ts` (Azurite): `getOrCreate` creates `{sub, tier:"free", createdAt}` on miss and returns existing row on hit; `blocked` read; subscription-state Merge upsert; `paddleEventOccurredAt` round-trip; lookup by `paddleCustomerId`
-- [ ] T005 Implement `functions/src/services/usersStore.ts` (Users table: getOrCreate, getByEmail, findByPaddleCustomerId, setTier, applySubscriptionState — data-model.md `Users`); make T004 pass
+- [X] T002 Write failing unit tests in `functions/tests/unit/userModels.test.ts` for new model surface: `Tier` guard, per-tier constants (`MONTHLY_ANALYSES` 50/300, `SAVED_JOBS_CAP` 100/1000), `UserEntity`/`UsageEntity`/`PaddleEventEntity` codecs (data-model.md tables)
+- [X] T003 Extend `functions/src/models/user.ts`: `Tier`, per-tier entitlement constants, `UserEntity`, `UsageEntity`, `PaddleEventEntity`, `AuthenticatedUser` gains `tier` **with default `"free"`** (populated at the middleware boundary — until T008 lands, `withAuth` supplies the default, so US2's metering compiles and fail-safes to free-tier limits); make T002 pass
+- [X] T004 Write failing integration tests in `functions/tests/integration/usersStore.test.ts` (Azurite): `getOrCreate` creates `{sub, tier:"free", createdAt}` on miss and returns existing row on hit; `blocked` read; subscription-state Merge upsert; `paddleEventOccurredAt` round-trip; lookup by `paddleCustomerId`
+- [X] T005 Implement `functions/src/services/usersStore.ts` (Users table: getOrCreate, getByEmail, findByPaddleCustomerId, setTier, applySubscriptionState — data-model.md `Users`); make T004 pass
 
 **Checkpoint**: Foundation ready — user story phases can start
 
@@ -49,15 +49,15 @@
 
 ### Tests for User Story 1 (write first, confirm failing)
 
-- [ ] T006 [P] [US1] Extend the signed-JWT middleware suite in `functions/tests/unit/auth.test.ts`: first sign-in auto-creates a Users row and proceeds; existing user gets `tier` attached; `blocked:true` → 403 `NOT_AUTHORIZED` with contact-developer copy; unverified email → 403 with **new** plain-language copy stating a verified Google email is required and how to verify it (FR-002 — no longer the invitation message); allowlist is never consulted; 401 paths unchanged
-- [ ] T007 [P] [US1] Extend `functions/tests/integration/auth.test.ts` (Azurite): end-to-end signup — request with a really-signed JWT for an unknown email creates the Users row and reaches the handler; second request reuses it (no duplicate)
+- [X] T006 [P] [US1] Extend the signed-JWT middleware suite in `functions/tests/unit/auth.test.ts`: first sign-in auto-creates a Users row and proceeds; existing user gets `tier` attached; `blocked:true` → 403 `NOT_AUTHORIZED` with contact-developer copy; unverified email → 403 with **new** plain-language copy stating a verified Google email is required and how to verify it (FR-002 — no longer the invitation message); allowlist is never consulted; 401 paths unchanged
+- [X] T007 [P] [US1] Extend `functions/tests/integration/auth.test.ts` (Azurite): end-to-end signup — request with a really-signed JWT for an unknown email creates the Users row and reaches the handler; second request reuses it (no duplicate)
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Modify `functions/src/services/auth.ts`: replace `isAllowed`/`recordSignIn` with `usersStore.getOrCreate`; add `blocked` → 403; **split the 403 messages** — unverified email gets verify-your-email guidance (FR-002), blocked gets contact-developer copy; pass `{sub, email, tier}` to handlers; make T006–T007 pass
-- [ ] T009 [P] [US1] Write failing unit tests in `functions/tests/unit/manageUsers.test.ts` for the reworked CLI: `list`, `set-tier <email> free|premium`, `block`/`unblock`; then implement `functions/scripts/manage-users.ts` (replaces `manage-allowed-users.ts`) and rename the npm alias to `users` in `functions/package.json`
-- [ ] T010 [P] [US1] Update `extension/components/AuthGate.tsx` + `extension/tests/unit/AuthGate.test.tsx`: invitation copy → self-serve "Sign in with Google to get started"; 403 copy now covers only blocked/unverified accounts (plain language + contact action, Principle III)
-- [ ] T011 [US1] Update the Playwright P1 journey in `extension/tests/e2e/`: fresh stubbed identity signs in with **no allowlist step**, analyzes a job, result renders (SC-001 journey)
+- [X] T008 [US1] Modify `functions/src/services/auth.ts`: replace `isAllowed`/`recordSignIn` with `usersStore.getOrCreate`; add `blocked` → 403; **split the 403 messages** — unverified email gets verify-your-email guidance (FR-002), blocked gets contact-developer copy; pass `{sub, email, tier}` to handlers; make T006–T007 pass
+- [X] T009 [P] [US1] Write failing unit tests in `functions/tests/unit/manageUsers.test.ts` for the reworked CLI: `list`, `set-tier <email> free|premium`, `block`/`unblock`; then implement `functions/scripts/manage-users.ts` (replaces `manage-allowed-users.ts`) and rename the npm alias to `users` in `functions/package.json`
+- [X] T010 [P] [US1] Update `extension/components/AuthGate.tsx` + `extension/tests/unit/AuthGate.test.tsx`: invitation copy → self-serve "Sign in with Google to get started"; 403 copy now covers only blocked/unverified accounts (plain language + contact action, Principle III)
+- [X] T011 [US1] Update the Playwright P1 journey in `extension/tests/e2e/`: fresh stubbed identity signs in with **no allowlist step**, analyzes a job, result renders (SC-001 journey)
 
 **Checkpoint**: MVP — self-serve signup works end-to-end (deploy to prod only together with US2's flag flip, per the operational note)
 
@@ -71,18 +71,18 @@
 
 ### Tests for User Story 2 (write first, confirm failing)
 
-- [ ] T012 [P] [US2] Write failing unit tests in `functions/tests/unit/meteringService.test.ts` per contracts/metering.md: first-of-month `createEntity`, 409 → re-read, `count >= limit(tier)` → limit-reached result with `resetsAt` (first of next UTC month), 412 → re-read → re-check → retry bounded at 4, **assert no call ever uses `If-Match: *` or omits `ifMatch`**, storage failure → fail-closed error, refund decrements conditionally with floor 0, `limit` recomputed from tier (stored value refreshed)
-- [ ] T013 [P] [US2] Write failing integration tests in `functions/tests/integration/metering.test.ts` (Azurite): **race — seed `limit−1`, fire 20 parallel check-and-increments: exactly 1 success, 19 limit-reached, final `count == limit`** (SC-002); month rollover creates a new RowKey; mid-month tier flip to premium unblocks with `count` preserved (FR-019)
-- [ ] T014 [P] [US2] Extend `functions/tests/unit/savedJobsRepository.test.ts` (failing): cap is tier-dependent (free 100, premium 1,000); check fires only on **new** rows — updates/deletes over cap still succeed
+- [X] T012 [P] [US2] Write failing unit tests in `functions/tests/unit/meteringService.test.ts` per contracts/metering.md: first-of-month `createEntity`, 409 → re-read, `count >= limit(tier)` → limit-reached result with `resetsAt` (first of next UTC month), 412 → re-read → re-check → retry bounded at 4, **assert no call ever uses `If-Match: *` or omits `ifMatch`**, storage failure → fail-closed error, refund decrements conditionally with floor 0, `limit` recomputed from tier (stored value refreshed)
+- [X] T013 [P] [US2] Write failing integration tests in `functions/tests/integration/metering.test.ts` (Azurite): **race — seed `limit−1`, fire 20 parallel check-and-increments: exactly 1 success, 19 limit-reached, final `count == limit`** (SC-002); month rollover creates a new RowKey; mid-month tier flip to premium unblocks with `count` preserved (FR-019)
+- [X] T014 [P] [US2] Extend `functions/tests/unit/savedJobsRepository.test.ts` (failing): cap is tier-dependent (free 100, premium 1,000); check fires only on **new** rows — updates/deletes over cap still succeed
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Implement `functions/src/services/meteringService.ts` (checkAndIncrement, refundOnSystemFailure, resetsAt; algorithm normative in contracts/metering.md); make T012–T013 pass
-- [ ] T016 [US2] Wire metering into `functions/src/analyze-job/index.ts`: `withAuth(withUsageMetering(handler))`, 429 `USAGE_LIMIT_REACHED` `{count, limit, resetsAt, tier}` before the orchestrator, `usage` echo on 200, best-effort refund on system failure, `METERING_ENFORCED=false` shadow mode (count, never block); extend `functions/tests/unit/analyze-job.handler.test.ts` for all four behaviors
-- [ ] T017 [US2] Make the saved-jobs cap tier-aware in `functions/src/services/savedJobsRepository.ts` (per-tier `SAVED_JOBS_CAP`) and give `functions/src/jobs/index.ts` tier-aware 409 `LIBRARY_FULL` copy (free: upgrade or remove; premium: prune/export); make T014 pass
-- [ ] T018 [P] [US2] Map 429 in `extension/services/api/apiClient.ts` (`USAGE_LIMIT_REACHED` with `resetsAt` → typed error distinct from `RATE_LIMITED` and generic failures) + failing-first tests in `extension/tests/unit/apiClient.test.ts` with msw fixtures matching contracts/metering.md verbatim
-- [ ] T019 [US2] Create `extension/components/UsageExhausted.tsx` + `extension/tests/unit/UsageExhausted.test.tsx`: "You've used all N free analyses this month", concrete reset date, Upgrade action; accessible labels; renders as a designed state, never the generic error banner (FR-009/SC-003)
-- [ ] T020 [US2] Wire the exhausted state and tier-aware 409 prompt into `extension/components/JobPanel/` (ThisPageTab analyze path, SavedTab save path) + update `extension/tests/unit/JobPanel.test.tsx` / `ThisPageTab.test.tsx`; verify saved jobs/profile/history rendering is untouched by 429 (FR-010)
+- [X] T015 [US2] Implement `functions/src/services/meteringService.ts` (checkAndIncrement, refundOnSystemFailure, resetsAt; algorithm normative in contracts/metering.md); make T012–T013 pass
+- [X] T016 [US2] Wire metering into `functions/src/analyze-job/index.ts`: `withAuth(withUsageMetering(handler))`, 429 `USAGE_LIMIT_REACHED` `{count, limit, resetsAt, tier}` before the orchestrator, `usage` echo on 200, best-effort refund on system failure, `METERING_ENFORCED=false` shadow mode (count, never block); extend `functions/tests/unit/analyze-job.handler.test.ts` for all four behaviors
+- [X] T017 [US2] Make the saved-jobs cap tier-aware in `functions/src/services/savedJobsRepository.ts` (per-tier `SAVED_JOBS_CAP`) and give `functions/src/jobs/index.ts` tier-aware 409 `LIBRARY_FULL` copy (free: upgrade or remove; premium: prune/export); make T014 pass
+- [X] T018 [P] [US2] Map 429 in `extension/services/api/apiClient.ts` (`USAGE_LIMIT_REACHED` with `resetsAt` → typed error distinct from `RATE_LIMITED` and generic failures) + failing-first tests in `extension/tests/unit/apiClient.test.ts` with msw fixtures matching contracts/metering.md verbatim
+- [X] T019 [US2] Create `extension/components/UsageExhausted.tsx` + `extension/tests/unit/UsageExhausted.test.tsx`: "You've used all N free analyses this month", concrete reset date, Upgrade action; accessible labels; renders as a designed state, never the generic error banner (FR-009/SC-003)
+- [X] T020 [US2] Wire the exhausted state and tier-aware 409 prompt into `extension/components/JobPanel/` (ThisPageTab analyze path, SavedTab save path) + update `extension/tests/unit/JobPanel.test.tsx` / `ThisPageTab.test.tsx`; verify saved jobs/profile/history rendering is untouched by 429 (FR-010)
 
 **Checkpoint**: Free tier fully enforced and humane; US1+US2 together are the shippable freemium core
 
@@ -96,20 +96,20 @@
 
 ### Tests for User Story 3 (write first, confirm failing)
 
-- [ ] T021 [P] [US3] Write failing unit tests in `functions/tests/unit/paddleClient.test.ts`: signature verifier — valid `ts;h1` over **raw bytes**, tampered byte fails, stale `ts` (>300 s) fails, constant-time compare, missing header fails; API wrappers (create transaction with `custom_data`, portal session) against stubbed `fetch` incl. 5xx mapping
-- [ ] T022 [P] [US3] Build the signed webhook fixture set (shapes from Paddle's sandbox simulator, raw body + test-secret signature) and write failing integration tests in `functions/tests/integration/paddleWebhook.test.ts` for activation: `transaction.completed` and `subscription.activated` (either order) → `tier:"premium"` + customer/subscription fields; duplicate `event_id` → single `PaddleEvents` row, single write, 200; orphan `custom_data` → 200 + logged, no write; bad signature → 400, no state change; flipped tier visible to a subsequent simulated authed request
-- [ ] T023 [P] [US3] Write failing integration tests in `functions/tests/integration/billing.test.ts` (Azurite + stubbed Paddle API) per contracts/billing-api.md: `GET /api/account` shapes (free no-usage, free with usage, premium renewing); `POST /api/billing/checkout` 200 `{checkoutUrl}` with `custom_data` from the **token** (never body), 409 `ALREADY_PREMIUM`, 502 `BILLING_UNAVAILABLE`; `POST /api/billing/portal` 200, 404 `NO_SUBSCRIPTION`, 502
+- [X] T021 [P] [US3] Write failing unit tests in `functions/tests/unit/paddleClient.test.ts`: signature verifier — valid `ts;h1` over **raw bytes**, tampered byte fails, stale `ts` (>300 s) fails, constant-time compare, missing header fails; API wrappers (create transaction with `custom_data`, portal session) against stubbed `fetch` incl. 5xx mapping
+- [X] T022 [P] [US3] Build the signed webhook fixture set (shapes from Paddle's sandbox simulator, raw body + test-secret signature) and write failing integration tests in `functions/tests/integration/paddleWebhook.test.ts` for activation: `transaction.completed` and `subscription.activated` (either order) → `tier:"premium"` + customer/subscription fields; duplicate `event_id` → single `PaddleEvents` row, single write, 200; orphan `custom_data` → 200 + logged, no write; bad signature → 400, no state change; flipped tier visible to a subsequent simulated authed request
+- [X] T023 [P] [US3] Write failing integration tests in `functions/tests/integration/billing.test.ts` (Azurite + stubbed Paddle API) per contracts/billing-api.md: `GET /api/account` shapes (free no-usage, free with usage, premium renewing); `POST /api/billing/checkout` 200 `{checkoutUrl}` with `custom_data` from the **token** (never body), 409 `ALREADY_PREMIUM`, 502 `BILLING_UNAVAILABLE`; `POST /api/billing/portal` 200, 404 `NO_SUBSCRIPTION`, 502
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Implement `functions/src/services/paddleClient.ts` (fetch wrapper + `verifyPaddleSignature`); make T021 pass
-- [ ] T025 [US3] Implement `functions/src/paddle-webhook/index.ts` (anonymous auth level; raw-body verify → `PaddleEvents` ledger `createEntity` → resolve user via `custom_data` then `paddleCustomerId` → activation events per contracts/paddle-webhook.md) and register it in `functions/src/index.ts`; make T022 pass
-- [ ] T026 [US3] Implement `functions/src/billing/index.ts` (`GET /api/account`, `POST /api/billing/checkout`, `POST /api/billing/portal`, all `withAuth` + OPTIONS twins) and register in `functions/src/index.ts`; make T023 pass
-- [ ] T027 [P] [US3] Tier-aware deployment selection: failing test in `functions/tests/unit/jobExtractionOrchestrator.test.ts` (premium → `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM`, unset → falls back to free deployment), then thread `tier` through `functions/src/services/jobExtractionOrchestrator.ts` and its caller in `functions/src/analyze-job/index.ts`
-- [ ] T028 [US3] Run the SC-008 eval gate: `npm run eval:postings` against both deployments on the fixed posting set; record comparison (no extraction regression, improved fit scoring) **and the premium deployment's latency benchmark — assert p95 ≤ 30 s per Constitution IV/QG-4, same budget as the free deployment** — in `specs/003-freemium-premium-tier/eval-premium.md`
-- [ ] T029 [P] [US3] Create `extension/services/accountService.ts` + failing-first `extension/tests/unit/accountService.test.ts` (msw): fetch `/api/account`, refresh on panel focus and from analyze-response `usage` echo, pending-upgrade polling ≤ 60 s intervals after checkout opens (contracts/billing-api.md client obligations)
-- [ ] T030 [US3] Create `extension/components/AccountBar.tsx` + `extension/tests/unit/AccountBar.test.tsx`: plan badge, "N of M analyses this month", "Renews on …", Upgrade → checkout URL opens in new tab, Manage subscription → portal URL, loading states >300 ms, accessible labels
-- [ ] T031 [US3] Mount AccountBar in `extension/entrypoints/sidepanel/App.tsx` and `extension/entrypoints/options/OptionsApp.tsx`; wire the UsageExhausted Upgrade CTA to the checkout flow; update `extension/tests/unit/App.test.tsx` / `OptionsApp.test.tsx`
+- [X] T024 [US3] Implement `functions/src/services/paddleClient.ts` (fetch wrapper + `verifyPaddleSignature`); make T021 pass
+- [X] T025 [US3] Implement `functions/src/paddle-webhook/index.ts` (anonymous auth level; raw-body verify → `PaddleEvents` ledger `createEntity` → resolve user via `custom_data` then `paddleCustomerId` → activation events per contracts/paddle-webhook.md) and register it in `functions/src/index.ts`; make T022 pass
+- [X] T026 [US3] Implement `functions/src/billing/index.ts` (`GET /api/account`, `POST /api/billing/checkout`, `POST /api/billing/portal`, all `withAuth` + OPTIONS twins) and register in `functions/src/index.ts`; make T023 pass
+- [X] T027 [P] [US3] Tier-aware deployment selection: failing test in `functions/tests/unit/jobExtractionOrchestrator.test.ts` (premium → `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM`, unset → falls back to free deployment), then thread `tier` through `functions/src/services/jobExtractionOrchestrator.ts` and its caller in `functions/src/analyze-job/index.ts`
+- [X] T028 [US3] Run the SC-008 eval gate: `npm run eval:postings` against both deployments on the fixed posting set; record comparison (no extraction regression, improved fit scoring) **and the premium deployment's latency benchmark — assert p95 ≤ 30 s per Constitution IV/QG-4, same budget as the free deployment** — in `specs/003-freemium-premium-tier/eval-premium.md`
+- [X] T029 [P] [US3] Create `extension/services/accountService.ts` + failing-first `extension/tests/unit/accountService.test.ts` (msw): fetch `/api/account`, refresh on panel focus and from analyze-response `usage` echo, pending-upgrade polling ≤ 60 s intervals after checkout opens (contracts/billing-api.md client obligations)
+- [X] T030 [US3] Create `extension/components/AccountBar.tsx` + `extension/tests/unit/AccountBar.test.tsx`: plan badge, "N of M analyses this month", "Renews on …", Upgrade → checkout URL opens in new tab, Manage subscription → portal URL, loading states >300 ms, accessible labels
+- [X] T031 [US3] Mount AccountBar in `extension/entrypoints/sidepanel/App.tsx` and `extension/entrypoints/options/OptionsApp.tsx`; wire the UsageExhausted Upgrade CTA to the checkout flow; update `extension/tests/unit/App.test.tsx` / `OptionsApp.test.tsx`
 
 **Checkpoint**: Revenue path live end-to-end in sandbox; free→premium upgrade unblocks an exhausted account immediately
 
@@ -123,13 +123,13 @@
 
 ### Tests for User Story 4 (write first, confirm failing)
 
-- [ ] T032 [P] [US4] Extend `functions/tests/integration/paddleWebhook.test.ts` with lifecycle fixtures: `subscription.updated` with `scheduled_change: cancel` → `endsAt` set, tier untouched; `past_due` status refresh; `subscription.canceled` → `tier:"free"`, status `canceled`, `renewsAt`/`endsAt` cleared; **out-of-order guard** — late `updated` (older `occurred_at`) after `canceled` leaves tier `free`
-- [ ] T033 [P] [US4] Write failing integration test `functions/tests/integration/downgrade.test.ts` (Azurite): premium user with 400 saved jobs flips to free → list/get/update/delete/export all succeed, new save → 409 `LIBRARY_FULL`; delete to 100 → save succeeds; tier back to premium → saves up to 1,000 (FR-021..023)
+- [X] T032 [P] [US4] Extend `functions/tests/integration/paddleWebhook.test.ts` with lifecycle fixtures: `subscription.updated` with `scheduled_change: cancel` → `endsAt` set, tier untouched; `past_due` status refresh; `subscription.canceled` → `tier:"free"`, status `canceled`, `renewsAt`/`endsAt` cleared; **out-of-order guard** — late `updated` (older `occurred_at`) after `canceled` leaves tier `free`
+- [X] T033 [P] [US4] Write failing integration test `functions/tests/integration/downgrade.test.ts` (Azurite): premium user with 400 saved jobs flips to free → list/get/update/delete/export all succeed, new save → 409 `LIBRARY_FULL`; delete to 100 → save succeeds; tier back to premium → saves up to 1,000 (FR-021..023)
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] Extend `functions/src/paddle-webhook/index.ts` with `subscription.updated` / `subscription.canceled` handling and the `paddleEventOccurredAt` stale guard (single Merge write per event, contracts/paddle-webhook.md event table); make T032–T033 pass (T033 needs no new code if R7 holds — the test proves it)
-- [ ] T035 [US4] Extension downgrade states: read-only banner on the saved list when `count > cap` (explanation + re-upgrade path) in `extension/components/JobPanel/SavedTab.tsx`; AccountBar "Premium until <date>" (`endsAt`) and "Payment problem — update your payment method" (`past_due`, portal link) states in `extension/components/AccountBar.tsx`; msw-backed tests in `extension/tests/unit/SavedTab.test.tsx` / `AccountBar.test.tsx`
+- [X] T034 [US4] Extend `functions/src/paddle-webhook/index.ts` with `subscription.updated` / `subscription.canceled` handling and the `paddleEventOccurredAt` stale guard (single Merge write per event, contracts/paddle-webhook.md event table); make T032–T033 pass (T033 needs no new code if R7 holds — the test proves it)
+- [X] T035 [US4] Extension downgrade states: read-only banner on the saved list when `count > cap` (explanation + re-upgrade path) in `extension/components/JobPanel/SavedTab.tsx`; AccountBar "Premium until <date>" (`endsAt`) and "Payment problem — update your payment method" (`past_due`, portal link) states in `extension/components/AccountBar.tsx`; msw-backed tests in `extension/tests/unit/SavedTab.test.tsx` / `AccountBar.test.tsx`
 
 **Checkpoint**: Full subscription lifecycle — subscribe, see state, cancel, downgrade gracefully
 
@@ -143,11 +143,11 @@
 
 ### Tests for User Story 5 (write first, confirm failing)
 
-- [ ] T036 [P] [US5] Write failing integration tests in `functions/tests/integration/migrateAllowlist.test.ts` (Azurite): folds each row (`tier:"free"`, `migratedFromAllowlist:true`, `sub`/`addedAt` carried; missing `sub` tolerated — recorded later by getOrCreate); existing `Users` row → skip (409 path); re-run idempotent; `--dry-run` writes nothing and prints the plan
+- [X] T036 [P] [US5] Write failing integration tests in `functions/tests/integration/migrateAllowlist.test.ts` (Azurite): folds each row (`tier:"free"`, `migratedFromAllowlist:true`, `sub`/`addedAt` carried; missing `sub` tolerated — recorded later by getOrCreate); existing `Users` row → skip (409 path); re-run idempotent; `--dry-run` writes nothing and prints the plan
 
 ### Implementation for User Story 5
 
-- [ ] T037 [US5] Implement `functions/scripts/migrate-allowlist.ts` (local-only, `--dry-run` flag, per-row summary output) + npm alias `migrate-allowlist` in `functions/package.json`; make T036 pass
+- [X] T037 [US5] Implement `functions/scripts/migrate-allowlist.ts` (local-only, `--dry-run` flag, per-row summary output) + npm alias `migrate-allowlist` in `functions/package.json`; make T036 pass
 - [ ] T038 [US5] Retirement cleanup (**gated on prod migration verified** — plan.md R10): delete `functions/src/services/allowedUsersStore.ts`, `functions/scripts/manage-allowed-users.ts`, `functions/tests/unit/allowedUsersStore.test.ts`, `functions/tests/unit/manageAllowedUsers.test.ts`; remove remaining `AllowedUsers` references (`AllowedUserEntity` in `functions/src/models/user.ts`, old npm alias); no-dead-code gate (QG-1)
 
 **Checkpoint**: All five stories independently functional; invite-only era fully retired
@@ -158,10 +158,10 @@
 
 **Purpose**: Guardrails, compliance, performance evidence, release readiness
 
-- [ ] T039 [P] Write failing unit tests `functions/tests/unit/rateLimiter.test.ts` (fixed window per IP from `x-forwarded-for`, 429 `RATE_LIMITED` distinct from `USAGE_LIMIT_REACHED`, window reset), then implement `functions/src/services/rateLimiter.ts` with defaults **30 analyze req/min/IP and 10 billing req/min/IP**, env-tunable via `RATE_LIMIT_ANALYZE_PER_MIN` / `RATE_LIMIT_BILLING_PER_MIN`, and wire it into `functions/src/analyze-job/index.ts` and `functions/src/billing/index.ts` (documented as friction, not a guarantee — research R8; defaults recorded in contracts/metering.md)
-- [ ] T040 [P] Author compliance set in `docs/compliance/`: privacy-policy update (account data, usage counters, payment status), terms of sale (developer — not Google — as seller; Paddle as MoR/reseller; refunds per Paddle), CWS prominent-disclosure text, listing copy stating free vs paid (research R9)
-- [ ] T041 Add the prominent-disclosure/consent surface to the extension sign-in flow (`extension/components/AuthGate.tsx` + test): affirmative consent to the updated data practices before first sign-in (CWS Disclosure Requirements)
-- [ ] T042 [P] Extend `functions/tests/integration/perf.test.ts`: metering adds ≤ 2 point ops — assert analyze-path auth+metering overhead stays within the existing p95 budgets (QG-4 evidence)
+- [X] T039 [P] Write failing unit tests `functions/tests/unit/rateLimiter.test.ts` (fixed window per IP from `x-forwarded-for`, 429 `RATE_LIMITED` distinct from `USAGE_LIMIT_REACHED`, window reset), then implement `functions/src/services/rateLimiter.ts` with defaults **30 analyze req/min/IP and 10 billing req/min/IP**, env-tunable via `RATE_LIMIT_ANALYZE_PER_MIN` / `RATE_LIMIT_BILLING_PER_MIN`, and wire it into `functions/src/analyze-job/index.ts` and `functions/src/billing/index.ts` (documented as friction, not a guarantee — research R8; defaults recorded in contracts/metering.md)
+- [X] T040 [P] Author compliance set in `docs/compliance/`: privacy-policy update (account data, usage counters, payment status), terms of sale (developer — not Google — as seller; Paddle as MoR/reseller; refunds per Paddle), CWS prominent-disclosure text, listing copy stating free vs paid (research R9)
+- [X] T041 Add the prominent-disclosure/consent surface to the extension sign-in flow (`extension/components/AuthGate.tsx` + test): affirmative consent to the updated data practices before first sign-in (CWS Disclosure Requirements)
+- [X] T042 [P] Extend `functions/tests/integration/perf.test.ts`: metering adds ≤ 2 point ops — assert analyze-path auth+metering overhead stays within the existing p95 budgets (QG-4 evidence)
 - [ ] T043 [P] Ops configuration pass (document in `specs/003-freemium-premium-tier/quickstart.md` Release gates + apply in Azure): premium deployment created, TPM sized (~30K total), **dynamic quota off** on both deployments, budget alerts configured as alerts-only
 - [ ] T044 Run the full quickstart.md validation: all automated suites, manual US1–US5 walkthrough, webhook security spot-checks, Paddle **sandbox** end-to-end smoke (checkout → premium ≤ 1 min; cancel → period-end downgrade), real Google OAuth smoke — the two Complexity Tracking exceptions' mandatory manual pass
 - [ ] T045 Release: extension version bump + release notes (self-serve signup, free/premium tiers, disclosure), switch Paddle sandbox → live config in the Function App, CWS listing + dashboard data-usage certification submitted (ships with the release, not after — plan.md PR 6)

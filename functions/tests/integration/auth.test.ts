@@ -17,7 +17,7 @@ import {
 } from "../helpers/testTokens";
 import { withAuth } from "../../src/services/auth";
 import { analyzeJobHandler } from "../../src/analyze-job/index";
-import { ensureTable } from "../../src/services/tablesService";
+import { getByEmail, setBlocked } from "../../src/services/usersStore";
 import { orchestrateJobAnalysis } from "../../src/services/jobExtractionOrchestrator";
 
 vi.mock("../../src/services/jobExtractionOrchestrator", async (importOriginal) => {
@@ -56,9 +56,13 @@ function makeContext(): InvocationContext {
   } as unknown as InvocationContext;
 }
 
+function uniqueEmail(): string {
+  return `${randomUUID()}@example.com`;
+}
+
 const analyzeJob = withAuth(analyzeJobHandler);
 
-describe("analyze-job behind withAuth (integration: certs stub + Azurite allowlist)", () => {
+describe("analyze-job behind withAuth (integration: certs stub + Azurite self-serve signup)", () => {
   beforeAll(async () => {
     process.env.GOOGLE_OAUTH_CERTS_URL = await startCertsStub();
     process.env.GOOGLE_OAUTH_CLIENT_ID = TEST_CLIENT_ID;
@@ -74,6 +78,15 @@ describe("analyze-job behind withAuth (integration: certs stub + Azurite allowli
 
   beforeEach(() => {
     vi.mocked(orchestrateJobAnalysis).mockReset();
+    vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
+      isJobPosting: true,
+      arrangement: "remote",
+      arrangementConfidence: "explicit",
+      seniority: "senior",
+      techStack: [],
+      model: "gpt-4o-mini",
+      analyzedAt: "2026-07-07T00:00:00Z",
+    } as never);
   });
 
   it("401 without a token — orchestrator (OpenAI) never runs", async () => {
@@ -83,62 +96,54 @@ describe("analyze-job behind withAuth (integration: certs stub + Azurite allowli
     expect(vi.mocked(orchestrateJobAnalysis)).not.toHaveBeenCalled();
   });
 
-  it("403 for a signed-in but non-allowlisted account — orchestrator never runs", async () => {
-    const token = signTestIdToken({ email: `${randomUUID()}@example.com` });
-    const res = await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
-    expect(res.status).toBe(403);
-    expect(res.jsonBody).toMatchObject({ error: { code: "NOT_AUTHORIZED" } });
-    expect(vi.mocked(orchestrateJobAnalysis)).not.toHaveBeenCalled();
-  });
-
-  it("200 for an allowlisted account — request reaches the orchestrator", async () => {
-    const email = `${randomUUID()}@example.com`;
-    const client = await ensureTable("AllowedUsers");
-    await client.createEntity({
-      partitionKey: "AllowedUser",
-      rowKey: email,
-      addedAt: new Date().toISOString(),
-    });
-    vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
-      isJobPosting: true,
-      arrangement: "remote",
-      arrangementConfidence: "explicit",
-      seniority: "senior",
-      techStack: [],
-      model: "gpt-4o-mini",
-      analyzedAt: "2026-07-07T00:00:00Z",
-    } as never);
+  it("end-to-end signup: an unknown email creates the Users row and reaches the handler", async () => {
+    const email = uniqueEmail();
+    expect(await getByEmail(email)).toBeNull();
 
     const token = signTestIdToken({ email });
     const res = await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
     expect(res.status).toBe(200);
     expect(vi.mocked(orchestrateJobAnalysis)).toHaveBeenCalledTimes(1);
+
+    const row = await getByEmail(email);
+    expect(row).not.toBeNull();
+    expect(row?.tier).toBe("free");
   });
 
-  it("revocation is effective on the very next request (no allowlist caching)", async () => {
-    const email = `${randomUUID()}@example.com`;
-    const client = await ensureTable("AllowedUsers");
-    await client.createEntity({
-      partitionKey: "AllowedUser",
-      rowKey: email,
-      addedAt: new Date().toISOString(),
-    });
-    vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
-      isJobPosting: true,
-      arrangement: "remote",
-      arrangementConfidence: "explicit",
-      seniority: "senior",
-      techStack: [],
-      model: "gpt-4o-mini",
-      analyzedAt: "2026-07-07T00:00:00Z",
-    } as never);
+  it("a second request from the same account reuses the row (no duplicate signup)", async () => {
+    const email = uniqueEmail();
+    const sub = `sub-${randomUUID()}`;
+    const token = signTestIdToken({ email, sub });
 
+    await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
+    const first = await getByEmail(email);
+
+    await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
+    const second = await getByEmail(email);
+
+    expect(second?.createdAt).toBe(first?.createdAt);
+    expect(second?.sub).toBe(sub);
+  });
+
+  it("blocking is effective on the very next request (no caching)", async () => {
+    const email = uniqueEmail();
     const token = signTestIdToken({ email });
+
     const first = await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
     expect(first.status).toBe(200);
 
-    await client.deleteEntity("AllowedUser", email);
+    await setBlocked(email, true);
     const second = await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
     expect(second.status).toBe(403);
+    expect(second.jsonBody).toMatchObject({ error: { code: "NOT_AUTHORIZED" } });
+  });
+
+  it("403 for an unverified email — orchestrator never runs and no Users row is created", async () => {
+    const email = uniqueEmail();
+    const token = signTestIdToken({ email, email_verified: false });
+    const res = await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
+    expect(res.status).toBe(403);
+    expect(vi.mocked(orchestrateJobAnalysis)).not.toHaveBeenCalled();
+    expect(await getByEmail(email)).toBeNull();
   });
 });

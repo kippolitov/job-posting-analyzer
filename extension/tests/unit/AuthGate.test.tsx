@@ -59,6 +59,17 @@ describe("AuthGate", () => {
     expect(screen.queryByTestId("feature")).not.toBeInTheDocument();
   });
 
+  it("signed out: shows the account/payment data-practices disclosure before sign-in (CWS Disclosure Requirements)", async () => {
+    vi.mocked(readAuthSnapshot).mockResolvedValue(signedOut);
+    render(<AuthGate>x</AuthGate>);
+    await screen.findByRole("button", { name: /sign in with google/i });
+    expect(
+      screen.getByText(/signing in creates a free account/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/paddle/i)).toBeInTheDocument();
+    expect(screen.getByText(/merchant of record/i)).toBeInTheDocument();
+  });
+
   it("clicking sign-in shows progress and unlocks on success", async () => {
     vi.mocked(readAuthSnapshot).mockResolvedValue(signedOut);
     let resolveSignIn: (v: unknown) => void = () => {};
@@ -72,7 +83,7 @@ describe("AuthGate", () => {
     );
     const button = await screen.findByRole("button", { name: /sign in with google/i });
     await userEvent.click(button);
-    expect(await screen.findByText(/signing in/i)).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(/signing in/i);
 
     vi.mocked(readAuthSnapshot).mockResolvedValue(signedIn);
     await act(async () => resolveSignIn(undefined));
@@ -95,16 +106,16 @@ describe("AuthGate", () => {
     ).toBeInTheDocument();
   });
 
-  it("not authorized: shows the invitation message with a request-access action (FR-004)", async () => {
+  it("not authorized (blocked/unverified): shows a contact-developer action, not an invitation gate", async () => {
     vi.mocked(readAuthSnapshot).mockResolvedValue(notAuthorized);
     render(
       <AuthGate>
         <div data-testid="feature" />
       </AuthGate>
     );
-    expect(await screen.findByText(/by invitation/i)).toBeInTheDocument();
-    const requestLink = screen.getByRole("link", { name: /request access/i });
-    expect(requestLink).toHaveAttribute("href", expect.stringContaining("mailto:"));
+    expect(await screen.findByText(/access unavailable/i)).toBeInTheDocument();
+    const contactLink = screen.getByRole("link", { name: /contact the developer/i });
+    expect(contactLink).toHaveAttribute("href", expect.stringContaining("mailto:"));
     expect(screen.queryByTestId("feature")).not.toBeInTheDocument();
   });
 
@@ -164,7 +175,7 @@ describe("AuthGate", () => {
     expect(screen.queryByTestId("feature")).not.toBeInTheDocument();
   });
 
-  it("revocation mid-session replaces the overlay with the invitation screen", async () => {
+  it("revocation (block) mid-session replaces the overlay with the access-unavailable screen", async () => {
     vi.mocked(readAuthSnapshot).mockResolvedValue(signedIn);
     render(
       <AuthGate>
@@ -173,7 +184,7 @@ describe("AuthGate", () => {
     );
     await screen.findByTestId("feature");
     emitSnapshot(notAuthorized);
-    expect(await screen.findByText(/by invitation/i)).toBeInTheDocument();
+    expect(await screen.findByText(/access unavailable/i)).toBeInTheDocument();
     expect(screen.queryByTestId("feature")).not.toBeInTheDocument();
   });
 });

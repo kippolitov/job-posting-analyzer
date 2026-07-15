@@ -15,7 +15,6 @@ import {
   jobsExportHandler,
   jobsPruneHandler,
 } from "../../src/jobs/index";
-import { ensureTable } from "../../src/services/tablesService";
 import type { SavedJobPayload } from "../../src/models/user";
 
 const profile = withAuth(profileHandler);
@@ -30,15 +29,10 @@ interface TestUser {
   token: string;
 }
 
-async function makeAllowlistedUser(): Promise<TestUser> {
+/** Signup is self-serve (003-freemium-premium-tier): no allowlist row needed. */
+function makeTestUser(): TestUser {
   const email = `${randomUUID()}@example.com`;
   const sub = `sub-${randomUUID()}`;
-  const client = await ensureTable("AllowedUsers");
-  await client.createEntity({
-    partitionKey: "AllowedUser",
-    rowKey: email,
-    addedAt: new Date().toISOString(),
-  });
   return { email, sub, token: signTestIdToken({ email, sub }) };
 }
 
@@ -129,7 +123,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
 
   describe("profile routes", () => {
     it("GET returns 404 PROFILE_NOT_FOUND before any profile exists", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const res = await profile(
         makeRequest({ method: "GET", token: user.token }),
         makeContext()
@@ -139,7 +133,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("PUT stores and GET returns the normalized profile", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const put = await profile(
         makeRequest({
           method: "PUT",
@@ -163,7 +157,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("PUT rejects malformed bodies with 400 INVALID_REQUEST", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const res = await profile(
         makeRequest({ method: "PUT", token: user.token, body: { nope: 1 } }),
         makeContext()
@@ -173,7 +167,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("DELETE returns 204 and is idempotent", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       await profile(
         makeRequest({
           method: "PUT",
@@ -197,7 +191,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
 
   describe("jobs routes", () => {
     it("PUT saves, GET item returns it, GET list includes it", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const job = makeJobBody();
       const key = keyOf(job.canonicalUrl);
 
@@ -227,7 +221,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("GET list rejects unknown filter values with 400", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const res = await jobsCollection(
         makeRequest({
           method: "GET",
@@ -241,7 +235,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("GET item returns 404 JOB_NOT_FOUND for a missing key", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const res = await jobsItem(
         makeRequest({
           method: "GET",
@@ -255,7 +249,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("PUT rejects key/canonicalUrl mismatches with 400", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const job = makeJobBody();
       const res = await jobsItem(
         makeRequest({
@@ -270,7 +264,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("PUT rejects notes above 10,000 chars with 400", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const job = makeJobBody({ notes: "x".repeat(10_001) });
       const res = await jobsItem(
         makeRequest({
@@ -285,7 +279,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("PATCH updates status/notes, 404s on missing, 400s on immutable-field changes", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const job = makeJobBody();
       const key = keyOf(job.canonicalUrl);
       await jobsItem(
@@ -329,7 +323,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("DELETE returns 204 and is idempotent", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const job = makeJobBody();
       const key = keyOf(job.canonicalUrl);
       await jobsItem(
@@ -349,7 +343,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("PUT returns 409 LIBRARY_FULL for a new row at the cap", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const { fillPartitionForTests } = await import("../helpers/savedJobsSeeder");
       const { SAVED_JOBS_SOFT_CAP } = await import(
         "../../src/services/savedJobsRepository"
@@ -371,7 +365,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     }, 120_000);
 
     it("export returns the byte-exact local format with Content-Disposition", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const job = makeJobBody();
       await jobsItem(
         makeRequest({
@@ -405,7 +399,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("prune deletes oldest archived entries and validates count", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const archived = makeJobBody({ status: "archived" });
       await jobsItem(
         makeRequest({
@@ -446,7 +440,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("rejects malformed job keys and non-JSON bodies with 400", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const badKey = await jobsItem(
         makeRequest({ method: "GET", token: user.token, params: { key: "not-a-sha" } }),
         makeContext()
@@ -480,7 +474,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
 
     it("returns 405 for unsupported methods", async () => {
-      const user = await makeAllowlistedUser();
+      const user = makeTestUser();
       const res = await profile(
         makeRequest({ method: "POST", token: user.token, body: {} }),
         makeContext()
@@ -502,8 +496,8 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
 
   describe("cross-user isolation (SC-003)", () => {
     it("two subs see zero of each other's data", async () => {
-      const userA = await makeAllowlistedUser();
-      const userB = await makeAllowlistedUser();
+      const userA = makeTestUser();
+      const userB = makeTestUser();
       const job = makeJobBody();
       const key = keyOf(job.canonicalUrl);
 
@@ -548,9 +542,9 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
     });
   });
 
-  describe("allowlist-removal data retention (FR-013)", () => {
-    it("removal revokes access but retains data; re-adding restores it", async () => {
-      const user = await makeAllowlistedUser();
+  describe("block data retention (FR-013)", () => {
+    it("blocking revokes access but retains data; unblocking restores it", async () => {
+      const user = makeTestUser();
       const job = makeJobBody();
       const key = keyOf(job.canonicalUrl);
       await jobsItem(
@@ -558,8 +552,8 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
         makeContext()
       );
 
-      const allowedUsers = await ensureTable("AllowedUsers");
-      await allowedUsers.deleteEntity("AllowedUser", user.email);
+      const { setBlocked } = await import("../../src/services/usersStore");
+      await setBlocked(user.email, true);
 
       const denied = await jobsItem(
         makeRequest({ method: "GET", token: user.token, params: { key } }),
@@ -567,11 +561,7 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
       );
       expect(denied.status).toBe(403);
 
-      await allowedUsers.createEntity({
-        partitionKey: "AllowedUser",
-        rowKey: user.email,
-        addedAt: new Date().toISOString(),
-      });
+      await setBlocked(user.email, false);
 
       const restored = await jobsItem(
         makeRequest({ method: "GET", token: user.token, params: { key } }),

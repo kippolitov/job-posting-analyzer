@@ -7,8 +7,9 @@ import type {
   SavedJobEntity,
   SavedJobPatchBody,
   SavedJobPayload,
+  Tier,
 } from "../models/user";
-import { SAVED_JOBS_SOFT_CAP } from "../models/user";
+import { SAVED_JOBS_CAP, SAVED_JOBS_SOFT_CAP } from "../models/user";
 import {
   decodeJsonProperty,
   encodeJsonProperty,
@@ -27,10 +28,15 @@ export { SAVED_JOBS_SOFT_CAP };
 
 const TABLE = "SavedJobs";
 
-/** The partition is at the soft cap and the save would create a new row. */
+/**
+ * The partition is at its tier cap and the save would create a new row
+ * (data-model.md "Saved-jobs over-cap rule" — only new rows are blocked;
+ * a downgraded over-cap library stays read-only-for-additions, never
+ * truncated).
+ */
 export class LibraryCapError extends Error {
-  constructor() {
-    super(`Library is at the ${SAVED_JOBS_SOFT_CAP.toLocaleString()}-posting cap.`);
+  constructor(cap: number) {
+    super(`Library is at the ${cap.toLocaleString()}-posting cap.`);
   }
 }
 
@@ -143,20 +149,24 @@ export async function countJobs(sub: string): Promise<number> {
 
 /**
  * Create or full replace (LWW). Preserves the stored savedAt on replace and
- * always sets updatedAt server-side. A new row beyond the soft cap throws
- * LibraryCapError; replaces are always allowed (contract PUT semantics).
+ * always sets updatedAt server-side. A new row beyond the tier's cap throws
+ * LibraryCapError; replaces are always allowed (contract PUT semantics) —
+ * a downgraded, over-cap library stays read-only-for-additions rather than
+ * losing data (data-model.md R7).
  */
 export async function saveJob(
   sub: string,
   key: string,
-  payload: SavedJobPayload
+  payload: SavedJobPayload,
+  tier: Tier = "free"
 ): Promise<SavedJobPayload> {
   if (sha256Hex(payload.canonicalUrl) !== key) {
     throw new KeyMismatchError();
   }
+  const cap = SAVED_JOBS_CAP[tier];
   const existing = await getEntityOrNull(sub, key);
-  if (!existing && (await countJobs(sub)) >= SAVED_JOBS_SOFT_CAP) {
-    throw new LibraryCapError();
+  if (!existing && (await countJobs(sub)) >= cap) {
+    throw new LibraryCapError(cap);
   }
   const savedAt = existing ? existing.savedAt : payload.savedAt;
   const updatedAt = nowIso();
