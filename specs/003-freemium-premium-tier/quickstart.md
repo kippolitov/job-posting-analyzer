@@ -37,6 +37,9 @@ npm run test:integration
 cd ../extension && npm test
 
 # E2E (P1 journey: fresh identity → sign-in with no allowlist → analyze → usage ticks)
+# Needs the local Functions host running with REQUIRE_AUTH=false (Azurite-backed,
+# not prod) so the stubbed auth token in tests/e2e/*.ts is accepted — flip it
+# back to true afterward. `npm run build` (no E2E=1) restores the store manifest.
 npm run build:e2e && npm run test:e2e
 
 # Premium-quality eval (SC-008) — run against both deployments, compare reports
@@ -75,7 +78,28 @@ shows the read-only banner, saves 409, deletes still work; delete to ≤ 100 ⇒
 sees all prior data (their `sub`-keyed Profiles/SavedJobs were never touched).
 
 **Webhook security spot-checks**: POST a fixture with a tampered byte → 400, no state change;
-replay the same fixture twice → single `PaddleEvents` row, single state write.
+replay the same fixture twice → single `PaddleEvents` row, single state write. **Covered by
+the automated integration suite** (`tests/integration/paddleWebhook.test.ts`: "bad signature:
+400, no state change" and "duplicate event_id delivery: single PaddleEvents row, single state
+write, 200 both times") — no separate manual step needed.
+
+## T044 validation run (2026-07-15)
+
+All automated suites green: 185 unit + 75 integration (`functions/`), 285 extension unit/contract,
+lint clean, e2e 8/8 (`extension/tests/e2e/*` — fixed two stale test bugs found during this run:
+`jobAnalyzer.spec.ts` predated the 002 auth gate and never stubbed sign-in; `migration.test.ts`'s
+`getByText("Legacy Saved Role")` matched the visible link plus two sr-only status/notes labels,
+now scoped to `getByRole("link", …)`). SC-008 eval already re-run in T043 (`eval-premium.md`).
+
+US1–US4 manual walkthroughs and the Paddle sandbox/Google OAuth smokes were proven for real in
+an earlier session (real Google sign-in, real sandbox checkout → premium in well under a minute,
+real portal cancel + simulated period-end downgrade) — not repeated here since nothing in T043
+touches that surface. US5: T038 already ran the real migration against production Table Storage
+(dry-run then live, 3 rows, verified via `manage-users list`); the "migrated user signs in and
+sees prior data" guarantee holds structurally (the migration never touches sub-keyed
+Profiles/SavedJobs) but hasn't been exercised through a live prod sign-in, because **production
+is still running 002's code** (see T045) — the `Users` table it wrote to isn't read by anything
+live yet.
 
 ## Release gates (before flipping Paddle live — plan.md PR 6)
 
