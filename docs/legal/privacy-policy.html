@@ -18,12 +18,12 @@
 </head>
 <body>
 <h1>Privacy Policy — Job Posting Analyzer</h1>
-<p class="updated">Last updated: July 12, 2026</p>
+<p class="updated">Last updated: July 15, 2026</p>
 
-<p>Job Posting Analyzer ("the extension") is a Chrome extension that analyzes job postings for work arrangement, salary, seniority, tech stack, and fit. Access is by invitation: features require signing in with a Google account the developer has allowlisted. This page explains what data the extension handles, how it's used, and what choices you have.</p>
+<p>Job Posting Analyzer ("the extension") is a Chrome extension that analyzes job postings for work arrangement, salary, seniority, tech stack, and fit. Anyone with a verified-email Google account can sign up and use it immediately — a free tier is available to everyone, and an optional paid Premium tier raises your monthly limits. This page explains what data the extension handles, how it's used, and what choices you have.</p>
 
-<h2>Sign-in and invitation</h2>
-<p>When you sign in, Google issues an ID token containing your email address and basic profile information. That token accompanies every request to our backend, which verifies it and checks your email against the invitation allowlist before doing any work. Your email address is stored server-side as the key for your account data. The extension never sees or stores your Google password.</p>
+<h2>Sign-in and account creation</h2>
+<p>When you sign in, Google issues an ID token containing your email address and basic profile information. That token accompanies every request to our backend, which verifies it and — the first time you sign in — creates an account for you automatically on the free tier. No invitation or approval step is required; a verified email address is the only requirement. Your email address is stored server-side as the key for your account data. The extension never sees or stores your Google password.</p>
 
 <h2>What the extension accesses</h2>
 <p>The extension only reads the page you're actively viewing, and only after you click its toolbar icon (via Chrome's <code>activeTab</code> permission) — it never reads pages in the background and never requests broad access to your browsing.</p>
@@ -42,7 +42,8 @@
     <ul>
       <li>Your candidate profile, stored under your account so it follows you across devices and browsers, and included in analysis requests you initiate.</li>
       <li>Postings you explicitly save (via the "Save" action) — the analysis snapshot, the posting's URL and title, your status labels, and any notes you add — until you delete them.</li>
-      <li>Your email address on the invitation allowlist.</li>
+      <li>Your account record: email address, entitlement tier (free or Premium), and your monthly analysis usage count (a number, reset each calendar month — not the content of what you analyzed).</li>
+      <li>If you subscribe to Premium: your subscription status (active, past due, or canceled), renewal or end date, and identifiers linking your account to our payment processor's records (see "Payments" below) — never your card number or other payment details, which we never receive.</li>
       <li>All of this lives in Azure Table Storage, keyed by your account, and is transmitted only over HTTPS.</li>
     </ul>
   </li>
@@ -55,8 +56,11 @@
   <li><strong>Operational telemetry:</strong> standard service metrics (request counts, latency, errors) are collected via Azure Application Insights to keep the service running. This does not include the content of the pages or profiles you submit.</li>
 </ul>
 
+<h2>Payments (Premium tier)</h2>
+<p>Premium ($5/month) is optional and processed entirely by <a href="https://www.paddle.com/legal/privacy" target="_blank" rel="noopener">Paddle.com Market Limited ("Paddle")</a>, who acts as merchant of record for the transaction — Paddle, not us, collects your payment details, calculates and remits any applicable sales tax or VAT, and issues your invoice/receipt. We never see or store your card number or other payment credentials. When you subscribe, Paddle notifies our backend that your account should be upgraded; we store only the subscription status, renewal/end date, and an internal customer/subscription identifier Paddle assigns, so we can display your plan and let you manage or cancel it. See <a href="https://www.paddle.com/legal/privacy" target="_blank" rel="noopener">Paddle's Privacy Policy</a> for how they handle payment data.</p>
+
 <h2>Third parties</h2>
-<p>Two third-party processors are involved: <a href="https://www.microsoft.com/en-us/trust-center/privacy" target="_blank" rel="noopener">Microsoft Azure</a> (hosting, storage, and the Azure OpenAI Service, which processes content under Microsoft's enterprise data handling commitments — Azure OpenAI does not use your data to train models) and <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google</a> (sign-in). We do not use advertising networks, analytics trackers, or any service that profiles or resells your data. We do not sell your data to anyone, under any circumstances, and we do not use it to determine creditworthiness or for lending purposes.</p>
+<p>Three third-party processors are involved: <a href="https://www.microsoft.com/en-us/trust-center/privacy" target="_blank" rel="noopener">Microsoft Azure</a> (hosting, storage, and the Azure OpenAI Service, which processes content under Microsoft's enterprise data handling commitments — Azure OpenAI does not use your data to train models), <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google</a> (sign-in), and, only if you choose to subscribe, <a href="https://www.paddle.com/legal/privacy" target="_blank" rel="noopener">Paddle</a> (payment processing, described above). We do not use advertising networks, analytics trackers, or any service that profiles or resells your data. We do not sell your data to anyone, under any circumstances, and we do not use it to determine creditworthiness or for lending purposes.</p>
 
 <h2>Permissions the extension requests</h2>
 <ul>
@@ -73,7 +77,8 @@
   <li><strong>Delete</strong> individual saved postings, or prune archived ones in bulk.</li>
   <li><strong>Delete your candidate profile</strong> at any time from the options page.</li>
   <li><strong>Sign out</strong> at any time; the extension makes no backend requests when signed out.</li>
-  <li><strong>Full deletion:</strong> if your access is revoked (removal from the allowlist), your stored data is retained so it's available if access is restored. To have all data associated with your account permanently deleted, email <a href="mailto:kippolitov@gmail.com">kippolitov@gmail.com</a> from the affected account or file an issue at the address below.</li>
+  <li><strong>Cancel Premium</strong> at any time via the "Manage subscription" link in the extension, which opens Paddle's customer portal — cancellation takes effect at the end of the paid period, and your account returns to the free tier automatically.</li>
+  <li><strong>Full deletion:</strong> if your access is suspended by the developer, your stored data is retained so it's available if access is restored. To have all data associated with your account permanently deleted, email <a href="mailto:kippolitov@gmail.com">kippolitov@gmail.com</a> from the affected account or file an issue at the address below.</li>
 </ul>
 
 <h2>Children's privacy</h2>

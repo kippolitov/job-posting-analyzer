@@ -180,6 +180,42 @@ describe("ThisPageTab", () => {
     expect(onReanalyze).toHaveBeenCalled();
   });
 
+  it("usage-limit-reached errors render the designed UsageExhausted card, never the generic error banner (FR-009/SC-003)", async () => {
+    const onUpgrade = vi.fn();
+    render(
+      <ThisPageTab
+        view={{
+          ...baseView,
+          status: "error",
+          analysis: null,
+          error: {
+            code: "usage-limit-reached",
+            message: "You've used all 50 free analyses this month.",
+            action: "Upgrade for more analyses, or wait for your allowance to reset.",
+            retryable: false,
+            usage: {
+              count: 50,
+              limit: 50,
+              resetsAt: "2026-08-01T00:00:00Z",
+              tier: "free",
+            },
+          },
+        }}
+        onAnalyze={noop}
+        onCancel={noop}
+        onForceAnalyze={noop}
+        onUpgrade={onUpgrade}
+      />
+    );
+    expect(
+      screen.getByText(/you.ve used all 50 free analyses this month/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/august 1/i)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /upgrade to premium/i }));
+    expect(onUpgrade).toHaveBeenCalledTimes(1);
+  });
+
   it("omits Retry for non-retryable errors", () => {
     renderTab({
       ...baseView,

@@ -1,4 +1,10 @@
-import type { JobAnalysis, JobErrorCode, JobPanelError, PageExtract } from "../types/job";
+import type {
+  JobAnalysis,
+  JobErrorCode,
+  JobPanelError,
+  PageExtract,
+  UsageInfo,
+} from "../types/job";
 import {
   getIdToken,
   markNotAuthorized,
@@ -58,10 +64,14 @@ export async function postJobAnalysis(
     await markNotAuthorized();
     throw makeJobError(
       "no-access",
-      "Access is by invitation.",
-      "Use “Request access” on the sign-in screen to contact the developer.",
+      "Your account can't sign in right now.",
+      "See the sign-in screen for details.",
       false
     );
+  }
+
+  if (response.status === 429) {
+    throw await mapTooManyRequests(response);
   }
 
   if (response.ok) {
@@ -78,6 +88,41 @@ export async function postJobAnalysis(
   }
 
   throw mapHttpError(response.status);
+}
+
+/**
+ * 429 covers two distinct causes (contracts/metering.md): the monthly usage
+ * allowance (USAGE_LIMIT_REACHED, carries `usage` for the exhausted-state
+ * card, FR-009) and the per-IP rate limiter (RATE_LIMITED, generic retry
+ * friction). Callers must branch on error.code, never on status alone.
+ */
+async function mapTooManyRequests(response: Response): Promise<JobPanelError> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  const errorCode = (body as { error?: { code?: string } } | null)?.error?.code;
+  const usage = (body as { usage?: UsageInfo } | null)?.usage;
+
+  if (errorCode === "USAGE_LIMIT_REACHED" && usage) {
+    const tierLabel = usage.tier === "premium" ? "premium" : "free";
+    return makeJobError(
+      "usage-limit-reached",
+      `You've used all ${usage.limit} ${tierLabel} analyses this month.`,
+      "Upgrade for more analyses, or wait for your allowance to reset.",
+      false,
+      usage
+    );
+  }
+
+  return makeJobError(
+    "service-error",
+    "The analysis service encountered an error.",
+    "Try again.",
+    true
+  );
 }
 
 async function attemptFetch(
@@ -130,7 +175,7 @@ function mapHttpError(status: number): JobPanelError {
       false
     );
   }
-  if (status === 502 || status === 500 || status === 503 || status === 504 || status === 429) {
+  if (status === 502 || status === 500 || status === 503 || status === 504) {
     return makeJobError(
       "service-error",
       "The analysis service encountered an error.",
@@ -145,9 +190,10 @@ function makeJobError(
   code: JobErrorCode,
   message: string,
   action: string,
-  retryable: boolean
+  retryable: boolean,
+  usage?: UsageInfo
 ): JobPanelError {
-  return { code, message, action, retryable };
+  return { code, message, action, retryable, ...(usage ? { usage } : {}) };
 }
 
 function isJobAnalysis(value: unknown): value is JobAnalysis {

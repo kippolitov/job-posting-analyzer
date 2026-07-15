@@ -17,6 +17,7 @@ import {
 } from "../helpers/testTokens";
 import { withAuth } from "../../src/services/auth";
 import { ensureTable } from "../../src/services/tablesService";
+import { getByEmail, setBlocked, setTier } from "../../src/services/usersStore";
 
 function makeRequest(authorization?: string, method = "POST"): HttpRequest {
   return {
@@ -36,15 +37,6 @@ function makeContext(): InvocationContext {
   } as unknown as InvocationContext;
 }
 
-async function allowlist(email: string): Promise<void> {
-  const client = await ensureTable("AllowedUsers");
-  await client.createEntity({
-    partitionKey: "AllowedUser",
-    rowKey: email.toLowerCase(),
-    addedAt: new Date().toISOString(),
-  });
-}
-
 function uniqueEmail(): string {
   return `${randomUUID()}@example.com`;
 }
@@ -53,7 +45,7 @@ const okHandler = vi.fn(
   (
     _request: HttpRequest,
     _context: InvocationContext,
-    _user: { sub: string; email: string }
+    _user: { sub: string; email: string; tier: string }
   ) => Promise.resolve({ status: 200, jsonBody: { ok: true } })
 );
 
@@ -129,9 +121,8 @@ describe("withAuth middleware", () => {
     expect(res.status).toBe(401);
   });
 
-  it("403 NOT_AUTHORIZED when email_verified is false, even if allowlisted", async () => {
+  it("403 NOT_AUTHORIZED with verify-your-email copy when email_verified is false", async () => {
     const email = uniqueEmail();
-    await allowlist(email);
     const token = signTestIdToken({ email, email_verified: false });
     const res = await withAuth(okHandler)(
       makeRequest(`Bearer ${token}`),
@@ -139,24 +130,17 @@ describe("withAuth middleware", () => {
     );
     expect(res.status).toBe(403);
     expect(res.jsonBody).toMatchObject({ error: { code: "NOT_AUTHORIZED" } });
+    const message = (res.jsonBody as { error: { message: string } }).error.message;
+    expect(message.toLowerCase()).toMatch(/verifi/);
+    expect(message.toLowerCase()).toMatch(/google/);
     expect(okHandler).not.toHaveBeenCalled();
+    // Signup is never gated by an allowlist — no Users row should exist.
+    expect(await getByEmail(email)).toBeNull();
   });
 
-  it("403 NOT_AUTHORIZED for a valid token not on the allowlist — handler never runs", async () => {
-    const token = signTestIdToken({ email: uniqueEmail() });
-    const res = await withAuth(okHandler)(
-      makeRequest(`Bearer ${token}`),
-      makeContext()
-    );
-    expect(res.status).toBe(403);
-    expect(res.jsonBody).toMatchObject({ error: { code: "NOT_AUTHORIZED" } });
-    expect(okHandler).not.toHaveBeenCalled();
-  });
-
-  it("invokes the handler with { sub, email } for an allowlisted user", async () => {
+  it("first sign-in auto-creates a Users row on the free tier and proceeds", async () => {
     const email = uniqueEmail();
     const sub = `sub-${randomUUID()}`;
-    await allowlist(email);
     const token = signTestIdToken({ email, sub });
     const res = await withAuth(okHandler)(
       makeRequest(`Bearer ${token}`),
@@ -164,26 +148,76 @@ describe("withAuth middleware", () => {
     );
     expect(res.status).toBe(200);
     expect(okHandler).toHaveBeenCalledTimes(1);
-    expect(okHandler.mock.calls[0][2]).toEqual({ sub, email });
+    expect(okHandler.mock.calls[0][2]).toEqual({ sub, email, tier: "free" });
+
+    const row = await getByEmail(email);
+    expect(row?.tier).toBe("free");
+    expect(row?.sub).toBe(sub);
   });
 
-  it("records the sub on the allowlist row on first sign-in", async () => {
+  it("an existing user's tier is attached to the handler call", async () => {
     const email = uniqueEmail();
     const sub = `sub-${randomUUID()}`;
-    await allowlist(email);
-    const token = signTestIdToken({ email, sub });
-    await withAuth(okHandler)(makeRequest(`Bearer ${token}`), makeContext());
-    const client = await ensureTable("AllowedUsers");
-    const row = await client.getEntity("AllowedUser", email.toLowerCase());
-    expect(row.sub).toBe(sub);
+    // First sign-in creates the row (free); an admin flips it to premium.
+    await withAuth(okHandler)(
+      makeRequest(`Bearer ${signTestIdToken({ email, sub })}`),
+      makeContext()
+    );
+    await setTier(email, "premium");
+    okHandler.mockClear();
+
+    const res = await withAuth(okHandler)(
+      makeRequest(`Bearer ${signTestIdToken({ email, sub })}`),
+      makeContext()
+    );
+    expect(res.status).toBe(200);
+    expect(okHandler.mock.calls[0][2]).toEqual({ sub, email, tier: "premium" });
   });
 
-  it("normalizes the email claim before the allowlist lookup", async () => {
+  it("403 NOT_AUTHORIZED with contact-developer copy for a blocked account", async () => {
     const email = uniqueEmail();
-    await allowlist(email);
-    const token = signTestIdToken({ email: email.toUpperCase() });
+    const sub = `sub-${randomUUID()}`;
+    await withAuth(okHandler)(
+      makeRequest(`Bearer ${signTestIdToken({ email, sub })}`),
+      makeContext()
+    );
+    await setBlocked(email, true);
+    okHandler.mockClear();
+
     const res = await withAuth(okHandler)(
-      makeRequest(`Bearer ${token}`),
+      makeRequest(`Bearer ${signTestIdToken({ email, sub })}`),
+      makeContext()
+    );
+    expect(res.status).toBe(403);
+    expect(res.jsonBody).toMatchObject({ error: { code: "NOT_AUTHORIZED" } });
+    const message = (res.jsonBody as { error: { message: string } }).error.message;
+    expect(message.toLowerCase()).toMatch(/contact/);
+    expect(okHandler).not.toHaveBeenCalled();
+  });
+
+  it("never consults the AllowedUsers table", async () => {
+    // A completely unlisted AllowedUsers table must not matter — signup is
+    // open. This would previously have 403'd as "not on the allowlist".
+    await ensureTable("AllowedUsers");
+    const email = uniqueEmail();
+    const res = await withAuth(okHandler)(
+      makeRequest(`Bearer ${signTestIdToken({ email })}`),
+      makeContext()
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("normalizes the email claim before the Users lookup", async () => {
+    const email = uniqueEmail();
+    const sub = `sub-${randomUUID()}`;
+    await withAuth(okHandler)(
+      makeRequest(`Bearer ${signTestIdToken({ email, sub })}`),
+      makeContext()
+    );
+    okHandler.mockClear();
+
+    const res = await withAuth(okHandler)(
+      makeRequest(`Bearer ${signTestIdToken({ email: email.toUpperCase(), sub })}`),
       makeContext()
     );
     expect(res.status).toBe(200);
@@ -203,15 +237,15 @@ describe("withAuth middleware", () => {
     const res = await withAuth(okHandler)(makeRequest(), makeContext());
     expect(res.status).toBe(200);
     expect(okHandler).toHaveBeenCalledTimes(1);
+    expect(okHandler.mock.calls[0][2]).toMatchObject({ tier: "free" });
   });
 
   it("REQUIRE_AUTH=false still uses a valid token's identity when present", async () => {
     process.env.REQUIRE_AUTH = "false";
     const email = uniqueEmail();
     const sub = `sub-${randomUUID()}`;
-    await allowlist(email);
     const token = signTestIdToken({ email, sub });
     await withAuth(okHandler)(makeRequest(`Bearer ${token}`), makeContext());
-    expect(okHandler.mock.calls[0][2]).toEqual({ sub, email });
+    expect(okHandler.mock.calls[0][2]).toMatchObject({ sub, email });
   });
 });

@@ -5,6 +5,7 @@ import type {
   JobAnalysisResponse,
 } from "../models/job";
 import { isJobAnalysisPayload } from "../models/job";
+import type { Tier } from "../models/user";
 
 /** Model output violated the schema even after the repair retry → HTTP 502. */
 export class JobSchemaError extends Error {}
@@ -196,14 +197,23 @@ function enforceConsistency(
 
 export async function orchestrateJobAnalysis(
   req: AnalyzeJobRequest,
+  tier: Tier = "free",
   warn: (message: string) => void = () => {}
 ): Promise<JobAnalysisResponse> {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT ?? "";
   const apiKey = process.env.AZURE_OPENAI_API_KEY ?? "";
-  const deployment =
+  const freeDeployment =
     process.env.AZURE_OPENAI_JOB_DEPLOYMENT ??
     process.env.AZURE_OPENAI_DEPLOYMENT ??
     "gpt-4o-mini";
+  // Premium falls back to the free deployment when unset (including an
+  // empty-string placeholder, e.g. local.settings.json before the premium
+  // deployment is provisioned) — a safe default in every environment
+  // (data-model.md, research.md R6).
+  const deployment =
+    tier === "premium" && process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM
+      ? process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM
+      : freeDeployment;
 
   const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion: "2024-08-01-preview" });
 

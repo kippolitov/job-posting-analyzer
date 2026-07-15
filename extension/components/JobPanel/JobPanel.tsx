@@ -4,6 +4,7 @@ import { ThisPageTab } from "./ThisPageTab";
 import { SavedTab } from "./SavedTab";
 import type { JobView } from "./ThisPageTab";
 import { jobStorage } from "../../services/jobStorage";
+import { startCheckout } from "../../services/accountService";
 import { MessageType } from "../../types/messages";
 import type { ExtensionMessage } from "../../types/messages";
 import type { SavedJob } from "../../types/job";
@@ -207,6 +208,17 @@ export function JobPanel({
     setSaveError(null);
   };
 
+  const handleUpgrade = async () => {
+    try {
+      const { checkoutUrl } = await startCheckout();
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      // Checkout couldn't be created (already premium, Paddle unreachable,
+      // etc.) — AccountBar in the options page surfaces the specific error.
+      chrome.runtime.openOptionsPage();
+    }
+  };
+
   return (
     <>
       <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
@@ -234,6 +246,7 @@ export function JobPanel({
               onSave={() => void handleSave()}
               onExport={() => void handleExport()}
               onPruneArchived={() => void handlePruneArchived()}
+              onUpgrade={() => void handleUpgrade()}
             />
           </div>
         )}

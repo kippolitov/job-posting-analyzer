@@ -22,6 +22,8 @@ export interface FakeStorageApi {
   failNext(status: number, code?: string): void;
   /** Soft cap override so 409 paths don't need 1,000 seeded records. */
   setCap(cap: number): void;
+  /** GET /api/account tier — free by default (contracts/billing-api.md). */
+  setAccountTier(tier: "free" | "premium"): void;
   reset(): void;
   seededKey(canonicalUrl: string): Promise<string>;
 }
@@ -40,6 +42,7 @@ export function createFakeStorageApi(): FakeStorageApi {
   const jobs = new Map<string, SavedJob>();
   let profile: CandidateProfile | null = null;
   let cap = 1_000;
+  let accountTier: "free" | "premium" = "free";
   let forcedFailure: { status: number; code: string } | null = null;
 
   function takeForcedFailure(): HttpResponse | null {
@@ -96,6 +99,42 @@ export function createFakeStorageApi(): FakeStorageApi {
       profile = null;
       return new HttpResponse(null, { status: 204 });
     }),
+
+    // Minimal AccountBar support (contracts/billing-api.md) — a fixed free
+    // account with no usage. Deliberately does not consume failNext()/setCap
+    // state: those are for the jobs/profile contract this fake exists to
+    // serve, and account fetches race jobs/profile fetches on every mount,
+    // so sharing the single-shot failure switch would make failures land on
+    // whichever request wins the race. Suites that exercise billing failure
+    // behavior use the dedicated mswAccountServer fake instead.
+    http.get(`${base}/account`, () => {
+      return HttpResponse.json({
+        email: "user@example.com",
+        tier: accountTier,
+        usage:
+          accountTier === "premium"
+            ? { count: 0, limit: 300, resetsAt: "2026-08-01T00:00:00Z" }
+            : { count: 0, limit: 50, resetsAt: "2026-08-01T00:00:00Z" },
+        subscription:
+          accountTier === "premium"
+            ? { status: "active", renewsAt: "2026-08-03T00:00:00Z", endsAt: null }
+            : null,
+      });
+    }),
+
+    http.post(`${base}/billing/checkout`, () =>
+      HttpResponse.json({
+        checkoutUrl: "https://sandbox-checkout.paddle.test/txn_1",
+        transactionId: "txn_1",
+      })
+    ),
+
+    http.post(`${base}/billing/portal`, () =>
+      HttpResponse.json(
+        { error: { code: "NO_SUBSCRIPTION", message: "no subscription" } },
+        { status: 404 }
+      )
+    ),
 
     http.get(`${base}/jobs/export`, () => {
       const failure = takeForcedFailure();
@@ -176,7 +215,14 @@ export function createFakeStorageApi(): FakeStorageApi {
       const existing = jobs.get(key);
       if (!existing && jobs.size >= cap) {
         return HttpResponse.json(
-          { error: { code: "LIBRARY_FULL", message: "cap" } },
+          {
+            error: {
+              code: "LIBRARY_FULL",
+              message:
+                `Library is at the ${cap.toLocaleString()}-posting cap. ` +
+                "Upgrade to Premium for a 1,000-job library, or remove a posting to save this one.",
+            },
+          },
           { status: 409 }
         );
       }
@@ -246,10 +292,14 @@ export function createFakeStorageApi(): FakeStorageApi {
     setCap: (value) => {
       cap = value;
     },
+    setAccountTier: (tier) => {
+      accountTier = tier;
+    },
     reset: () => {
       jobs.clear();
       profile = null;
       cap = 1_000;
+      accountTier = "free";
       forcedFailure = null;
     },
     seededKey: (canonicalUrl) => sha256Hex(canonicalUrl),

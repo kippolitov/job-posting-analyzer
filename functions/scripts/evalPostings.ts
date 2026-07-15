@@ -1,15 +1,22 @@
 /**
- * Accuracy eval for the job analyzer (SC-001 / SC-002).
- * Usage: npm run eval:postings   (requires AZURE_OPENAI_* config; makes live model calls)
+ * Accuracy eval for the job analyzer (SC-001 / SC-002 / SC-008).
+ * Usage: npm run eval:postings [-- --tier=premium]
+ *   (requires AZURE_OPENAI_* config; makes live model calls)
  *
  * Reads posting fixtures from tests/fixtures/postings/manifest.json and reports:
  * - arrangement accuracy (target >= 90% on a 50-posting set)
  * - stated-arrangement contradictions (target: zero)
  * - hybrid day-count extraction wherever the manifest expects one
+ * - p95 latency (target <= 30s, Constitution IV/QG-4 — same ceiling for both tiers)
+ *
+ * --tier=free (default) uses AZURE_OPENAI_JOB_DEPLOYMENT; --tier=premium uses
+ * AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM (data-model.md). Run once per tier and
+ * compare the two reports for SC-008 sign-off (specs/003-freemium-premium-tier/eval-premium.md).
  */
 import { readFileSync, readdirSync } from "fs";
 import path from "path";
 import { orchestrateJobAnalysis } from "../src/services/jobExtractionOrchestrator";
+import type { Tier } from "../src/models/user";
 
 interface ManifestEntry {
   file: string;
@@ -36,7 +43,27 @@ try {
   // Fall back to ambient environment variables.
 }
 
+function parseTier(argv: string[]): Tier {
+  const flag = argv.find((arg) => arg.startsWith("--tier="));
+  const value = flag?.slice("--tier=".length);
+  if (value === "premium") return "premium";
+  if (value && value !== "free") {
+    throw new Error(`--tier must be "free" or "premium", got "${value}"`);
+  }
+  return "free";
+}
+
+function p95(sortedAscending: number[]): number {
+  if (sortedAscending.length === 0) return 0;
+  const index = Math.min(
+    sortedAscending.length - 1,
+    Math.ceil(sortedAscending.length * 0.95) - 1
+  );
+  return sortedAscending[index];
+}
+
 async function main(): Promise<void> {
+  const tier = parseTier(process.argv.slice(2));
   const manifest = JSON.parse(
     readFileSync(path.join(fixturesDir, "manifest.json"), "utf-8")
   ) as ManifestEntry[];
@@ -47,6 +74,8 @@ async function main(): Promise<void> {
   let hybridExpected = 0;
   let hybridDaysCorrect = 0;
   const failures: string[] = [];
+  const latenciesMs: number[] = [];
+  let deploymentName = "";
 
   for (const entry of manifest) {
     if (!available.has(entry.file)) {
@@ -54,16 +83,22 @@ async function main(): Promise<void> {
       continue;
     }
     const mainText = readFileSync(path.join(fixturesDir, entry.file), "utf-8");
-    const result = await orchestrateJobAnalysis({
-      extract: {
-        url: `https://eval.example/postings/${entry.file}`,
-        canonicalUrl: `https://eval.example/postings/${entry.file}`,
-        title: entry.file,
-        jsonLd: [],
-        mainText,
-        extractedAt: new Date().toISOString(),
+    const startedAt = Date.now();
+    const result = await orchestrateJobAnalysis(
+      {
+        extract: {
+          url: `https://eval.example/postings/${entry.file}`,
+          canonicalUrl: `https://eval.example/postings/${entry.file}`,
+          title: entry.file,
+          jsonLd: [],
+          mainText,
+          extractedAt: new Date().toISOString(),
+        },
       },
-    });
+      tier
+    );
+    latenciesMs.push(Date.now() - startedAt);
+    deploymentName = result.model;
 
     const arrangementOk = result.arrangement === entry.expected.arrangement;
     if (arrangementOk) {
@@ -89,13 +124,19 @@ async function main(): Promise<void> {
 
   const total = manifest.length;
   const accuracy = total > 0 ? (correctArrangement / total) * 100 : 0;
+  const sortedLatencies = [...latenciesMs].sort((a, b) => a - b);
+  const p95Ms = p95(sortedLatencies);
 
-  console.log("\n=== Job analyzer eval (SC-001 / SC-002) ===");
+  console.log(`\n=== Job analyzer eval (SC-001 / SC-002 / SC-008) — tier: ${tier} ===`);
+  console.log(`Deployment:                    ${deploymentName || "(none evaluated)"}`);
   console.log(`Postings evaluated:            ${total}`);
   console.log(`Arrangement accuracy:          ${accuracy.toFixed(1)}% (target ≥ 90%)`);
   console.log(`Stated-arrangement conflicts:  ${contradictions} (target 0)`);
   console.log(
     `Hybrid day counts:             ${hybridDaysCorrect}/${hybridExpected} extracted correctly`
+  );
+  console.log(
+    `Latency p95:                   ${(p95Ms / 1000).toFixed(1)}s (target ≤ 30s, Constitution IV/QG-4)`
   );
   if (failures.length > 0) {
     console.log("\nMisses:");
@@ -107,7 +148,11 @@ async function main(): Promise<void> {
     );
   }
 
-  const pass = accuracy >= 90 && contradictions === 0 && hybridDaysCorrect === hybridExpected;
+  const pass =
+    accuracy >= 90 &&
+    contradictions === 0 &&
+    hybridDaysCorrect === hybridExpected &&
+    p95Ms <= 30_000;
   if (total >= 50 && !pass) process.exitCode = 1;
 }
 
