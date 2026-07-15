@@ -113,16 +113,6 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 export const ARRANGEMENTS = ["remote", "hybrid", "onsite", "unspecified"] as const;
 export type Arrangement = (typeof ARRANGEMENTS)[number];
 
-/** `AllowedUsers` row — PK "AllowedUser", RK lowercased email (data-model.md). */
-export interface AllowedUserEntity {
-  partitionKey: "AllowedUser";
-  rowKey: string;
-  /** Populated by the middleware on the account's first successful sign-in. */
-  sub?: string;
-  addedAt: string;
-  note?: string;
-}
-
 /** `Profiles` row — PK sub, RK "profile" (data-model.md). */
 export interface ProfileEntity {
   partitionKey: string;

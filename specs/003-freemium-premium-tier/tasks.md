@@ -148,7 +148,7 @@
 ### Implementation for User Story 5
 
 - [X] T037 [US5] Implement `functions/scripts/migrate-allowlist.ts` (local-only, `--dry-run` flag, per-row summary output) + npm alias `migrate-allowlist` in `functions/package.json`; make T036 pass
-- [ ] T038 [US5] Retirement cleanup (**gated on prod migration verified** — plan.md R10): delete `functions/src/services/allowedUsersStore.ts`, `functions/scripts/manage-allowed-users.ts`, `functions/tests/unit/allowedUsersStore.test.ts`, `functions/tests/unit/manageAllowedUsers.test.ts`; remove remaining `AllowedUsers` references (`AllowedUserEntity` in `functions/src/models/user.ts`, old npm alias); no-dead-code gate (QG-1)
+- [X] T038 [US5] Retirement cleanup (**gated on prod migration verified** — plan.md R10): delete `functions/src/services/allowedUsersStore.ts`, `functions/scripts/manage-allowed-users.ts`, `functions/tests/unit/allowedUsersStore.test.ts`, `functions/tests/unit/manageAllowedUsers.test.ts`; remove remaining `AllowedUsers` references (`AllowedUserEntity` in `functions/src/models/user.ts`, old npm alias); no-dead-code gate (QG-1)
 
 **Checkpoint**: All five stories independently functional; invite-only era fully retired
 
