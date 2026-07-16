@@ -132,9 +132,13 @@ test("accept: legacy data lands server-side and shows in the Saved tab", async (
   });
   await sidePanel.getByRole("button", { name: /continue/i }).click();
 
-  // The migrated posting is in the (server-backed) library.
+  // The migrated posting is in the (server-backed) library. The title text
+  // also appears in two sr-only labels (status/notes) on the same row, so
+  // scope to the link's role — getByText would hit all three.
   await sidePanel.getByRole("tab", { name: "Saved" }).click();
-  await expect(sidePanel.getByText("Legacy Saved Role")).toBeVisible();
+  await expect(
+    sidePanel.getByRole("link", { name: /Legacy Saved Role/i })
+  ).toBeVisible();
 
   // Legacy keys deleted, marker completed.
   const worker = await getWorker(context);

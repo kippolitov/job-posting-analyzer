@@ -220,6 +220,43 @@ describe("JobPanel", () => {
     expect(await screen.findByText(/No saved postings yet/)).toBeInTheDocument();
   });
 
+  it("usage-limit-reached renders the exhausted card, and saved jobs stay fully accessible from the Saved tab (FR-010)", async () => {
+    render(<JobPanel tabId={7} />);
+    dispatch({
+      type: MessageType.JOB_ANALYSIS_RESULT,
+      analysis,
+      canonicalUrl: "https://example.com/jobs/1",
+      sourceUrl: "https://example.com/jobs/1",
+      multiplePostings: false,
+      cached: false,
+      saved: null,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(/Already saved · status: interested/);
+
+    dispatch({
+      type: MessageType.JOB_ANALYSIS_ERROR,
+      error: {
+        code: "usage-limit-reached",
+        message: "You've used all 50 free analyses this month.",
+        action: "Upgrade for more analyses, or wait for your allowance to reset.",
+        retryable: false,
+        usage: { count: 50, limit: 50, resetsAt: "2026-08-01T00:00:00Z", tier: "free" },
+      },
+      fallback: null,
+      canonicalUrl: null,
+      sourceUrl: null,
+    });
+    expect(
+      await screen.findByText(/you.ve used all 50 free analyses this month/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    // Saved jobs remain fully accessible — untouched by the 429.
+    await userEvent.click(screen.getByRole("tab", { name: "Saved" }));
+    expect(await screen.findByText("Senior Backend Engineer")).toBeInTheDocument();
+  });
+
   it("saves the analyzed posting with default status interested", async () => {
     render(<JobPanel tabId={7} />);
     dispatch({

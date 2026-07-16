@@ -1,15 +1,17 @@
 import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { OAuth2Client } from "google-auth-library";
 import type { AuthenticatedUser } from "../models/user";
-import { isAllowed, normalizeEmail, recordSignIn } from "./allowedUsersStore";
+import { getOrCreate, normalizeEmail } from "./usersStore";
 
 /**
  * withAuth(handler) — the single auth/authorization boundary for every HTTP
  * function (contracts/auth.md). Verifies the Google ID token (signature via
  * JWKS, iss, aud, exp — real crypto, offline after the certs cache warms),
- * requires email_verified, then point-reads the AllowedUsers table (uncached;
- * revocation is effective on the next request) and records the account's sub
- * on first sign-in. Failures return 401/403 BEFORE the wrapped handler — for
+ * requires email_verified, then point-reads the Users table (uncached; tier
+ * flips and blocks are effective on the next request) — auto-creating the
+ * row on first sign-in (self-serve signup, plan.md R1). No allowlist: any
+ * verified-email Google account may sign up; the admin CLI's `block` is the
+ * only override. Failures return 401/403 BEFORE the wrapped handler — for
  * analyze-job, before any OpenAI spend.
  *
  * `REQUIRE_AUTH` (default false until the gated extension version ships —
@@ -30,6 +32,7 @@ const CERTS_TTL_MS = 60 * 60 * 1000;
 const LOCAL_DEV_USER: AuthenticatedUser = {
   sub: "local-dev",
   email: "local-dev@localhost",
+  tier: "free",
 };
 
 const oauthClient = new OAuth2Client();
@@ -132,6 +135,7 @@ export function withAuth(handler: AuthedHandler) {
           return handler(request, context, {
             sub: verified.sub,
             email: normalizeEmail(verified.email),
+            tier: "free",
           });
         } catch {
           // Bypass mode never blocks — fall through to the dev identity.
@@ -167,22 +171,16 @@ export function withAuth(handler: AuthedHandler) {
       return authErrorResponse(
         403,
         "NOT_AUTHORIZED",
-        "Access is by invitation. Contact the developer to request access."
+        "Sign-in requires a verified Google email address. Verify your email in your Google Account settings (myaccount.google.com), then try again."
       );
     }
 
     const email = normalizeEmail(verified.email);
+    let user: Awaited<ReturnType<typeof getOrCreate>>;
     try {
-      if (!(await isAllowed(email))) {
-        return authErrorResponse(
-          403,
-          "NOT_AUTHORIZED",
-          "Access is by invitation. Contact the developer to request access."
-        );
-      }
-      await recordSignIn(email, verified.sub);
+      user = await getOrCreate(email, verified.sub);
     } catch (err) {
-      context.error("Allowlist lookup failed:", err);
+      context.error("Users lookup failed:", err);
       return {
         status: 500,
         headers: authCorsHeaders(),
@@ -195,6 +193,18 @@ export function withAuth(handler: AuthedHandler) {
       };
     }
 
-    return handler(request, context, { sub: verified.sub, email });
+    if (user.blocked) {
+      return authErrorResponse(
+        403,
+        "NOT_AUTHORIZED",
+        "Your access has been suspended. Contact the developer to request access."
+      );
+    }
+
+    return handler(request, context, {
+      sub: verified.sub,
+      email,
+      tier: user.tier,
+    });
   };
 }

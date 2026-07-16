@@ -117,11 +117,22 @@ export type JobErrorCode =
   | "extract-too-large"
   | "thin-content"
   | "no-access"
+  | "usage-limit-reached"
   | "unknown";
+
+/** contracts/metering.md 429 `usage` echo — carried on a usage-limit-reached error. */
+export interface UsageInfo {
+  count: number;
+  limit: number;
+  resetsAt: string;
+  tier: "free" | "premium";
+}
 
 export interface JobPanelError {
   code: JobErrorCode;
   message: string;
   action: string;
   retryable: boolean;
+  /** Present only for code "usage-limit-reached" (FR-009 exhausted state). */
+  usage?: UsageInfo;
 }

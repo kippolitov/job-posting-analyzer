@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { importFromJson } from "../../services/importService";
 import { jobStorage } from "../../services/jobStorage";
+import { fetchAccount, startCheckout, SAVED_JOBS_CAP } from "../../services/accountService";
 import type { Arrangement, JobStatus, SavedJob } from "../../types/job";
 import { ARRANGEMENTS, JOB_STATUSES } from "../../types/job";
 import { SavedJobRow } from "./SavedJobRow";
@@ -21,15 +22,28 @@ export function SavedTab() {
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Downgrade over-cap banner (FR-021/022): the true, unfiltered library
+  // size vs. the tier cap — independent of the arrangement/status filters
+  // applied to `jobs` above.
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [tier, setTier] = useState<"free" | "premium" | null>(null);
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
 
   const reload = useCallback(async () => {
     setLoadState((prev) => (prev === "ready" ? prev : "loading"));
     try {
-      const filtered = await jobStorage.list({
-        ...(arrangement !== "all" ? { arrangement } : {}),
-        ...(status !== "all" ? { status } : {}),
-      });
-      setJobs(filtered);
+      const noFilter = arrangement === "all" && status === "all";
+      const [filtered, all] = await Promise.all([
+        noFilter
+          ? Promise.resolve(undefined)
+          : jobStorage.list({
+              ...(arrangement !== "all" ? { arrangement } : {}),
+              ...(status !== "all" ? { status } : {}),
+            }),
+        jobStorage.list({}),
+      ]);
+      setJobs(filtered ?? all);
+      setTotalCount(all.length);
       setLoadState("ready");
     } catch {
       setLoadState("error");
@@ -39,6 +53,29 @@ export function SavedTab() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    fetchAccount()
+      .then((account) => setTier(account.tier))
+      .catch(() => {
+        // The AccountBar surfaces this failure; the over-cap banner just
+        // stays hidden without a known tier.
+      });
+  }, []);
+
+  const handleUpgrade = async () => {
+    setUpgradeBusy(true);
+    try {
+      const { checkoutUrl } = await startCheckout();
+      window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      // AccountBar (options page) surfaces the specific failure.
+    } finally {
+      setUpgradeBusy(false);
+    }
+  };
+
+  const overCap = tier !== null && totalCount !== null && totalCount > SAVED_JOBS_CAP[tier];
 
   const runAction = async (action: () => Promise<unknown>, failureMessage: string) => {
     try {
@@ -207,6 +244,28 @@ export function SavedTab() {
           className="shrink-0 border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
         >
           {actionError}
+        </div>
+      )}
+
+      {overCap && tier && totalCount !== null && (
+        <div
+          role="status"
+          className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
+        >
+          Your library has {totalCount} postings, over the{" "}
+          {SAVED_JOBS_CAP[tier].toLocaleString()}-posting {tier} limit. Existing
+          postings are safe — view, edit, and delete still work; new postings
+          can&rsquo;t be saved until you free up space.
+          {tier === "free" && (
+            <button
+              onClick={() => void handleUpgrade()}
+              disabled={upgradeBusy}
+              aria-label="Upgrade to Premium"
+              className="ml-2 font-semibold underline hover:no-underline disabled:opacity-60"
+            >
+              Upgrade
+            </button>
+          )}
         </div>
       )}
 

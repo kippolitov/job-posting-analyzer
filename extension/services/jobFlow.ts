@@ -402,6 +402,7 @@ function toJobPanelError(err: unknown): JobPanelError {
       message: string;
       retryable: boolean;
       action?: string;
+      usage?: JobPanelError["usage"];
     };
     // Rebuild as a plain object: on an Error subclass (e.g. ApiError),
     // `message` is non-enumerable and would be dropped by the JSON
@@ -411,6 +412,7 @@ function toJobPanelError(err: unknown): JobPanelError {
       message: e.message,
       action: e.action ?? "Try again.",
       retryable: e.retryable,
+      ...(e.usage ? { usage: e.usage } : {}),
     };
   }
   return {

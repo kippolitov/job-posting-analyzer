@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AccountBar } from "../../components/AccountBar";
 import { AuthGate } from "../../components/AuthGate";
 import { JobPanel } from "../../components/JobPanel/JobPanel";
 import { useTheme } from "../../hooks/useTheme";
@@ -102,12 +103,15 @@ export function App() {
 
       <AuthGate>
         {tabId !== undefined && (
-          <JobPanel
-            tabId={tabId}
-            navigationId={navigationId}
-            analyzeNonce={analyzeNonce}
-            probeNonce={probeNonce}
-          />
+          <div className="flex h-full min-h-0 flex-col">
+            <AccountBar />
+            <JobPanel
+              tabId={tabId}
+              navigationId={navigationId}
+              analyzeNonce={analyzeNonce}
+              probeNonce={probeNonce}
+            />
+          </div>
         )}
       </AuthGate>
     </main>

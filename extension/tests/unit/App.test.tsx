@@ -3,6 +3,8 @@ import { render, screen, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MessageType } from "../../types/messages";
 import type { ExtensionMessage } from "../../types/messages";
+import { installFakeStorageApi } from "./helpers/mswStorageServer";
+import { installMemoryStorage } from "./helpers/memoryStorage";
 
 import { App } from "../../entrypoints/sidepanel/App";
 
@@ -14,6 +16,8 @@ vi.mock("../../services/auth/authState", () => ({
   }),
   onAuthChange: vi.fn(() => () => {}),
 }));
+
+installFakeStorageApi();
 
 function getRegisteredListeners(): Array<(message: ExtensionMessage) => void> {
   const addListener = chrome.runtime.onMessage.addListener as ReturnType<typeof vi.fn>;
@@ -28,6 +32,7 @@ describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    installMemoryStorage("local");
     vi.mocked(chrome.runtime.sendMessage).mockImplementation(((
       message: { type: string }
     ) => {
@@ -115,7 +120,9 @@ describe("App", () => {
     expect(
       screen.getByText("Analyze the current page as a job posting")
     ).toBeInTheDocument();
-    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: /analyzing/i })
+    ).not.toBeInTheDocument();
   });
 
   it("drops stale state on a navigation ACTIVE_TAB_CHANGED", async () => {
@@ -190,5 +197,14 @@ describe("App", () => {
     await waitFor(() =>
       expect(chrome.runtime.onMessage.removeListener).toHaveBeenCalled()
     );
+  });
+
+  it("mounts the AccountBar above the panel (plan/usage always visible, FR-013)", async () => {
+    render(<App />);
+    expect(await screen.findByLabelText("Plan: Free")).toBeInTheDocument();
+    expect(screen.getByText("0 of 50 analyses this month")).toBeInTheDocument();
+    expect(
+      screen.getByText("Analyze the current page as a job posting")
+    ).toBeInTheDocument();
   });
 });

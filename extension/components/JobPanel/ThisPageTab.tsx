@@ -2,6 +2,7 @@ import { formatSalary } from "../../lib/formatSalary";
 import type { JobAnalysis, JobPanelError, SavedJob } from "../../types/job";
 import { ArrangementBadge } from "./ArrangementBadge";
 import { FitScore } from "./FitScore";
+import { UsageExhausted } from "../UsageExhausted";
 
 export type JobViewStatus = "idle" | "analyzing" | "ready" | "error";
 
@@ -27,6 +28,7 @@ interface ThisPageTabProps {
   onSave?: () => void;
   onExport?: () => void;
   onPruneArchived?: () => void;
+  onUpgrade?: () => void;
 }
 
 export function ThisPageTab({
@@ -39,6 +41,7 @@ export function ThisPageTab({
   onSave,
   onExport,
   onPruneArchived,
+  onUpgrade,
 }: ThisPageTabProps) {
   if (view.status === "idle") {
     return (
@@ -80,6 +83,20 @@ export function ThisPageTab({
   }
 
   if (view.status === "error" && view.error) {
+    // The exhausted state is a designed card, never the generic error
+    // banner (FR-009/SC-003) — saved jobs/profile/history are unaffected,
+    // since this branch only ever replaces the "This Page" analyze result.
+    if (view.error.code === "usage-limit-reached" && view.error.usage) {
+      return (
+        <div className="p-4">
+          <UsageExhausted
+            usage={view.error.usage}
+            onUpgrade={onUpgrade ?? (() => chrome.runtime.openOptionsPage())}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4 p-4">
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">

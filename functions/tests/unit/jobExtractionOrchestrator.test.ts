@@ -68,6 +68,7 @@ describe("jobExtractionOrchestrator", () => {
     process.env.AZURE_OPENAI_API_KEY = "fake-key";
     process.env.AZURE_OPENAI_DEPLOYMENT = "gpt-4o-mini";
     delete process.env.AZURE_OPENAI_JOB_DEPLOYMENT;
+    delete process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM;
   });
 
   it("sends mainText and serialized JSON-LD in the user message", async () => {
@@ -272,5 +273,51 @@ describe("jobExtractionOrchestrator", () => {
     const [params] = mockCreate.mock.calls[0] as [{ model: string }];
     expect(params.model).toBe("gpt-4o");
     expect(result.model).toBe("gpt-4o");
+  });
+
+  describe("tier-aware deployment selection (data-model.md)", () => {
+    it("free tier uses the free deployment", async () => {
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      const result = await orchestrateJobAnalysis(baseRequest, "free");
+      const [params] = mockCreate.mock.calls[0] as [{ model: string }];
+      expect(params.model).toBe("gpt-4o-mini");
+      expect(result.model).toBe("gpt-4o-mini");
+    });
+
+    it("premium tier uses AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM when set", async () => {
+      process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM = "gpt-4.1-mini";
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      const result = await orchestrateJobAnalysis(baseRequest, "premium");
+      const [params] = mockCreate.mock.calls[0] as [{ model: string }];
+      expect(params.model).toBe("gpt-4.1-mini");
+      expect(result.model).toBe("gpt-4.1-mini");
+    });
+
+    it("premium tier falls back to the free deployment when the premium deployment is unset", async () => {
+      delete process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM;
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      const result = await orchestrateJobAnalysis(baseRequest, "premium");
+      const [params] = mockCreate.mock.calls[0] as [{ model: string }];
+      expect(params.model).toBe("gpt-4o-mini");
+      expect(result.model).toBe("gpt-4o-mini");
+    });
+
+    it("premium tier falls back to the free deployment when the premium deployment is an empty-string placeholder", async () => {
+      // local.settings.json ships AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM: "" until
+      // the deployment is provisioned — must not be treated as a real value.
+      process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM = "";
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      const result = await orchestrateJobAnalysis(baseRequest, "premium");
+      const [params] = mockCreate.mock.calls[0] as [{ model: string }];
+      expect(params.model).toBe("gpt-4o-mini");
+      expect(result.model).toBe("gpt-4o-mini");
+    });
+
+    it("defaults to the free deployment when no tier is passed", async () => {
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const [params] = mockCreate.mock.calls[0] as [{ model: string }];
+      expect(params.model).toBe("gpt-4o-mini");
+    });
   });
 });

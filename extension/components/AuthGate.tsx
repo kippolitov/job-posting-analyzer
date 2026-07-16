@@ -9,8 +9,8 @@ import { detectLegacyData, type LegacyData } from "../services/migrationService"
 import { AuthError } from "../types/auth";
 import { MigrationPrompt } from "./MigrationPrompt";
 
-const REQUEST_ACCESS_MAILTO =
-  "mailto:kippolitov@gmail.com?subject=Job%20Posting%20Analyzer%20access%20request";
+const CONTACT_DEVELOPER_MAILTO =
+  "mailto:kippolitov@gmail.com?subject=Job%20Posting%20Analyzer%20account%20access";
 
 /**
  * Wraps every user surface (FR-001): children render only for a signed-in
@@ -111,17 +111,18 @@ export function AuthGate({
     return (
       <GateCard>
         <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-          Access is by invitation
+          Access unavailable
         </h2>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-          This extension is currently limited to invited users. Your Google
-          account is not on the invitation list.
+          Sign-in requires a verified Google email address — verify it in
+          your Google Account settings and try again. If your access was
+          suspended, contact the developer to request it back.
         </p>
         <a
-          href={REQUEST_ACCESS_MAILTO}
+          href={CONTACT_DEVELOPER_MAILTO}
           className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
         >
-          Request access
+          Contact the developer
         </a>
         <button
           onClick={() => void handleSignIn()}
@@ -212,15 +213,39 @@ export function AuthGate({
   return (
     <GateCard>
       <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-        Sign in to continue
+        Sign in with Google to get started
       </h2>
       <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-        Job Posting Analyzer requires a Google sign-in. Your profile and saved
-        postings follow your account across devices.
+        Create your free account instantly — no invitation needed. Your
+        profile and saved postings follow your account across devices.
       </p>
+      <DataPracticesDisclosure />
       <SignInButton signingIn={signingIn} onClick={() => void handleSignIn()} />
       {error && <GateError message={error} />}
     </GateCard>
+  );
+}
+
+/**
+ * CWS Disclosure Requirements (docs/compliance/prominent-disclosure.md):
+ * prominent, affirmative-consent disclosure of the account/payment data
+ * practices introduced by self-serve signup + Premium, shown before the
+ * first sign-in — not buried behind a link. Clicking "Sign in with Google"
+ * is the affirmative consent action.
+ */
+function DataPracticesDisclosure() {
+  return (
+    <p className="mt-3 text-left text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+      <strong className="text-gray-700 dark:text-gray-300">
+        Signing in creates a free account.
+      </strong>{" "}
+      We store your email address, entitlement tier (free or Premium), and
+      monthly analysis usage count. If you subscribe to Premium ($5/month),
+      Paddle — our payment processor and merchant of record — handles
+      payment; we never see your card details, only your subscription
+      status. By continuing, you agree to our Privacy Policy and Terms of
+      Service, including the terms of sale for Premium.
+    </p>
   );
 }
 

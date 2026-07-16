@@ -2,11 +2,12 @@ import { test, expect, e2eEnabled, skipReason } from "./fixtures";
 import type { BrowserContext } from "@playwright/test";
 
 /**
- * P1 sign-in gate journey (US1). Auth is stubbed by seeding
- * chrome.storage.local with a StoredAuth session — the ytsummary
- * signIn.test.ts pattern — because CI cannot drive real Google OAuth
- * (plan.md Complexity Tracking). A manual OAuth smoke test is still
- * required before release tagging.
+ * P1 self-serve signup / sign-in gate journey (US1, 003-freemium-premium-tier):
+ * any verified-email Google account signs in and is unlocked immediately —
+ * no allowlist/invitation step. Auth is stubbed by seeding
+ * chrome.storage.local with a StoredAuth session because CI cannot drive
+ * real Google OAuth (plan.md Complexity Tracking). A manual OAuth smoke
+ * test is still required before release tagging.
  */
 
 test.skip(!e2eEnabled, skipReason);
@@ -66,15 +67,15 @@ test("options page is gated when signed out: profile editor unreachable", async 
   await expect(options.getByLabel(/your background/i)).toHaveCount(0);
 });
 
-test("a stubbed StoredAuth session unlocks the panel and sign-out restores the gate", async ({
+test("a fresh stubbed identity signs in with no allowlist step and unlocks the panel; sign-out restores the gate", async ({
   context,
   sidePanel,
 }) => {
-  await seedStoredAuth(context, stubAuth("invitee@example.com", "sub-invitee"));
+  await seedStoredAuth(context, stubAuth("new-user@example.com", "sub-new-user"));
   await sidePanel.reload();
 
   // Signed-in header with the account email; feature UI reachable.
-  await expect(sidePanel.getByText("invitee@example.com")).toBeVisible();
+  await expect(sidePanel.getByText("new-user@example.com")).toBeVisible();
   await expect(
     sidePanel.getByRole("button", { name: /sign in with google/i })
   ).toHaveCount(0);
@@ -83,7 +84,7 @@ test("a stubbed StoredAuth session unlocks the panel and sign-out restores the g
   await expect(
     sidePanel.getByRole("button", { name: /sign in with google/i })
   ).toBeVisible();
-  await expect(sidePanel.getByText("invitee@example.com")).toHaveCount(0);
+  await expect(sidePanel.getByText("new-user@example.com")).toHaveCount(0);
 });
 
 test("switching accounts shows none of the previous account's session (spec edge case)", async ({

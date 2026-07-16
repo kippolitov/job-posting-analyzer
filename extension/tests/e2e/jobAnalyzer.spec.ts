@@ -1,9 +1,36 @@
 import http from "node:http";
+import type { BrowserContext } from "@playwright/test";
 import { test, expect, e2eEnabled, skipReason } from "./fixtures";
 
 // P1 journey: open the panel on a job posting page → analysis renders with
 // an arrangement badge and evidence.
 // Requires a live backend baked into the build (see skipReason) plus E2E=1.
+// Auth is stubbed the same way as signIn.test.ts/migration.test.ts — the
+// panel is gated behind sign-in (FR-001), so without a seeded session this
+// test would only ever see the sign-in screen.
+
+async function seedStoredAuth(context: BrowserContext): Promise<void> {
+  const worker =
+    context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString(
+    "base64url"
+  );
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: "sub-job-analyzer-e2e",
+      email: "job-analyzer-e2e@example.com",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    })
+  ).toString("base64url");
+  await worker.evaluate(async (auth) => {
+    await chrome.storage.local.set({ "auth:session": auth });
+  }, {
+    idToken: `${header}.${payload}.stub-signature`,
+    expiresAt: Date.now() + 3600_000,
+    signedInAt: Date.now(),
+    user: { sub: "sub-job-analyzer-e2e", email: "job-analyzer-e2e@example.com" },
+  });
+}
 
 const POSTING_HTML = `<!doctype html>
 <html><head><title>Senior Backend Engineer - Acme</title>
@@ -51,6 +78,7 @@ test.describe("US1 — Job Posting Analyzer (P1 journey)", () => {
   }) => {
     const { server, url } = await serveFixture();
     try {
+      await seedStoredAuth(context);
       const postingPage = await context.newPage();
       await postingPage.goto(url);
 
