@@ -349,7 +349,10 @@ describe("SavedTab", () => {
           )
         );
       },
-      20_000
+      // Seeding + rendering 101 postings takes ~9s locally but repeatedly
+      // exceeded 20s on GitHub's shared runners (3 consecutive CI timeouts
+      // on 2026-07-16, all other 284 tests green).
+      60_000
     );
 
     it("shows a read-only banner without an Upgrade action for an over-cap premium library", async () => {
@@ -387,7 +390,10 @@ describe("SavedTab", () => {
           expect(screen.queryByText("Bulk Job 0")).not.toBeInTheDocument()
         );
       },
-      20_000
+      // Seeding + rendering 101 postings takes ~9s locally but repeatedly
+      // exceeded 20s on GitHub's shared runners (3 consecutive CI timeouts
+      // on 2026-07-16, all other 284 tests green).
+      60_000
     );
   });
 });
