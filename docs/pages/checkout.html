@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout — Job Posting Analyzer</title>
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 480px; margin: 96px auto 0; padding: 0 24px; color: #1f2937; line-height: 1.6; text-align: center; }
+  a { color: #4f46e5; }
+  #status { color: #6b7280; }
+</style>
+</head>
+<body>
+<p id="status">Opening checkout…</p>
+
+<script>
+  // NOTE: this is Paddle's client-side token (safe to expose publicly — distinct
+  // from the server-side PADDLE_API_KEY, which must never appear in front-end code).
+  // Fill in once the live account's Developer Tools > Authentication token exists.
+  var PADDLE_CLIENT_TOKEN = "REPLACE_WITH_LIVE_CLIENT_SIDE_TOKEN";
+
+  var statusEl = document.getElementById("status");
+
+  function showFallback(message) {
+    statusEl.textContent = message;
+    var link = document.createElement("p");
+    link.innerHTML = 'Return to <a href="./">Job Posting Analyzer</a> or try upgrading again from the extension.';
+    document.body.appendChild(link);
+  }
+
+  var transactionId = new URLSearchParams(window.location.search).get("_ptxn");
+
+  if (!transactionId) {
+    showFallback("No checkout session found.");
+  } else if (PADDLE_CLIENT_TOKEN.indexOf("REPLACE_WITH") === 0) {
+    showFallback("Checkout isn't configured yet.");
+  } else {
+    Paddle.Initialize({
+      token: PADDLE_CLIENT_TOKEN,
+      eventCallback: function (event) {
+        if (event.name === "checkout.closed") {
+          statusEl.textContent = "Checkout closed. You can close this tab.";
+        }
+      }
+    });
+    Paddle.Checkout.open({ transactionId: transactionId });
+  }
+</script>
+</body>
+</html>
