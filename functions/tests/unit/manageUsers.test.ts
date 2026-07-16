@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
-import {
-  runCli,
-  resolveCliConnectionString,
-} from "../../scripts/manage-allowed-users";
+import { runCli, resolveCliConnectionString } from "../../scripts/manage-users";
 import { ensureTable } from "../../src/services/tablesService";
 
 function uniqueEmail(): string {
@@ -24,15 +21,29 @@ function makeOutput() {
 }
 
 async function readRow(email: string): Promise<Record<string, unknown> | null> {
-  const client = await ensureTable("AllowedUsers");
+  const client = await ensureTable("Users");
   try {
-    return await client.getEntity("AllowedUser", email.toLowerCase());
+    return await client.getEntity("User", email.toLowerCase());
   } catch {
     return null;
   }
 }
 
-describe("manage-allowed-users connection-string resolution", () => {
+async function seedUser(
+  email: string,
+  extra: Record<string, unknown> = {}
+): Promise<void> {
+  const client = await ensureTable("Users");
+  await client.createEntity({
+    partitionKey: "User",
+    rowKey: email.toLowerCase(),
+    tier: "free",
+    createdAt: new Date().toISOString(),
+    ...extra,
+  });
+}
+
+describe("manage-users connection-string resolution", () => {
   const saved = {
     tables: process.env.TABLES_CONNECTION_STRING,
     jobs: process.env.AzureWebJobsStorage,
@@ -67,66 +78,61 @@ describe("manage-allowed-users connection-string resolution", () => {
   });
 });
 
-describe("manage-allowed-users subcommands (Azurite-backed)", () => {
+describe("manage-users subcommands (Azurite-backed)", () => {
   beforeEach(() => {
     process.env.TABLES_CONNECTION_STRING = "UseDevelopmentStorage=true";
   });
 
-  it("add normalizes the email, sets addedAt, and stores an optional note", async () => {
+  it("set-tier flips an existing user's tier", async () => {
     const email = uniqueEmail();
+    await seedUser(email);
     const { io } = makeOutput();
-    const code = await runCli(
-      ["add", `  ${email.toUpperCase()}  `, "--note", "college friend"],
-      io
-    );
+    const code = await runCli(["set-tier", email, "premium"], io);
     expect(code).toBe(0);
-
-    const row = await readRow(email);
-    expect(row).not.toBeNull();
-    expect(Date.parse(row!.addedAt as string)).not.toBeNaN();
-    expect(row!.note).toBe("college friend");
+    expect((await readRow(email))?.tier).toBe("premium");
   });
 
-  it("add is idempotent and preserves the original addedAt", async () => {
+  it("set-tier rejects an unknown tier value", async () => {
     const email = uniqueEmail();
-    const first = makeOutput();
-    await runCli(["add", email], first.io);
-    const original = (await readRow(email))!.addedAt;
-
-    const second = makeOutput();
-    const code = await runCli(["add", email], second.io);
-    expect(code).toBe(0);
-    expect((await readRow(email))!.addedAt).toBe(original);
+    await seedUser(email);
+    const { io, errors } = makeOutput();
+    const code = await runCli(["set-tier", email, "gold"], io);
+    expect(code).not.toBe(0);
+    expect(errors.join("\n")).toMatch(/free|premium/i);
   });
 
-  it("remove deletes the row and is idempotent on missing", async () => {
+  it("set-tier fails clearly when the account has never signed up", async () => {
     const email = uniqueEmail();
-    await runCli(["add", email], makeOutput().io);
-    expect(await readRow(email)).not.toBeNull();
-
-    const removal = await runCli(["remove", email], makeOutput().io);
-    expect(removal).toBe(0);
-    expect(await readRow(email)).toBeNull();
-
-    const again = await runCli(["remove", email], makeOutput().io);
-    expect(again).toBe(0);
+    const { io, errors } = makeOutput();
+    const code = await runCli(["set-tier", email, "premium"], io);
+    expect(code).not.toBe(0);
+    expect(errors.join("\n")).toMatch(/no such|not found/i);
   });
 
-  it("list prints rows including the sub once recorded", async () => {
+  it("block sets blocked:true; unblock clears it", async () => {
     const email = uniqueEmail();
-    await runCli(["add", email], makeOutput().io);
-    const client = await ensureTable("AllowedUsers");
-    await client.updateEntity(
-      { partitionKey: "AllowedUser", rowKey: email, sub: "sub-recorded-123" },
-      "Merge"
-    );
+    await seedUser(email);
+
+    const blockCode = await runCli(["block", email], makeOutput().io);
+    expect(blockCode).toBe(0);
+    expect((await readRow(email))?.blocked).toBe(true);
+
+    const unblockCode = await runCli(["unblock", email], makeOutput().io);
+    expect(unblockCode).toBe(0);
+    expect((await readRow(email))?.blocked).toBe(false);
+  });
+
+  it("list prints tier, blocked state, and sub for every account", async () => {
+    const email = uniqueEmail();
+    await seedUser(email, { sub: "sub-listed-123", tier: "premium" });
 
     const { io, lines } = makeOutput();
     const code = await runCli(["list"], io);
     expect(code).toBe(0);
     const output = lines.join("\n");
     expect(output).toContain(email);
-    expect(output).toContain("sub-recorded-123");
+    expect(output).toContain("premium");
+    expect(output).toContain("sub-listed-123");
   });
 
   it("exits non-zero on bad usage", async () => {
@@ -136,10 +142,19 @@ describe("manage-allowed-users subcommands (Azurite-backed)", () => {
     const unknown = await runCli(["frobnicate"], makeOutput().io);
     expect(unknown).not.toBe(0);
 
-    const addWithoutEmail = await runCli(["add"], makeOutput().io);
-    expect(addWithoutEmail).not.toBe(0);
+    const setTierWithoutTier = await runCli(
+      ["set-tier", uniqueEmail()],
+      makeOutput().io
+    );
+    expect(setTierWithoutTier).not.toBe(0);
 
-    const invalidEmail = await runCli(["add", "not-an-email"], makeOutput().io);
+    const blockWithoutEmail = await runCli(["block"], makeOutput().io);
+    expect(blockWithoutEmail).not.toBe(0);
+
+    const invalidEmail = await runCli(
+      ["block", "not-an-email"],
+      makeOutput().io
+    );
     expect(invalidEmail).not.toBe(0);
   });
 });

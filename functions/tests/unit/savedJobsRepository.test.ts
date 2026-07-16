@@ -107,7 +107,7 @@ describe("savedJobsRepository.saveJob", () => {
 });
 
 describe("savedJobsRepository cap behavior", () => {
-  it("rejects a NEW row at the soft cap but allows replacing an existing one", async () => {
+  it("rejects a NEW row at the premium cap (1,000) but allows replacing an existing one", async () => {
     const sub = uniqueSub();
     // Fill the partition to the cap via batched direct inserts (fast path).
     const { fillPartitionForTests } = await import(
@@ -117,18 +117,61 @@ describe("savedJobsRepository cap behavior", () => {
 
     const newJob = makeJob();
     await expect(
-      saveJob(sub, keyOf(newJob.canonicalUrl), newJob)
+      saveJob(sub, keyOf(newJob.canonicalUrl), newJob, "premium")
     ).rejects.toBeInstanceOf(LibraryCapError);
 
     // Replace of an existing row must still succeed.
     const existingUrl = "https://seeded.example/jobs/0";
     const replacement = makeJob({ canonicalUrl: existingUrl, notes: "updated" });
     await expect(
-      saveJob(sub, keyOf(existingUrl), replacement)
+      saveJob(sub, keyOf(existingUrl), replacement, "premium")
     ).resolves.toMatchObject({ notes: "updated" });
 
     await expect(countJobs(sub)).resolves.toBe(SAVED_JOBS_SOFT_CAP);
   }, 120_000);
+
+  it("rejects a NEW row at the free cap (100) even though the premium cap is far off", async () => {
+    const sub = uniqueSub();
+    const { fillPartitionForTests } = await import(
+      "../helpers/savedJobsSeeder"
+    );
+    await fillPartitionForTests(sub, 100);
+
+    const newJob = makeJob();
+    await expect(
+      saveJob(sub, keyOf(newJob.canonicalUrl), newJob, "free")
+    ).rejects.toBeInstanceOf(LibraryCapError);
+  }, 30_000);
+
+  it("allows a 101st free-tier row once the account is premium", async () => {
+    const sub = uniqueSub();
+    const { fillPartitionForTests } = await import(
+      "../helpers/savedJobsSeeder"
+    );
+    await fillPartitionForTests(sub, 100);
+
+    const newJob = makeJob();
+    await expect(
+      saveJob(sub, keyOf(newJob.canonicalUrl), newJob, "premium")
+    ).resolves.toMatchObject({ canonicalUrl: newJob.canonicalUrl });
+  }, 30_000);
+
+  it("updates/deletes on an over-cap (downgraded) library still succeed — only new rows are blocked", async () => {
+    const sub = uniqueSub();
+    const { fillPartitionForTests } = await import(
+      "../helpers/savedJobsSeeder"
+    );
+    await fillPartitionForTests(sub, 100);
+
+    const existingUrl = "https://seeded.example/jobs/0";
+    const replacement = makeJob({ canonicalUrl: existingUrl, notes: "still editable" });
+    await expect(
+      saveJob(sub, keyOf(existingUrl), replacement, "free")
+    ).resolves.toMatchObject({ notes: "still editable" });
+
+    await expect(deleteJob(sub, keyOf(existingUrl))).resolves.toBeUndefined();
+    await expect(countJobs(sub)).resolves.toBe(99);
+  }, 30_000);
 });
 
 describe("savedJobsRepository.listJobs", () => {

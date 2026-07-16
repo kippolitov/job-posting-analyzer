@@ -104,6 +104,17 @@ describe("apiClient.apiFetch", () => {
     expect(markNotAuthorized).toHaveBeenCalled();
   });
 
+  it("maps 429 to a retryable RATE_LIMITED, distinct from SERVICE_ERROR", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(429, { error: { code: "RATE_LIMITED" } })
+    );
+    await expect(apiFetch("/jobs")).rejects.toMatchObject({
+      status: 429,
+      code: "RATE_LIMITED",
+      retryable: true,
+    });
+  });
+
   it("maps 5xx to a retryable SERVICE_ERROR", async () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse(500, { error: { code: "SERVICE_ERROR" } })

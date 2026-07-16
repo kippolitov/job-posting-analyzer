@@ -1,16 +1,22 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { isAnalyzeJobRequest, MAIN_TEXT_CAP } from "../models/job";
 import type { AuthenticatedUser } from "../models/user";
-import { withAuth } from "../services/auth";
+import { withAuth, type AuthedHandler } from "../services/auth";
 import {
   orchestrateJobAnalysis,
   JobSchemaError,
 } from "../services/jobExtractionOrchestrator";
+import {
+  checkAndIncrement,
+  refundOnSystemFailure,
+  type CheckAndIncrementResult,
+} from "../services/meteringService";
+import { withRateLimit } from "../services/rateLimiter";
 
 export async function analyzeJobHandler(
   request: HttpRequest,
   context: InvocationContext,
-  _user: AuthenticatedUser
+  user: AuthenticatedUser
 ): Promise<HttpResponseInit> {
   if (request.method === "OPTIONS") {
     return { status: 204, headers: corsHeaders() };
@@ -42,7 +48,7 @@ export async function analyzeJobHandler(
   }
 
   try {
-    const result = await orchestrateJobAnalysis(body, (message) =>
+    const result = await orchestrateJobAnalysis(body, user.tier, (message) =>
       context.warn(message)
     );
     return { status: 200, headers: corsHeaders(), jsonBody: result };
@@ -58,6 +64,94 @@ export async function analyzeJobHandler(
     context.error("orchestrateJobAnalysis failed:", err);
     return errorResponse(500, "SERVICE_ERROR", "Analysis failed. Please try again.");
   }
+}
+
+function meteringEnforced(): boolean {
+  return process.env.METERING_ENFORCED !== "false";
+}
+
+function formatResetDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function usageEcho(usage: CheckAndIncrementResult) {
+  return {
+    count: usage.count,
+    limit: usage.limit,
+    resetsAt: usage.resetsAt,
+    tier: usage.tier,
+  };
+}
+
+/**
+ * withUsageMetering(handler) — composes as withAuth(withUsageMetering(handler))
+ * (contracts/metering.md): increments the caller's monthly counter BEFORE the
+ * wrapped handler runs (fail closed — no OpenAI spend on a 429 or a metering
+ * outage), echoes usage on 200, and best-effort refunds a system-caused
+ * failure. METERING_ENFORCED=false (rollout PR1 shadow mode, plan.md) still
+ * counts but never blocks — used to accrue real usage data before the public
+ * flag flip.
+ */
+export function withUsageMetering(handler: AuthedHandler): AuthedHandler {
+  return async (
+    request: HttpRequest,
+    context: InvocationContext,
+    user: AuthenticatedUser
+  ): Promise<HttpResponseInit> => {
+    if (request.method === "OPTIONS") return handler(request, context, user);
+
+    let usage: CheckAndIncrementResult;
+    try {
+      usage = await checkAndIncrement(user.sub, user.tier);
+    } catch (err) {
+      context.error("usage metering check failed:", err);
+      return errorResponse(
+        503,
+        "SERVICE_ERROR",
+        "Couldn't verify your usage allowance. Please try again."
+      );
+    }
+
+    if (!usage.allowed) {
+      if (!meteringEnforced()) {
+        // Shadow mode: count, never block (rollout PR1).
+        return handler(request, context, user);
+      }
+      const tierLabel = usage.tier === "premium" ? "premium" : "free";
+      return {
+        status: 429,
+        headers: corsHeaders(),
+        jsonBody: {
+          error: {
+            code: "USAGE_LIMIT_REACHED",
+            message: `You've used all ${usage.limit} ${tierLabel} analyses this month. Your allowance resets on ${formatResetDate(usage.resetsAt)}.`,
+          },
+          usage: usageEcho(usage),
+        },
+      };
+    }
+
+    const response = await handler(request, context, user);
+
+    if (response.status !== undefined && response.status >= 500) {
+      // System-caused failure after the increment — best-effort refund
+      // (FR-007); a lost refund is logged, never surfaced (metering.md).
+      refundOnSystemFailure(user.sub, user.tier).catch((err) => {
+        context.error("metering.refund_lost:", err);
+      });
+    } else if (response.status === 200) {
+      response.jsonBody = {
+        ...(response.jsonBody as Record<string, unknown>),
+        usage: usageEcho(usage),
+      };
+    }
+
+    return response;
+  };
 }
 
 function errorResponse(status: number, code: string, message: string): HttpResponseInit {
@@ -81,7 +175,7 @@ app.http("analyze-job", {
   methods: ["POST"],
   authLevel: "function",
   route: "analyze-job",
-  handler: withAuth(analyzeJobHandler),
+  handler: withRateLimit("analyze", withAuth(withUsageMetering(analyzeJobHandler))),
 });
 
 app.http("analyze-job-preflight", {

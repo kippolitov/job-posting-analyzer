@@ -153,7 +153,7 @@ describe("importFromJson", () => {
 
     expect(result.status).toBe("cap-blocked");
     expect(result.importedJobs).toBe(1);
-    expect(result.errorMessage).toMatch(/full/i);
+    expect(result.errorMessage).toMatch(/cap/i);
   });
 
   it("reports failed with the counts reached when the service errors mid-import", async () => {

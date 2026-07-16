@@ -10,7 +10,8 @@
     "test": "vitest run --reporter=verbose tests/unit",
     "test:integration": "vitest run --reporter=verbose tests/integration",
     "azurite": "azurite-table --location .azurite --silent",
-    "allowed-users": "tsx scripts/manage-allowed-users.ts",
+    "users": "tsx scripts/manage-users.ts",
+    "migrate-allowlist": "tsx scripts/migrate-allowlist.ts",
     "eval:postings": "npx tsx scripts/evalPostings.ts",
     "coverage": "vitest run --coverage"
   },

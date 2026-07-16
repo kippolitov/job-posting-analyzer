@@ -2,16 +2,12 @@ import { canonicalKey } from "../lib/canonicalUrl";
 import type { Arrangement, JobStatus, SavedJob } from "../types/job";
 import { ApiError, apiFetch } from "./api/apiClient";
 
-export const SAVED_JOBS_SOFT_CAP = 1_000;
-
-/** The library hit the soft cap; the UI offers export + prune-archived. */
-export class LibraryFullError extends Error {
-  constructor() {
-    super(
-      `Your library is full (${SAVED_JOBS_SOFT_CAP.toLocaleString()} postings). Export it or prune archived postings to save more.`
-    );
-  }
-}
+/**
+ * The library hit its tier cap (100 free / 1,000 premium — data-model.md);
+ * the server names the exact cap and the tier-appropriate action (upgrade
+ * vs. prune/export) in `message`, so the UI never hardcodes a number.
+ */
+export class LibraryFullError extends Error {}
 
 export interface JobListFilter {
   arrangement?: Arrangement;
@@ -67,7 +63,16 @@ async function list(filter?: JobListFilter): Promise<SavedJob[]> {
 async function save(job: SavedJob): Promise<void> {
   const key = await canonicalKey(job.canonicalUrl);
   const response = await apiFetch(`/jobs/${key}`, { method: "PUT", body: job });
-  if (response.status === 409) throw new LibraryFullError();
+  if (response.status === 409) {
+    let message = "Your library is full. Export it or remove a posting to save this one.";
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (body.error?.message) message = body.error.message;
+    } catch {
+      // Keep the generic message.
+    }
+    throw new LibraryFullError(message);
+  }
   if (!response.ok) await throwUnexpected(response);
 }
 

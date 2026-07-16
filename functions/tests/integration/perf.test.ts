@@ -9,16 +9,18 @@ import {
   TEST_CLIENT_ID,
 } from "../helpers/testTokens";
 import { withAuth } from "../../src/services/auth";
+import { withUsageMetering } from "../../src/analyze-job/index";
 import { jobsCollectionHandler } from "../../src/jobs/index";
-import { ensureTable } from "../../src/services/tablesService";
 import { SAVED_JOBS_SOFT_CAP } from "../../src/services/savedJobsRepository";
 import { fillPartitionForTests } from "../helpers/savedJobsSeeder";
 
 /**
  * Performance budgets from plan.md (T044), measured against Azurite + the
  * local certs stub: auth middleware overhead ≤ 100 ms p95 warm; listing a
- * 1,000-record library ≤ 1.5 s p95. Results are logged so they can be
- * recorded in plan.md Performance Goals.
+ * 1,000-record library ≤ 1.5 s p95; analyze-path auth+metering overhead
+ * stays within the same budget (QG-4 evidence — metering adds at most 2
+ * Table Storage point ops, research.md R2). Results are logged so they can
+ * be recorded in plan.md Performance Goals.
  */
 
 const RUNS = 40;
@@ -60,12 +62,6 @@ describe("performance budgets (Azurite-backed)", () => {
 
   it("auth middleware overhead is ≤ 100 ms p95 warm", async () => {
     const email = `${randomUUID()}@example.com`;
-    const allowedUsers = await ensureTable("AllowedUsers");
-    await allowedUsers.createEntity({
-      partitionKey: "AllowedUser",
-      rowKey: email,
-      addedAt: new Date().toISOString(),
-    });
     const token = signTestIdToken({ email, sub: `sub-${randomUUID()}` });
 
     // The handler is a no-op, so the measured time is middleware-only:
@@ -90,15 +86,35 @@ describe("performance budgets (Azurite-backed)", () => {
     expect(p95Ms).toBeLessThanOrEqual(100);
   }, 60_000);
 
+  it("analyze-path auth+metering overhead is ≤ 100 ms p95 warm (QG-4)", async () => {
+    const email = `${randomUUID()}@example.com`;
+    const token = signTestIdToken({ email, sub: `sub-${randomUUID()}` });
+
+    // The inner handler is a no-op, so the measured time is auth (token
+    // verification + Users point-read/auto-create) plus metering (Usage
+    // read + conditional create/update) — no OpenAI call is on this path.
+    const noop = withAuth(withUsageMetering(() => Promise.resolve({ status: 200 })));
+    const context = makeContext();
+
+    await noop(makeRequest(token), context); // warm-up (also creates the Users row)
+
+    const samples: number[] = [];
+    for (let i = 0; i < RUNS; i++) {
+      const start = performance.now();
+      const res = await noop(makeRequest(token), context);
+      samples.push(performance.now() - start);
+      expect(res.status).toBe(200);
+    }
+    const p95Ms = p95(samples);
+    console.warn(
+      `analyze-path auth+metering warm p95: ${p95Ms.toFixed(2)} ms over ${RUNS} runs`
+    );
+    expect(p95Ms).toBeLessThanOrEqual(100);
+  }, 60_000);
+
   it("listing a 1,000-record library is ≤ 1.5 s p95", async () => {
     const email = `${randomUUID()}@example.com`;
     const sub = `sub-${randomUUID()}`;
-    const allowedUsers = await ensureTable("AllowedUsers");
-    await allowedUsers.createEntity({
-      partitionKey: "AllowedUser",
-      rowKey: email,
-      addedAt: new Date().toISOString(),
-    });
     await fillPartitionForTests(sub, SAVED_JOBS_SOFT_CAP);
     const token = signTestIdToken({ email, sub });
 

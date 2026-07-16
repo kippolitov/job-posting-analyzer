@@ -15,6 +15,7 @@ export type ApiErrorCode =
   | "NETWORK_ERROR"
   | "UNAUTHENTICATED"
   | "NOT_AUTHORIZED"
+  | "RATE_LIMITED"
   | "SERVICE_ERROR";
 
 /**
@@ -89,8 +90,19 @@ export async function apiFetch(
     throw new ApiError(
       403,
       "NOT_AUTHORIZED",
-      "Access is by invitation. Use “Request access” on the sign-in screen.",
+      "Your account can't sign in right now. See the sign-in screen for details.",
       false
+    );
+  }
+
+  if (response.status === 429) {
+    // Only the per-IP rate limiter reaches this generic client (analyze-job's
+    // USAGE_LIMIT_REACHED 429 is handled by jobAnalysisClient, contracts/metering.md).
+    throw new ApiError(
+      429,
+      "RATE_LIMITED",
+      "Too many requests. Please wait a moment and try again.",
+      true
     );
   }
 

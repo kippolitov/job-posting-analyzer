@@ -234,6 +234,45 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
     await expectJobError(postJobAnalysis({ extract }), "service-error", true);
   });
 
+  it("maps 429 USAGE_LIMIT_REACHED to a distinct, non-retryable usage-limit-reached error carrying usage", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "USAGE_LIMIT_REACHED",
+            message: "You've used all 50 free analyses this month.",
+          },
+          usage: { count: 50, limit: 50, resetsAt: "2026-08-01T00:00:00Z", tier: "free" },
+        }),
+        { status: 429 }
+      )
+    );
+    const err = (await postJobAnalysis({ extract }).then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (e: unknown) => e
+    )) as JobPanelError;
+    expect(err.code).toBe("usage-limit-reached");
+    expect(err.retryable).toBe(false);
+    expect(err.usage).toEqual({
+      count: 50,
+      limit: 50,
+      resetsAt: "2026-08-01T00:00:00Z",
+      tier: "free",
+    });
+  });
+
+  it("maps 429 RATE_LIMITED to a generic retryable service-error, distinct from usage-limit-reached", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: "RATE_LIMITED", message: "slow down" } }),
+        { status: 429 }
+      )
+    );
+    await expectJobError(postJobAnalysis({ extract }), "service-error", true);
+  });
+
   it("rejects a 200 response that fails the JobAnalysis shape check", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ nonsense: true }), { status: 200 })

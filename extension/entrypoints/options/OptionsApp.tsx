@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AccountBar } from "../../components/AccountBar";
 import { AuthGate } from "../../components/AuthGate";
 import {
   getProfile,
@@ -10,7 +11,10 @@ import {
 export function OptionsApp() {
   return (
     <AuthGate showSignOut={false}>
-      <ProfileEditor />
+      <div className="flex h-full min-h-0 flex-col">
+        <AccountBar />
+        <ProfileEditor />
+      </div>
     </AuthGate>
   );
 }
@@ -81,7 +85,7 @@ function ProfileEditor() {
 
   if (loadFailed) {
     return (
-      <main className="h-full bg-gray-50 px-6 py-8 dark:bg-gray-950">
+      <main className="min-h-0 flex-1 bg-gray-50 px-6 py-8 dark:bg-gray-950">
         <div
           role="alert"
           className="mx-auto max-w-xl rounded-lg border border-red-200 bg-red-50 p-4 text-center dark:border-red-900/60 dark:bg-red-950/40"
@@ -108,7 +112,7 @@ function ProfileEditor() {
     // absorbs all spare height and scrolls internally, so the action buttons
     // in the footer never leave the viewport no matter how long the pasted
     // resume is.
-    <main className="flex h-full flex-col bg-gray-50 dark:bg-gray-950">
+    <main className="flex min-h-0 flex-1 flex-col bg-gray-50 dark:bg-gray-950">
       <div className="mx-auto flex h-full w-full max-w-4xl min-h-0 flex-col px-8 py-6">
         <div className="shrink-0">
           <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">

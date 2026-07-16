@@ -7,11 +7,7 @@ import {
   afterAll,
   beforeEach,
 } from "vitest";
-import {
-  jobStorage,
-  LibraryFullError,
-  SAVED_JOBS_SOFT_CAP,
-} from "../../services/jobStorage";
+import { jobStorage, LibraryFullError } from "../../services/jobStorage";
 import {
   getIdToken,
   markNotAuthorized,
@@ -83,7 +79,6 @@ describe("jobStorage (fetch-backed JobRepository, contracts/storage-api.md)", ()
     expect(Object.keys(jobStorage).sort()).toEqual(
       ["exportAll", "get", "list", "pruneArchived", "remove", "save", "update"].sort()
     );
-    expect(SAVED_JOBS_SOFT_CAP).toBe(1_000);
   });
 
   it("save PUTs to /jobs/{sha256} and get returns the stored record", async () => {
@@ -115,11 +110,17 @@ describe("jobStorage (fetch-backed JobRepository, contracts/storage-api.md)", ()
     expect(remoteOnly.map((j) => j.canonicalUrl)).toEqual(["https://a.example/1"]);
   });
 
-  it("save maps 409 LIBRARY_FULL to LibraryFullError", async () => {
+  it("save maps 409 LIBRARY_FULL to LibraryFullError, propagating the server's tier-aware message", async () => {
     api.setCap(0);
-    await expect(jobStorage.save(makeJob())).rejects.toBeInstanceOf(
-      LibraryFullError
+    const err = await jobStorage.save(makeJob()).then(
+      () => {
+        throw new Error("expected rejection");
+      },
+      (e: unknown) => e
     );
+    expect(err).toBeInstanceOf(LibraryFullError);
+    expect((err as Error).message).toMatch(/posting cap/i);
+    expect((err as Error).message).toMatch(/upgrade|prune|export/i);
   });
 
   it("update PATCHes status/notes and is a no-op on a missing record", async () => {

@@ -120,4 +120,13 @@ describe("OptionsApp", () => {
     expect(screen.queryByText("Profile saved.")).not.toBeInTheDocument();
     expect(screen.getByLabelText(/Your background/)).toHaveValue("My profile");
   });
+
+  it("mounts the AccountBar above the profile editor (plan/usage always visible, FR-013)", async () => {
+    render(<OptionsApp />);
+    expect(await screen.findByLabelText("Plan: Free")).toBeInTheDocument();
+    expect(screen.getByText("0 of 50 analyses this month")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Your background/)).toBeEnabled()
+    );
+  });
 });
