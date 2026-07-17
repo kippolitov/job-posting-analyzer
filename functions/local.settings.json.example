@@ -13,7 +13,19 @@
     "//TABLES_CONNECTION_STRING": "Optional override: Table Storage connection for tables only (falls back to AzureWebJobsStorage). UseDevelopmentStorage=true points tables at Azurite (npm run azurite).",
 
     "//REQUIRE_AUTH": "Auth middleware enforcement. Defaults to false (bypass) until the gated extension version ships — plan.md Rollout. Set \"true\" for local dev per quickstart.md.",
-    "REQUIRE_AUTH": "true"
+    "REQUIRE_AUTH": "true",
+
+    "//AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM": "Deployment used for premium-tier analyses (specs/003). When unset or empty, premium falls back to the free deployment — safe in every environment.",
+    "AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM": "",
+
+    "//METERING_ENFORCED": "Free-tier usage metering (specs/003). Any value except \"false\" enforces the monthly caps; \"false\" runs shadow mode (counts but never blocks).",
+    "METERING_ENFORCED": "true",
+
+    "//PADDLE": "Paddle Billing (specs/003) — sandbox values for local dev; see specs/003-freemium-premium-tier/quickstart.md for the full local checkout/webhook walkthrough (default payment link, TLS, tunnel).",
+    "PADDLE_API_BASE_URL": "https://sandbox-api.paddle.com",
+    "PADDLE_API_KEY": "",
+    "PADDLE_WEBHOOK_SECRET": "",
+    "PADDLE_PREMIUM_PRICE_ID": ""
   },
   "Host": {
     "CORS": "chrome-extension://REPLACE_WITH_EXTENSION_ID"
