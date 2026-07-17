@@ -12,8 +12,37 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * reference before the live cutover (plan.md Rollout PR 3).
  */
 
-const SIGNATURE_PATTERN = /^ts=(\d+);h1=([0-9a-f]+)$/;
 const REPLAY_WINDOW_SECONDS = 300;
+
+/**
+ * Parses a `Paddle-Signature` header into its timestamp and h1 signature(s).
+ * After a secret-key rotation Paddle signs with both the old and new keys for
+ * a grace period, sending multiple `h1` elements (`ts=…;h1=old;h1=new`) — so
+ * the header is a semicolon-separated list, not a fixed two-field shape.
+ */
+function parseSignatureHeader(
+  header: string
+): { ts: number; signatures: string[] } | null {
+  let ts: number | null = null;
+  const signatures: string[] = [];
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) return null;
+    const key = part.slice(0, eq);
+    const value = part.slice(eq + 1);
+    if (key === "ts") {
+      if (ts !== null || !/^\d+$/.test(value)) return null;
+      ts = Number(value);
+    } else if (key === "h1") {
+      if (!/^[0-9a-f]+$/.test(value)) return null;
+      signatures.push(value);
+    } else {
+      return null;
+    }
+  }
+  if (ts === null || signatures.length === 0) return null;
+  return { ts, signatures };
+}
 
 export class PaddleApiError extends Error {
   constructor(message = "Couldn't reach Paddle. Please try again.") {
@@ -35,11 +64,10 @@ export function verifyPaddleSignature(
   now: Date = new Date()
 ): boolean {
   if (!header) return false;
-  const match = SIGNATURE_PATTERN.exec(header);
-  if (!match) return false;
+  const parsed = parseSignatureHeader(header);
+  if (!parsed) return false;
 
-  const ts = Number(match[1]);
-  const providedHex = match[2];
+  const { ts, signatures } = parsed;
   const nowSeconds = Math.floor(now.getTime() / 1000);
   if (Math.abs(nowSeconds - ts) > REPLAY_WINDOW_SECONDS) return false;
 
@@ -47,11 +75,16 @@ export function verifyPaddleSignature(
     .update(`${ts}:`)
     .update(rawBody)
     .digest("hex");
-
   const expected = Buffer.from(expectedHex, "hex");
-  const provided = Buffer.from(providedHex, "hex");
-  if (expected.length !== provided.length) return false;
-  return timingSafeEqual(expected, provided);
+
+  let anyMatch = false;
+  for (const providedHex of signatures) {
+    const provided = Buffer.from(providedHex, "hex");
+    if (provided.length === expected.length && timingSafeEqual(expected, provided)) {
+      anyMatch = true;
+    }
+  }
+  return anyMatch;
 }
 
 function requireEnv(name: string): string {

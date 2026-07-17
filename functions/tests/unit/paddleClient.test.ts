@@ -56,6 +56,43 @@ describe("verifyPaddleSignature", () => {
     expect(verifyPaddleSignature(rawBody, "not-a-signature", SECRET)).toBe(false);
   });
 
+  it("accepts a rotation-era header carrying old and new h1 signatures (valid one second)", () => {
+    const rawBody = Buffer.from(JSON.stringify({ event_id: "evt_1" }));
+    const now = Math.floor(Date.now() / 1000);
+    const oldH1 = createHmac("sha256", "retired-secret").update(`${now}:`).update(rawBody).digest("hex");
+    const goodH1 = createHmac("sha256", SECRET).update(`${now}:`).update(rawBody).digest("hex");
+    const header = `ts=${now};h1=${oldH1};h1=${goodH1}`;
+    expect(verifyPaddleSignature(rawBody, header, SECRET)).toBe(true);
+  });
+
+  it("accepts a rotation-era header when the valid h1 comes first", () => {
+    const rawBody = Buffer.from(JSON.stringify({ event_id: "evt_1" }));
+    const now = Math.floor(Date.now() / 1000);
+    const goodH1 = createHmac("sha256", SECRET).update(`${now}:`).update(rawBody).digest("hex");
+    const oldH1 = createHmac("sha256", "retired-secret").update(`${now}:`).update(rawBody).digest("hex");
+    const header = `ts=${now};h1=${goodH1};h1=${oldH1}`;
+    expect(verifyPaddleSignature(rawBody, header, SECRET)).toBe(true);
+  });
+
+  it("rejects a multi-h1 header where no signature matches", () => {
+    const rawBody = Buffer.from(JSON.stringify({ event_id: "evt_1" }));
+    const now = Math.floor(Date.now() / 1000);
+    const bad1 = createHmac("sha256", "wrong-1").update(`${now}:`).update(rawBody).digest("hex");
+    const bad2 = createHmac("sha256", "wrong-2").update(`${now}:`).update(rawBody).digest("hex");
+    const header = `ts=${now};h1=${bad1};h1=${bad2}`;
+    expect(verifyPaddleSignature(rawBody, header, SECRET)).toBe(false);
+  });
+
+  it("rejects headers with duplicate ts or unknown fields", () => {
+    const rawBody = Buffer.from(JSON.stringify({ event_id: "evt_1" }));
+    const now = Math.floor(Date.now() / 1000);
+    const h1 = createHmac("sha256", SECRET).update(`${now}:`).update(rawBody).digest("hex");
+    expect(verifyPaddleSignature(rawBody, `ts=${now};ts=${now};h1=${h1}`, SECRET)).toBe(false);
+    expect(verifyPaddleSignature(rawBody, `ts=${now};h1=${h1};extra=1`, SECRET)).toBe(false);
+    expect(verifyPaddleSignature(rawBody, `h1=${h1}`, SECRET)).toBe(false);
+    expect(verifyPaddleSignature(rawBody, `ts=${now}`, SECRET)).toBe(false);
+  });
+
   it("rejects a signature computed with the wrong secret", () => {
     const rawBody = Buffer.from(JSON.stringify({ event_id: "evt_1" }));
     const now = Math.floor(Date.now() / 1000);
