@@ -6,7 +6,7 @@
 
 Job Posting Analyzer is a **WXT (Manifest V3) + React 18 + TypeScript** side-panel extension backed by an **Azure Functions** API that calls **Azure OpenAI** with strict JSON-schema outputs. Click the toolbar icon on a job listing and the side panel shows work arrangement (remote/hybrid/onsite) with evidence and confidence, salary, seniority, and tech stack — plus a 0–100 fit score against your candidate profile.
 
-Access is by invitation: every feature requires signing in with a Google account the developer has allowlisted. Profiles and saved postings live server-side per account, so they follow you across devices and browsers.
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/kbdecogbebgmeefjkppickfgegbheipc)** — free to start: sign in with any Google account and get 50 analyses per month plus a 100-posting library. A **Premium** subscription ($5/month, billed by Paddle) raises that to 300 analyses, a 1,000-posting library, and a higher-quality model. Profiles and saved postings live server-side per account, so they follow you across devices and browsers.
 
 ---
 
@@ -27,10 +27,11 @@ Access is by invitation: every feature requires signing in with a Google account
 ### The stack
 
 - **Extension**: WXT (Chrome MV3), React 18, TypeScript 5 (strict), Tailwind CSS — side panel + options page
-- **Backend**: Azure Functions v4 (Node 20, TypeScript) exposing `POST /api/analyze-job` plus profile and saved-jobs endpoints
+- **Backend**: Azure Functions v4 (Node 20, TypeScript) exposing `POST /api/analyze-job` plus profile, saved-jobs, account, billing, and Paddle-webhook endpoints
 - **AI**: Azure OpenAI with a strict JSON-schema response format — the model cannot return anything the extension can't render
-- **Storage**: Azure Table Storage — per-account candidate profiles, saved postings, and the developer-managed allowlist
-- **Auth**: Google OIDC (`chrome.identity.launchWebAuthFlow`); the backend verifies every ID token's signature/`aud`/`iss`/`exp` and checks the allowlist before doing any work
+- **Storage**: Azure Table Storage — per-account candidate profiles, saved postings, usage metering, and subscription state
+- **Auth**: Google OIDC (`chrome.identity.launchWebAuthFlow`); the backend verifies every ID token's signature/`aud`/`iss`/`exp`, then provisions or loads the account — no human approval step
+- **Billing**: Paddle (merchant of record) — server-created checkout transactions, HMAC-verified webhooks flip the tier, Paddle's customer portal handles cancel/payment methods (no in-extension billing UI)
 
 ### Design decisions that matter
 
@@ -38,16 +39,9 @@ Access is by invitation: every feature requires signing in with a Google account
 
 **The LLM is behind a contract.** Azure OpenAI is called with a strict JSON-schema response format, so extraction output is structurally validated before it ever reaches the UI. Prompt changes are regression-tested with an eval script (`npm run eval:postings`) against a corpus of real postings.
 
-**Auth is enforced where it can't be bypassed.** The extension never holds secrets; every request carries a Google ID token that the Functions backend independently verifies and checks against an `AllowedUsers` table. Sessions survive browser restarts for ~30 days via silent renewal.
+**Auth is enforced where it can't be bypassed.** The extension never holds secrets; every request carries a Google ID token that the Functions backend independently verifies before touching any data. Sessions survive browser restarts for ~30 days via silent renewal.
 
-**Access control is data, not code.** The allowlist is a Table Storage table edited with a local CLI — no rebuild or redeploy; changes take effect on the account's next request:
-
-```bash
-cd functions
-npm run allowed-users -- add someone@gmail.com --note "who this is"
-npm run allowed-users -- remove someone@gmail.com   # access revoked; their data is retained
-npm run allowed-users -- list
-```
+**Billing never trusts the client.** Checkout transactions are created server-side with the verified account identity in `custom_data`; tier changes happen only when a Paddle webhook arrives with a valid HMAC signature over the raw body (replay-windowed, rotation-tolerant). The extension can ask for a checkout URL — it can never assert a tier. Free-tier metering is enforced in the same request path that does the work, so an exhausted allowance is a clear "resets on <date>" state, never a silent failure.
 
 ---
 
@@ -62,7 +56,8 @@ spec.md → plan.md → tasks.md → implement (per ticket)
 Every feature lives in `specs/`:
 
 - **[`001-job-posting-analyzer`](specs/001-job-posting-analyzer/)** — the core extension: extraction, side panel, fit scoring
-- **[`002-account-persistent-storage`](specs/002-account-persistent-storage/)** — Google sign-in, allowlisting, server-side profiles and saved postings, migration
+- **[`002-account-persistent-storage`](specs/002-account-persistent-storage/)** — Google sign-in, allowlisting (since retired), server-side profiles and saved postings, migration
+- **[`003-freemium-premium-tier`](specs/003-freemium-premium-tier/)** — self-serve signup, free-tier metering, Premium subscription via Paddle (checkout, webhooks, customer portal), legacy-allowlist migration
 
 Each feature carries its full paper trail: `spec.md` (user stories and acceptance scenarios), `plan.md` (stack and architecture decisions), `tasks.md` (dependency-ordered tickets), plus `research.md`, `data-model.md`, API `contracts/`, and a `quickstart.md`. Every decision is auditable because it's in a file — not buried in a chat log.
 
@@ -83,6 +78,7 @@ Merge to main
 Release tag
   └── release.yml ──► build the extension with production secrets baked in
                        → publish a zip to a private releases repo
+                       → upload + publish to the Chrome Web Store
 ```
 
 ### Security posture
@@ -106,7 +102,7 @@ extension/
 
 functions/
 ├── src/                # analyze-job, jobs, profile endpoints + services and models
-├── scripts/            # allowlist CLI, posting eval harness
+├── scripts/            # user admin CLI, legacy-allowlist migration, posting eval harness
 └── tests/              # vitest unit + integration tests (against Azurite)
 
 specs/                  # Spec Kit artifacts — the paper trail for every feature
@@ -122,7 +118,7 @@ cd extension && npm install && npm run dev       # extension dev server (WXT)
 cd functions && npm install && npm start         # functions dev server (func CLI)
 ```
 
-Copy `functions/local.settings.json.example` to `functions/local.settings.json` and fill in your Azure OpenAI endpoint/key plus `GOOGLE_OAUTH_CLIENT_ID` (a Web-application OAuth client whose redirect URI is `https://<extension-id>.chromiumapp.org/`). Point the extension at your backend via `WXT_AZURE_FUNCTION_URL` / `WXT_AZURE_FUNCTION_KEY` / `WXT_API_BASE_URL` / `WXT_GOOGLE_OAUTH_CLIENT_ID` in `extension/.env.local`. For local tables, run `npm run azurite` in `functions/` and allowlist yourself with the CLI. Full walkthrough: [`specs/002-account-persistent-storage/quickstart.md`](specs/002-account-persistent-storage/quickstart.md).
+Copy `functions/local.settings.json.example` to `functions/local.settings.json` and fill in your Azure OpenAI endpoint/key plus `GOOGLE_OAUTH_CLIENT_ID` (a Web-application OAuth client whose redirect URI is `https://<extension-id>.chromiumapp.org/`). Point the extension at your backend via `WXT_AZURE_FUNCTION_URL` / `WXT_AZURE_FUNCTION_KEY` / `WXT_API_BASE_URL` / `WXT_GOOGLE_OAUTH_CLIENT_ID` in `extension/.env.local`. For local tables, run `npm run azurite` in `functions/` — signing in auto-creates a free-tier account, no allowlisting needed. Auth/storage walkthrough: [`specs/002-account-persistent-storage/quickstart.md`](specs/002-account-persistent-storage/quickstart.md); billing/metering (Paddle sandbox, webhooks, tiers): [`specs/003-freemium-premium-tier/quickstart.md`](specs/003-freemium-premium-tier/quickstart.md).
 
 Tests:
 
@@ -132,3 +128,9 @@ cd extension && npm run test:e2e           # playwright e2e (opt-in: E2E=1 + a l
 cd functions && npm test                    # vitest unit tests (starts Azurite automatically)
 cd functions && npm run test:integration   # endpoint/auth/perf tests against Azurite
 ```
+
+---
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md) — you're welcome to read, run, and learn from this code for any noncommercial purpose. Commercial use (including republishing the extension or selling access to it) is not permitted.
