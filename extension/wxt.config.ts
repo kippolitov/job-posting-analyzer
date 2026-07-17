@@ -15,8 +15,10 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: {
     name: "Job Posting Analyzer",
+    // Doubles as the Chrome Web Store listing summary (132-char limit there);
+    // states free vs. paid plainly per CWS Deceptive Installation Tactics policy.
     description:
-      "Analyzes job postings for work arrangement, salary, seniority, tech stack, and fit",
+      "AI job posting analyzer: arrangement, salary, fit score. Free: 50 analyses/mo. Premium ($5/mo): 300/mo + better model.",
     permissions: ["sidePanel", "storage", "scripting", "activeTab", "identity"],
     // Localhost host permissions let the Playwright e2e suite exercise page
     // extraction (it cannot perform the action click that grants activeTab).
