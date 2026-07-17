@@ -43,3 +43,7 @@ test-results/
 
 # Chrome Web Store submission materials (not for the repo)
 store-submission/
+
+# One-off local screenshots (Paddle verification session)
+/checkout-page.png
+/product-page.png
