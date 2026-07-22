@@ -1,103 +1,23 @@
-export type Arrangement = "remote" | "hybrid" | "onsite" | "unspecified";
-
-export type ArrangementConfidence = "explicit" | "inferred" | "none";
-
-export type Seniority =
-  | "junior"
-  | "mid"
-  | "senior"
-  | "staff"
-  | "principal"
-  | "manager"
-  | "director"
-  | "executive"
-  | "unspecified";
-
-export type JobStatus =
-  | "interested"
-  | "applied"
-  | "interviewing"
-  | "rejected"
-  | "ghosted"
-  | "archived";
-
-export const JOB_STATUSES: JobStatus[] = [
-  "interested",
-  "applied",
-  "interviewing",
-  "rejected",
-  "ghosted",
-  "archived",
-];
-
-export const ARRANGEMENTS: Arrangement[] = [
-  "remote",
-  "hybrid",
-  "onsite",
-  "unspecified",
-];
-
-export type SalaryPeriod = "year" | "month" | "day" | "hour";
-
-export interface Salary {
-  min: number | null;
-  max: number | null;
-  currency: string | null;
-  period: SalaryPeriod | null;
-}
-
-export interface Fit {
-  score: number;
-  rationale: string;
-  /** Required responsibilities/skills the profile covers. Absent on pre-breakdown snapshots. */
-  matching?: string[];
-  /** Required responsibilities/skills the profile shows no evidence of. */
-  missing?: string[];
-  /** Nice-to-have qualifications from the posting the profile does not cover. */
-  desired?: string[];
-  /** Why this role is a strong choice for this candidate. */
-  strengths?: string[];
-  /** Risks or downsides of this role for this candidate. */
-  weaknesses?: string[];
-}
-
-/** Client-side extraction payload; never persisted. */
-export interface PageExtract {
-  url: string;
-  canonicalUrl: string;
-  title: string;
-  jsonLd: Record<string, unknown>[];
-  mainText: string;
-  extractedAt: string;
-}
-
-/** Structured extraction result for one page at one point in time. */
-export interface JobAnalysis {
-  isJobPosting: boolean;
-  title: string | null;
-  company: string | null;
-  location: string | null;
-  arrangement: Arrangement;
-  arrangementConfidence: ArrangementConfidence;
-  arrangementEvidence: string | null;
-  daysInOffice: number | null;
-  daysRemote: number | null;
-  remoteRestrictions: string | null;
-  salary: Salary | null;
-  seniority: Seniority;
-  techStack: string[];
-  fit: Fit | null;
-  model: string;
-  analyzedAt: string;
-}
+export type {
+  Arrangement,
+  ArrangementConfidence,
+  Seniority,
+  SalaryPeriod,
+  Salary,
+  Fit,
+  JobStatus,
+  PageExtractPayload as PageExtract,
+  JobAnalysisResponse as JobAnalysis,
+} from "../../shared/types/job";
+export { JOB_STATUSES, ARRANGEMENTS } from "../../shared/types/job";
 
 /** A persisted posting in the saved-jobs library. */
 export interface SavedJob {
   schemaVersion: number;
   canonicalUrl: string;
   sourceUrl: string;
-  analysis: JobAnalysis;
-  status: JobStatus;
+  analysis: import("../../shared/types/job").JobAnalysisResponse;
+  status: import("../../shared/types/job").JobStatus;
   notes: string;
   savedAt: string;
   updatedAt: string;
