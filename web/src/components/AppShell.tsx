@@ -48,6 +48,25 @@ export function AppShell() {
       <main className="mx-auto w-full max-w-5xl flex-1 p-4">
         <Outlet />
       </main>
+      <footer className="border-t border-gray-200 p-4 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+        <a
+          href="https://kippolitov.github.io/job-posting-analyzer/legal/privacy-policy.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          Privacy Policy
+        </a>{" "}
+        ·{" "}
+        <a
+          href="https://kippolitov.github.io/job-posting-analyzer/legal/terms.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          Terms of Service
+        </a>
+      </footer>
     </div>
   );
 }
