@@ -12,6 +12,16 @@ launch that preceded it, see [`specs/003-freemium-premium-tier/`](specs/003-free
 [`specs/001-job-posting-analyzer/`](specs/001-job-posting-analyzer/) and
 [`specs/002-account-persistent-storage/`](specs/002-account-persistent-storage/).
 
+**How this stays current:** every PR with a user-facing or notable change adds
+its own bullet points under `## [Unreleased]` below (Added/Changed/Fixed/
+Removed, whichever apply — see the `[0.0.29]` entry for the shape). On merge
+to `main`, `cd.yml`'s version-bump step automatically renames
+`## [Unreleased]` to `## [X.Y.Z] - <date>` matching the version it just
+tagged, and opens a fresh empty `## [Unreleased]` above it — the same commit
+that bumps `extension/package.json`. If `[Unreleased]` has no entries at
+bump time (a pure CI/infra tweak, say), that release simply gets no
+changelog section rather than an empty heading.
+
 ## [Unreleased]
 
 ## [0.0.29] - 2026-07-22
