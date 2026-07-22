@@ -25,6 +25,13 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.33] - 2026-07-22
+
+- Fixes the root cause of "Missing required parameter: client_id" on the production web app: `WEB_API_BASE_URL` and `VITE_GOOGLE_OAUTH_CLIENT_ID` were never created as GitHub secrets, so `cd.yml`'s `web-ci` build (the one that actually gets deployed, unlike `ci.yml`'s `web-ci` which safely falls back to placeholders) silently compiled both to empty strings. Sign-in has been broken since the web app first deployed.
+- Already remediated live: created both secrets (reusing the extension's existing Google OAuth client ID, matching `web/.env.local`'s convention, and the production Function App URL) and manually triggered a redeploy — confirmed via `curl` that the deployed JS bundle now contains both values.
+- This PR is the guard-rail so it can't regress silently again: a required-secrets check before `Build`, and a post-build verification step that greps the built JS bundle for both values.
+- Also fixes a misleading comment on `deploy-web`'s download step that read as if this same file's `web-ci` had a placeholder variant — the placeholder build it meant is actually in `ci.yml`, a different file.
+
 ## [0.0.31] - 2026-07-22
 
 - Fixes a bug where the AccountBar's "Open web app" link (added in #11) never rendered in any Chrome Web Store build, including the currently-published v0.0.29 and v0.0.30: `release.yml` — the workflow that builds what actually gets uploaded to the CWS — never had `WXT_WEB_APP_URL` added to its build env, unlike `cd.yml` and `ci.yml`. It silently compiled to an empty string and the link's falsy check just skipped rendering it.
