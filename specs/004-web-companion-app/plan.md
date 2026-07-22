@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add a third monorepo package, `web/` — a static React 18 + TypeScript 5 (strict) + Tailwind SPA built with Vite — that signs users in with Google Identity Services (GIS) and reads/writes the **same** server-side account data as the extension. Library, profile, and account views are pure consumers of the existing `/api/profile`, `/api/jobs`, and `/api/account` endpoints (no backend changes); search / filter / sort / side-by-side comparison run client-side over the fetched library. One genuinely new capability — **document-upload analysis** — is a single new Functions endpoint, `POST /api/analyze-document`, that extracts text from an uploaded `.docx`/`.pdf` server-side, validates it (magic-byte sniff, 10 MB cap, encrypted / image-only rejection) **before** consuming allowance, then reuses the existing metering service and analyze orchestrator unchanged. Saved document-sourced analyses get a small `SavedJobs` schema extension (a `source` discriminator, `filename`, and a synthetic dedupe key). The entire backend auth delta is two lines of policy: widen the token `aud` check to a set of client IDs and add a CORS origin allowlist. Deployment extends `cd.yml`'s existing GitHub Pages job to publish the SPA under `/app/` — **zero new Azure resources**, consistent with 003's cost posture.
+Add a third monorepo package, `web/` — a static React 18 + TypeScript 5 (strict) + Tailwind SPA built with Vite — that signs users in with Google Identity Services (GIS) and reads/writes the **same** server-side account data as the extension. Library, profile, and account views are pure consumers of the existing `/api/profile`, `/api/jobs`, and `/api/account` endpoints (no backend changes); search / filter / sort / side-by-side comparison run client-side over the fetched library. One genuinely new capability — **document-upload analysis** — is a single new Functions endpoint, `POST /api/analyze-document`, that extracts text from an uploaded `.docx`/`.pdf` server-side, validates it (magic-byte sniff, 10 MB cap, encrypted / image-only rejection) **before** consuming allowance, then reuses the existing metering service and analyze orchestrator unchanged. Saved document-sourced analyses get a small `SavedJobs` schema extension (a `source` discriminator, `filename`, and a synthetic dedupe key). The entire backend auth delta is two lines of policy: widen the token `aud` check to a set of client IDs and add a CORS origin allowlist. Deployment publishes the SPA to a dedicated **Azure Static Web Apps (Free tier)** resource — a deliberate, documented exception to the "no new Azure resources" habit from 002/003, now governed by constitution Principle V (Cost Discipline): the Free tier is $0 and closes a real gap GitHub Pages could not (response-header/CSP control for an authenticated surface). GitHub Pages continues to host the marketing landing page, legal pages, and coverage reports — only the authenticated app moves.
 
 ## Technical Context
 
@@ -20,13 +20,13 @@ Add a third monorepo package, `web/` — a static React 18 + TypeScript 5 (stric
 
 **Testing**: Vitest everywhere; Azurite table integration tests for the new endpoint's metering interaction; real `.docx`/`.pdf` fixtures driven through the true extraction path; MSW contract tests in `web/`. ≥80% changed-module coverage bar (constitution QG-2).
 
-**Target Platform**: Static GitHub Pages hosting under `/app/` (SPA); Azure Functions (Linux, Node 20) for the API. Web views must be fully usable on mobile viewports.
+**Target Platform**: Azure Static Web Apps (Free tier) at its own origin (SPA, clean-path routing); Azure Functions (Linux, Node 20) for the API. Web views must be fully usable on mobile viewports.
 
 **Project Type**: Monorepo with three packages — `extension/` (WXT), `functions/` (Azure Functions), `web/` (new Vite SPA) — plus a new shared-types location both `extension/` and `web/` import.
 
 **Performance Goals**: Document analysis shares the analyze path budget — ≤ 8 s p50, 30 s ceiling (constitution QG-4) — with text extraction adding a sub-second budget at the 10 MB cap. Any operation > 300 ms shows a progress indicator (constitution III). Landing + library first render usable on a mobile viewport.
 
-**Constraints**: GitHub Pages cannot rewrite paths → **hash-based routing** (research R1). Functions process memory ceiling 512 MB (constitution IV) bounds in-memory PDF parsing at 10 MB. GIS ID tokens live ~1 hour and are held **in memory only, never localStorage** (research R2). Backend auth delta limited to: `aud` set + CORS allowlist (research R3).
+**Constraints**: Azure Static Web Apps' `navigationFallback` rewrites unknown paths to `index.html`, so the app uses **clean-path routing** (`BrowserRouter`), superseding research R1's original hash-routing decision (see R1 addendum). Functions process memory ceiling 512 MB (constitution IV) bounds in-memory PDF parsing at 10 MB. GIS ID tokens live ~1 hour and are held **in memory only, never localStorage** (research R2). Backend auth delta limited to: `aud` set + CORS allowlist naming the Static Web Apps origin (research R3). Hosting exception governed by constitution Principle V (Cost Discipline): Free tier, $0, no metered overage risk at this traffic scale.
 
 **Scale/Scope**: Per-user library ≤ 1,000 postings (premium cap) — comfortably within client-side search/filter/sort/compare over a single fetched list. Single new endpoint; ~6 new web views (landing, library, posting detail, compare, profile, account, upload/analyze).
 
@@ -34,7 +34,7 @@ Add a third monorepo package, `web/` — a static React 18 + TypeScript 5 (stric
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Derived from `.specify/memory/constitution.md` v1.0.0:
+Derived from `.specify/memory/constitution.md` v1.1.0:
 
 | Principle | Gate | Status |
 |-----------|------|--------|
@@ -42,6 +42,7 @@ Derived from `.specify/memory/constitution.md` v1.0.0:
 | **II. Testing Standards** | Test-first (Red-Green-Refactor); ≥80% coverage on changed modules; integration tests use real fixtures/stubs not hollow mocks; E2E covers every P1 journey. | ✅ PASS — plan mandates real `.docx`/`.pdf` fixtures through the true extraction path, Azurite metering integration tests (reject-before-increment + parallel races), MSW contract tests; P1 (sign-in + see shared data) gets an E2E path. |
 | **III. UX Consistency** | Progress indicator for > 300 ms ops; plain-language errors + next action, no raw traces; stable terminology; WCAG 2.1 AA labels/contrast. | ✅ PASS — upload/analyze and library fetch show progress; all validation/quota/cap errors are plain-language with an action (reuses 003's exact messages); web reuses the extension's design tokens for consistent terminology; a11y labels required on interactive elements. |
 | **IV. Performance** | Analysis ≤ 30 s; UI async/non-blocking; ≤ 512 MB memory; reject ≥ 20% p95 regression. | ✅ PASS — document path shares the analyze budget + sub-second extraction; upload/analyze is async with progress; 10 MB cap enforced at the boundary bounds memory; no change to the analyze latency path itself. |
+| **V. Cost Discipline** | New infrastructure MUST default to a genuinely free tier; a new resource is justified only when it closes a real capability gap the zero-resource baseline can't. | ✅ PASS — Azure Static Web Apps Free tier is $0 with no time limit; adopted specifically to gain response-header/CSP control GitHub Pages could not provide for an authenticated surface (see Security review addendum below). |
 
 **Quality Gates**: QG-1 (lint zero-warnings — `web/` gets its own lint gate in ci.yml), QG-2 (≥80% coverage — enforced in ci.yml for `web/`), QG-3 (UX review of error/loading states), QG-4 (latency benchmark — document path inherits the analyze scenario budget).
 
@@ -73,11 +74,13 @@ specs/004-web-companion-app/
 web/                                # NEW package — static Vite SPA
 ├── index.html
 ├── package.json                    # React 18, Vite, Tailwind, react-router, msw (dev)
-├── vite.config.ts                  # base: "/app/"
+├── vite.config.ts                  # base: "/"
+├── public/
+│   └── staticwebapp.config.json    # navigationFallback (clean paths) + security headers (CSP/HSTS/etc.) — copied into dist/ by Vite
 ├── tailwind.config.cjs             # imports shared design tokens
 ├── tsconfig.json                   # strict; path alias to shared/
 ├── src/
-│   ├── main.tsx                    # HashRouter root
+│   ├── App.tsx                     # BrowserRouter root
 │   ├── auth/                       # GIS init, in-memory token store, silent refresh
 │   ├── api/                        # fetch client (Bearer token) for profile/jobs/account/analyze-document
 │   ├── pages/                      # landing, library, posting-detail, compare, profile, account, upload
@@ -113,10 +116,11 @@ extension/                          # EXISTING — imports migrate to shared/ ty
 
 .github/workflows/
 ├── ci.yml                          # EDIT: add web/ lint+test+build job; keep ≥80% coverage gate
-└── cd.yml                          # EDIT: publish-coverage job also builds web/ → pages/app/
+└── cd.yml                          # EDIT: publish-coverage (Pages) job drops web-dist; new deploy-web job
+                                     #       ships web/dist to Azure Static Web Apps (Free tier)
 ```
 
-**Structure Decision**: Three-package monorepo. `web/` is a standalone Vite SPA deployed statically under `/app/`; `shared/` holds the analysis/job TypeScript types and design tokens that both `extension/` and `web/` import (replacing the current duplication between `extension/types/job.ts` and `functions/src/models/job.ts`). All backend work is additive except two small policy edits (`auth.ts` aud-set, `http.ts` CORS allowlist) and one small model/repository extension for document-sourced saved jobs.
+**Structure Decision**: Three-package monorepo. `web/` is a standalone Vite SPA deployed to its own **Azure Static Web Apps (Free tier)** origin with clean-path routing; `shared/` holds the analysis/job TypeScript types and design tokens that both `extension/` and `web/` import (replacing the current duplication between `extension/types/job.ts` and `functions/src/models/job.ts`). GitHub Pages continues to serve the marketing landing page, legal pages, and coverage reports — unrelated to the authenticated app, which now lives at a dedicated origin. All backend work is additive except two small policy edits (`auth.ts` aud-set, `http.ts` CORS allowlist naming the Static Web Apps origin) and one small model/repository extension for document-sourced saved jobs.
 
 ## Complexity Tracking
 

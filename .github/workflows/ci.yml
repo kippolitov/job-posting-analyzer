@@ -47,6 +47,7 @@ jobs:
         env:
           WXT_AZURE_FUNCTION_URL: ${{ secrets.AZURE_FUNCTION_URL || 'https://placeholder.example.com/api/analyze-job' }}
           WXT_AZURE_FUNCTION_KEY: ${{ secrets.AZURE_FUNCTION_KEY || '' }}
+          WXT_WEB_APP_URL: ${{ secrets.WXT_WEB_APP_URL || 'https://placeholder.example.com' }}
         run: npm run build
         working-directory: extension
 
@@ -81,6 +82,50 @@ jobs:
           name: functions
           test-filter: tests/unit
 
+      # Includes the performance budgets (constitution QG-4), the
+      # analyze-document extraction/latency benchmark among them — run on
+      # every push, not as a manual-only check (specs/004 T051).
+      - name: Integration tests (Azurite-backed, incl. performance budgets)
+        run: npm run test:integration
+        working-directory: functions
+
       - name: Build
         run: npm run build
         working-directory: functions
+
+  web-ci:
+    name: Web CI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Lint
+        run: npm run lint
+        working-directory: web
+
+      - name: Unit tests
+        uses: ./.github/actions/unit-tests
+        with:
+          working-directory: web
+          name: web
+
+      - name: Build
+        env:
+          VITE_API_BASE_URL: ${{ secrets.WXT_API_BASE_URL || 'https://placeholder.example.com/api' }}
+          VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GOOGLE_OAUTH_CLIENT_ID || 'placeholder.apps.googleusercontent.com' }}
+        run: npm run build
+        working-directory: web

@@ -15,7 +15,7 @@ The library, profile, and account views are **pure consumers** of endpoints that
 
 ## GET/PUT/PATCH/DELETE /api/jobs/{key}
 
-- **PUT `/api/jobs/{key}`** — save/replace a posting. For document-sourced saves, `key = saveKey` returned by `analyze-document` (`sha256("doc:"+sha256(text))`), body carries `source:"document"`, `filename`, and `canonicalUrl:"doc:<hash>"`. Server key-verification (`sha256Hex(canonicalUrl) === key`) is unchanged. At-cap → `409 LibraryCapError` with the existing message (FR-024, US5 scenario 2).
+- **PUT `/api/jobs/{key}`** — save/replace a posting. For document-sourced saves, `key = saveKey` and `canonicalUrl` are both taken verbatim from `analyze-document`'s response (the client cannot derive `doc:<hash>` itself), body carries `source:"document"`, `filename`, and that `canonicalUrl`. Server key-verification (`sha256Hex(canonicalUrl) === key`) is unchanged. At-cap → `409 LibraryCapError` with the existing message (FR-024, US5 scenario 2).
 - **PATCH `/api/jobs/{key}`** — update `status` / `notes` / `analysis`; `canonicalUrl` & `savedAt` immutable (unchanged).
 - **DELETE `/api/jobs/{key}`** — remove; brings an over-cap library back under cap (US5, downgrade rule).
 - Web reuses all of these for editing status/notes and deleting from the larger screen.
