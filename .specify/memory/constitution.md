@@ -1,22 +1,20 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: (none) → 1.0.0
-Modified principles: N/A — initial constitution, no prior version
+Version change: 1.0.0 → 1.1.0
+Modified principles: N/A
 Added sections:
-  - Core Principles (4 principles: Code Quality, Testing Standards,
-    User Experience Consistency, Performance Requirements)
-  - Quality Gates
-  - Development Workflow
-  - Governance
+  - Core Principles: V. Cost Discipline (new) — codifies the "no new Azure
+    resources" constraint that features 002–004 applied ad hoc, reframing the
+    gate as cost (free-tier-first) rather than raw resource count. Adopted so
+    004's hosting switch (GitHub Pages → Azure Static Web Apps Free tier) can
+    close a real header/CSP capability gap without violating cost discipline.
 Removed sections: N/A
 Templates reviewed:
   - .specify/templates/plan-template.md ✅ aligned (Constitution Check section
     dynamically derives gates from this file — no template edit required)
-  - .specify/templates/spec-template.md ✅ aligned (SC-002 performance metric
-    and testing scenarios already present; no structural change needed)
-  - .specify/templates/tasks-template.md ✅ aligned (Phase N includes performance
-    optimization and testing discipline tasks matching Principles II and IV)
+  - .specify/templates/spec-template.md ✅ aligned (no structural change needed)
+  - .specify/templates/tasks-template.md ✅ aligned (no structural change needed)
   - .specify/templates/commands/ — directory absent, skipped
 Deferred TODOs: None
 -->
@@ -90,6 +88,29 @@ The system MUST meet the following measurable targets at all times:
 Rationale: summarization is a latency-sensitive task; users abandon tools that feel slow,
 making performance a first-class correctness concern.
 
+### V. Cost Discipline
+
+Infrastructure choices MUST optimize for near-zero recurring cost without sacrificing
+required capability:
+
+- **Free-tier-first**: new infrastructure MUST default to a provider's genuinely free
+  tier (no time-boxed trial, no credit-card-triggered auto-billing) unless the required
+  capability is unavailable at that tier.
+- **Cost is the gate, not resource count**: adding a new managed resource is permitted
+  when it is free (or negligible) and closes a real capability gap — e.g., response
+  header control, SLA, edge latency — that a zero-resource baseline cannot provide.
+  Avoiding a new resource for its own sake MUST NOT be used to justify a materially
+  worse security or reliability posture.
+- **Overage awareness**: any resource with metered overage billing MUST have its free
+  quota and overage rate documented in the owning feature's `plan.md` before adoption.
+
+Rationale: cost-consciousness has been enforced ad hoc across features 002-004 as
+"no new Azure resources." Stated as a resource-count rule, it forced a real security
+tradeoff in 004 — GitHub Pages' lack of response-header control on an authenticated
+surface — to preserve a $0 outcome that a free-tier managed resource (Azure Static Web
+Apps) achieves just as cheaply. Making cost, not resource count, the actual gate keeps
+the project's cost discipline intact while removing that false choice.
+
 ## Quality Gates
 
 Every feature MUST pass all four gates before it is considered complete:
@@ -138,4 +159,4 @@ satisfied. Any violation MUST be resolved or explicitly justified in writing bef
 **Runtime guidance**: for day-to-day development decisions, refer to the active feature's
 `plan.md` for context and gate details.
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-06-05
+**Version**: 1.1.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-07-21

@@ -310,6 +310,7 @@ export function createFakeStorageApi(): FakeStorageApi {
 export function stubApiBaseGlobals(): void {
   vi.stubGlobal("WXT_API_BASE_URL", TEST_API_BASE);
   vi.stubGlobal("WXT_AZURE_FUNCTION_KEY", "");
+  vi.stubGlobal("WXT_WEB_APP_URL", "https://web-app.test");
 }
 
 /**

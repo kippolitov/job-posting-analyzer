@@ -1,7 +1,12 @@
 # Chrome Web Store Listing Copy — Free vs. Paid (003-freemium-premium-tier)
 
 Draft copy for the Chrome Web Store listing (Developer Dashboard → Store
-listing) once the freemium release ships. Satisfies the
+listing) once the freemium release ships. Updated for
+[`004-web-companion-app`](../../specs/004-web-companion-app/) to add a short
+mention of the companion web app — see that section below; the pricing and
+disclosure copy below is otherwise unchanged by 004, since the web app reuses
+the same account, tiers, and limits and is not itself distributed through the
+Chrome Web Store. Satisfies the
 [Deceptive Installation Tactics](https://developer.chrome.com/docs/webstore/program-policies/deceptive-installation-tactics)
 and [Misleading or Unexpected Behavior](https://developer.chrome.com/docs/webstore/program-policies/unexpected-behavior)
 policies' requirement to state plainly what's free vs. paid — and the
@@ -47,6 +52,27 @@ policy's requirement to identify the developer, not Google, as the seller.
 >
 > Exceeding your monthly free-tier limit never charges you automatically —
 > you'll see a clear notice with your reset date and an option to upgrade.
+
+## Detailed description — companion web app mention (004-web-companion-app)
+
+Add one short paragraph after the pricing section, since the free companion web
+app is a real feature of the same account and is worth surfacing in the listing
+even though it isn't itself distributed through the Chrome Web Store:
+
+> ## Also included: a web companion app
+>
+> Sign in at the companion web app with the same Google account to browse,
+> search, filter, sort, and compare your saved library on a bigger screen, edit
+> your candidate profile, and analyze a job posting from an uploaded Word
+> (.docx) or PDF document instead of a browser tab. It's the same account, same
+> free/Premium limits, and same data — nothing to set up separately. Find the
+> link in the extension's side panel.
+
+No screenshot requirement changes: the web app is a bonus surface, not a
+prerequisite for any core feature, so the CWS screenshot set can stay
+extension-only. Do not imply document-upload analysis is available *in* the
+extension — that capability is web-only (spec 004 FR — extension has no file
+picker), so this paragraph must stay scoped to "the web companion app."
 
 ## Screenshots / promotional copy checklist
 

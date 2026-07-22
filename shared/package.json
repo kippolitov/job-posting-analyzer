@@ -1,0 +1,7 @@
+{
+  "name": "@job-posting-analyzer/shared",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Single-source TypeScript types and design tokens shared by functions/, extension/, and web/. Not built or published — consumers import the source files directly.",
+  "license": "PolyForm-Noncommercial-1.0.0"
+}

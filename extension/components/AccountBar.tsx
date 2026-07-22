@@ -9,6 +9,11 @@ import {
   type AccountState,
 } from "../services/accountService";
 
+/** Companion web app origin (specs/004-web-companion-app), injected at build
+ * time via wxt.config.ts's `define` — never hard-coded (Azure Static Web
+ * Apps, not GitHub Pages; see constitution Principle V). */
+declare const WXT_WEB_APP_URL: string;
+
 /** Auto-retry delay for a failed initial load — transient blips (a brief
  * local backend restart, a dropped connection) self-heal without the user
  * having to reload the whole panel. */
@@ -168,6 +173,33 @@ export function AccountBar() {
             >
               {portalPending ? "Opening…" : "Manage subscription"}
             </button>
+          )}
+          {WXT_WEB_APP_URL && (
+            <a
+              href={WXT_WEB_APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open the web app in a new tab"
+              title="Open web app"
+              className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <path d="M15 3h6v6" />
+                <path d="M10 14 21 3" />
+              </svg>
+            </a>
           )}
         </div>
       </div>

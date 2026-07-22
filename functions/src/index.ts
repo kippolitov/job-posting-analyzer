@@ -1,4 +1,5 @@
 import "./analyze-job/index";
+import "./analyze-document/index";
 import "./profile/index";
 import "./jobs/index";
 import "./paddle-webhook/index";
