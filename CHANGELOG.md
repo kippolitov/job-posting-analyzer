@@ -25,6 +25,12 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.31] - 2026-07-22
+
+- Fixes a bug where the AccountBar's "Open web app" link (added in #11) never rendered in any Chrome Web Store build, including the currently-published v0.0.29 and v0.0.30: `release.yml` — the workflow that builds what actually gets uploaded to the CWS — never had `WXT_WEB_APP_URL` added to its build env, unlike `cd.yml` and `ci.yml`. It silently compiled to an empty string and the link's falsy check just skipped rendering it.
+- Adds `WXT_WEB_APP_URL` to `release.yml`'s required-secrets check and its "Build extension" env, matching the other `WXT_*` vars.
+- Adds a build-output verification step (greps for `azurestaticapps.net` in the zipped output) so this class of "silently missing feature" bug fails CI loudly instead of shipping quietly, the same way the existing Azure Function URL check already does.
+
 ## [0.0.30] - 2026-07-22
 
 - Adds `CHANGELOG.md` (Keep a Changelog style), starting with the `[0.0.29]` entry for the 004-web-companion-app release (PR #11): companion web app, document-upload analysis, the Azure Static Web Apps hosting switch, backend auth delta, and the legal/CWS/CI follow-ups from that work. Links to it from README.md.
