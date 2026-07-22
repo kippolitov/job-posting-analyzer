@@ -137,12 +137,43 @@ jobs:
           working-directory: web
           name: web
 
+      - name: Verify required secrets
+        run: |
+          if [ -z "${{ secrets.WEB_API_BASE_URL }}" ]; then
+            echo "ERROR: WEB_API_BASE_URL secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VITE_GOOGLE_OAUTH_CLIENT_ID }}" ]; then
+            echo "ERROR: VITE_GOOGLE_OAUTH_CLIENT_ID secret is not set"
+            exit 1
+          fi
+
       - name: Build
         env:
           VITE_API_BASE_URL: ${{ secrets.WEB_API_BASE_URL }}
           VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GOOGLE_OAUTH_CLIENT_ID }}
         run: npm run build
         working-directory: web
+
+      - name: Verify config baked into web build
+        run: |
+          # Scoped to dist/assets/ (the JS bundle), not all of web/dist/ —
+          # web/public/staticwebapp.config.json's CSP connect-src already
+          # hardcodes azurewebsites.net regardless of build-time env vars,
+          # which made an earlier version of this check pass even with an
+          # empty VITE_API_BASE_URL (verified locally before landing this).
+          echo "Checking build output contains the API base URL..."
+          if ! grep -rq 'azurewebsites.net' web/dist/assets/; then
+            echo "ERROR: API base URL not found in web/dist/assets — VITE_API_BASE_URL was likely empty at build time."
+            exit 1
+          fi
+          echo "Checking build output contains a Google OAuth client ID..."
+          if ! grep -rqE '[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com' web/dist/assets/; then
+            echo "ERROR: No Google OAuth client ID found in web/dist/assets — VITE_GOOGLE_OAUTH_CLIENT_ID was likely"
+            echo "empty at build time (this is the exact bug that broke production sign-in once already)."
+            exit 1
+          fi
+          echo "OK: config correctly baked into the web build"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -208,7 +239,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Download web build (built with real secrets, unlike web-ci's placeholder build)
+      - name: Download web build (this file's web-ci, built with real secrets — not ci.yml's web-ci, which builds with safe placeholders since it never deploys anything)
         uses: actions/download-artifact@v4
         with:
           name: web-dist
