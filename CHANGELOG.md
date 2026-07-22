@@ -25,6 +25,12 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.34] - 2026-07-22
+
+- Fixes the release pipeline retry problem hit on v0.0.33: the run built, tested, packaged, and created the GitHub release successfully, then failed at the last step ("Publish to Chrome Web Store") with `ITEM_NOT_UPDATABLE` (the listing was mid-review for v0.0.32 at the time). A "Re-run failed jobs" then failed differently, at the duplicate-release guard, because that guard and the CWS publish were steps in the *same* job — any re-run always restarts from the top. The workflow's own comment already flagged this as a known limitation.
+- Splits `release.yml`'s single job into `build-and-release` (checkout through packaging + creating the GitHub release, unchanged otherwise) and `publish-chrome-web-store` (`needs: [build-and-release]`, downloads the packaged zip as a build artifact and does the CWS upload/publish). A CWS-side failure can now be retried on its own via "Re-run failed jobs" with zero risk of re-hitting the duplicate-release guard.
+- Also moved the e2e-permissions guard (rejects a build carrying localhost host permissions) earlier, into `build-and-release` before any release is created — a bad build now fails before there's anything for a future retry to get stuck behind.
+
 ## [0.0.33] - 2026-07-22
 
 - Fixes the root cause of "Missing required parameter: client_id" on the production web app: `WEB_API_BASE_URL` and `VITE_GOOGLE_OAUTH_CLIENT_ID` were never created as GitHub secrets, so `cd.yml`'s `web-ci` build (the one that actually gets deployed, unlike `ci.yml`'s `web-ci` which safely falls back to placeholders) silently compiled both to empty strings. Sign-in has been broken since the web app first deployed.
