@@ -1,3 +1,5 @@
+const { themeExtend } = require("../shared/tokens/index.cjs");
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
@@ -6,11 +8,7 @@ module.exports = {
   ],
   darkMode: "class",
   theme: {
-    extend: {
-      maxWidth: {
-        panel: "400px",
-      },
-    },
+    extend: themeExtend,
   },
   plugins: [require("@tailwindcss/typography")],
 };

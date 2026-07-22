@@ -14,6 +14,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("AccountBar", () => {
@@ -149,6 +150,24 @@ describe("AccountBar", () => {
         "noopener,noreferrer"
       )
     );
+  });
+
+  it("offers an 'Open web app' link that opens the companion web app in a new tab", async () => {
+    render(<AccountBar />);
+    await screen.findByLabelText("Plan: Free");
+    const link = screen.getByRole("link", { name: /open the web app in a new tab/i });
+    expect(link).toHaveAttribute("href", "https://web-app.test");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("hides the 'Open web app' link when WXT_WEB_APP_URL is not configured", async () => {
+    vi.stubGlobal("WXT_WEB_APP_URL", "");
+    render(<AccountBar />);
+    await screen.findByLabelText("Plan: Free");
+    expect(
+      screen.queryByRole("link", { name: /open the web app in a new tab/i })
+    ).not.toBeInTheDocument();
   });
 
   it("hides Manage subscription for a free account that never subscribed", async () => {

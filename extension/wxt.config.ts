@@ -33,6 +33,11 @@ export default defineConfig({
     action: {},
   },
   vite: () => ({
+    server: {
+      // Dev server must be able to serve ../shared/ (types + tokens), which
+      // lives outside this package's root (plan.md Project Structure).
+      fs: { allow: [".."] },
+    },
     define: {
       WXT_AZURE_FUNCTION_URL: JSON.stringify(
         process.env.WXT_AZURE_FUNCTION_URL ?? ""
@@ -44,6 +49,11 @@ export default defineConfig({
       WXT_GOOGLE_OAUTH_CLIENT_ID: JSON.stringify(
         process.env.WXT_GOOGLE_OAUTH_CLIENT_ID ?? ""
       ),
+      // Companion web app origin (specs/004-web-companion-app) — Azure
+      // Static Web Apps. Build-time config, not a secret; kept out of source
+      // the same way as the other WXT_* endpoints so an eventual custom
+      // domain is a config change, not a code change.
+      WXT_WEB_APP_URL: JSON.stringify(process.env.WXT_WEB_APP_URL ?? ""),
     },
   }),
 });
