@@ -1,21 +1,29 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.0 → 1.1.0
+Version change: 1.1.0 → 1.2.0
 Modified principles: N/A
 Added sections:
-  - Core Principles: V. Cost Discipline (new) — codifies the "no new Azure
-    resources" constraint that features 002–004 applied ad hoc, reframing the
-    gate as cost (free-tier-first) rather than raw resource count. Adopted so
-    004's hosting switch (GitHub Pages → Azure Static Web Apps Free tier) can
-    close a real header/CSP capability gap without violating cost discipline.
+  - Development Workflow: new "Changelog" bullet — every release (every merge
+    to `main`, which auto-bumps the version and auto-publishes) MUST have an
+    automatically generated changelog entry. Codifies the mechanism already
+    implemented for the 004 release: PR authors add their own bullets to
+    CHANGELOG.md's `## [Unreleased]` section; cd.yml's version-bump job
+    renames it to `## [X.Y.Z] - <date>` in the same commit that bumps the
+    version, so the version-to-changelog link can never be a forgotten manual
+    step. A Development Workflow bullet (peer to the existing "Documentation"
+    bullet), not a new Core Principle — this is a process rule, not an
+    architectural constraint on the level of Cost Discipline (V).
 Removed sections: N/A
 Templates reviewed:
   - .specify/templates/plan-template.md ✅ aligned (Constitution Check section
-    dynamically derives gates from this file — no template edit required)
+    dynamically derives gates from this file — no template edit required;
+    this bullet isn't a new Quality Gate, so no gate list to update)
   - .specify/templates/spec-template.md ✅ aligned (no structural change needed)
   - .specify/templates/tasks-template.md ✅ aligned (no structural change needed)
   - .specify/templates/commands/ — directory absent, skipped
+  - README.md ✅ aligned (already links to CHANGELOG.md, added alongside the
+    file itself)
 Deferred TODOs: None
 -->
 
@@ -138,6 +146,16 @@ by the project maintainer before merge.
   PR and include a full regression test run.
 - **Documentation**: public APIs and CLI commands MUST have updated documentation in the
   same PR that introduces or changes them.
+- **Changelog**: every release MUST have a changelog entry, generated automatically —
+  never a manual, skippable step. Any PR with a user-facing or notable change MUST add
+  its own bullet points (Added/Changed/Fixed/Removed, as applicable) to `CHANGELOG.md`'s
+  `## [Unreleased]` section. Because every merge to `main` auto-bumps the version and
+  publishes a release (`cd.yml`'s version-and-tag job, `release.yml`'s Chrome Web Store
+  publish), that same automation MUST rename `## [Unreleased]` to `## [X.Y.Z] - <date>`
+  in the same commit that bumps the version, then open a fresh empty `[Unreleased]`
+  above it — keeping the changelog and the shipped version permanently in lockstep. A
+  release whose `[Unreleased]` section is empty (a pure CI/infra-only merge) simply gets
+  no changelog section, rather than an empty heading.
 
 ## Governance
 
@@ -159,4 +177,4 @@ satisfied. Any violation MUST be resolved or explicitly justified in writing bef
 **Runtime guidance**: for day-to-day development decisions, refer to the active feature's
 `plan.md` for context and gate details.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-07-21
+**Version**: 1.2.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-07-22

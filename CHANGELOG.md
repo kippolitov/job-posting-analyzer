@@ -24,6 +24,14 @@ changelog section rather than an empty heading.
 
 ## [Unreleased]
 
+### Added
+
+- `CHANGELOG.md` itself, and the `cd.yml` automation that stamps `[Unreleased]`
+  with the version on every merge to `main`.
+- Constitution v1.2.0: a "Changelog" bullet under Development Workflow making
+  the automatic changelog-per-release mechanism above a MUST requirement,
+  not just an implementation detail.
+
 ## [0.0.29] - 2026-07-22
 
 ### Companion web app ([`004-web-companion-app`](specs/004-web-companion-app/))
