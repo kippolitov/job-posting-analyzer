@@ -1,21 +1,39 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.0 → 1.1.0
+Version change: 1.1.0 → 1.2.0
 Modified principles: N/A
 Added sections:
-  - Core Principles: V. Cost Discipline (new) — codifies the "no new Azure
-    resources" constraint that features 002–004 applied ad hoc, reframing the
-    gate as cost (free-tier-first) rather than raw resource count. Adopted so
-    004's hosting switch (GitHub Pages → Azure Static Web Apps Free tier) can
-    close a real header/CSP capability gap without violating cost discipline.
+  - Development Workflow: new "Changelog" bullet — every release (every merge
+    to `main`, which auto-bumps the version and auto-publishes) MUST have an
+    automatically generated changelog entry, with zero manual CHANGELOG.md
+    editing by anyone. `cd.yml`'s version-bump job resolves the merged PR's
+    number from the squash-merge commit message, pulls that PR's title and
+    `## Summary` section via the GitHub API, and inserts it as
+    `## [X.Y.Z] - <date>` in CHANGELOG.md, in the same commit that bumps the
+    version — falling back to the PR title alone if `## Summary` is empty,
+    and skipping the changelog step entirely if no PR number can be resolved
+    (a direct push or unusual merge) rather than guessing. Depends on
+    `.github/pull_request_template.md` (new) prompting every PR for a
+    `## Summary`. A Development Workflow bullet (peer to the existing
+    "Documentation" bullet), not a new Core Principle — this is a process
+    rule, not an architectural constraint on the level of Cost Discipline (V).
+    (Revised in place before first merge: the initial draft of this bullet
+    described a hand-written `## [Unreleased]` section PR authors edited
+    directly; replaced with PR-extraction so nobody — not even the PR author
+    — has to write CHANGELOG.md by hand.)
 Removed sections: N/A
 Templates reviewed:
   - .specify/templates/plan-template.md ✅ aligned (Constitution Check section
-    dynamically derives gates from this file — no template edit required)
+    dynamically derives gates from this file — no template edit required;
+    this bullet isn't a new Quality Gate, so no gate list to update)
   - .specify/templates/spec-template.md ✅ aligned (no structural change needed)
   - .specify/templates/tasks-template.md ✅ aligned (no structural change needed)
   - .specify/templates/commands/ — directory absent, skipped
+  - README.md ✅ aligned (already links to CHANGELOG.md, added alongside the
+    file itself)
+  - .github/pull_request_template.md ✅ added (prompts every PR for the
+    `## Summary` the changelog extraction depends on)
 Deferred TODOs: None
 -->
 
@@ -138,6 +156,17 @@ by the project maintainer before merge.
   PR and include a full regression test run.
 - **Documentation**: public APIs and CLI commands MUST have updated documentation in the
   same PR that introduces or changes them.
+- **Changelog**: every release MUST have a changelog entry, generated automatically —
+  never a manual, skippable step, and never something a PR author has to hand-write.
+  Every PR MUST use `.github/pull_request_template.md`'s `## Summary` section to
+  describe what changed. Because every merge to `main` auto-bumps the version and
+  publishes a release (`cd.yml`'s version-and-tag job, `release.yml`'s Chrome Web Store
+  publish), that same automation MUST resolve the merged PR's number from the
+  squash-merge commit message, pull that PR's title and `## Summary` via the GitHub
+  API, and insert it into `CHANGELOG.md` as `## [X.Y.Z] - <date>` in the same commit
+  that bumps the version — falling back to the PR title alone if `## Summary` is
+  empty, and skipping the changelog step entirely (no entry for that release) if no
+  PR number can be resolved from the commit message, rather than guessing at content.
 
 ## Governance
 
@@ -159,4 +188,4 @@ satisfied. Any violation MUST be resolved or explicitly justified in writing bef
 **Runtime guidance**: for day-to-day development decisions, refer to the active feature's
 `plan.md` for context and gate details.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-07-21
+**Version**: 1.2.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-07-22

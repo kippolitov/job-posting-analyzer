@@ -291,11 +291,104 @@ jobs:
           VERSION=$(jq -r '.version' package.json)
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve the merged PR number from the commit message
+        id: pr
+        run: |
+          set -euo pipefail
+          MSG=$(git log -1 --format=%s)
+          NUMBER=$(echo "$MSG" | grep -oE '\(#[0-9]+\)$' | grep -oE '[0-9]+' || true)
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+          if [ -z "$NUMBER" ]; then
+            echo "No '(#N)' suffix on '$MSG' — not a squash-merged PR, skipping changelog."
+          fi
+
+      - name: Extract changelog entry from the merged PR
+        id: changelog
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          TITLE=$(gh pr view "$PR_NUMBER" --json title -q .title)
+          BODY=$(gh pr view "$PR_NUMBER" --json body -q .body)
+
+          # Everything between "## Summary" and the next "## " heading.
+          SUMMARY=$(printf '%s\n' "$BODY" | awk '/^## Summary/{flag=1; next} /^## /{flag=0} flag')
+          TRIMMED=$(printf '%s\n' "$SUMMARY" | sed '/^[[:space:]]*$/d')
+
+          if [ -z "$TRIMMED" ]; then
+            echo "PR #$PR_NUMBER has no ## Summary content — falling back to its title."
+            ENTRY="- $TITLE"
+          else
+            ENTRY="$SUMMARY"
+          fi
+
+          # Random delimiter: ENTRY is PR-supplied text and must not be able
+          # to fake a line matching a fixed delimiter and truncate itself.
+          DELIM="CHANGELOG_ENTRY_$(openssl rand -hex 8)"
+          {
+            echo "entry<<$DELIM"
+            echo "$ENTRY"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp CHANGELOG.md with this release's entry
+        if: steps.changelog.outputs.changed == 'true'
+        env:
+          # Routed through env: rather than spliced into the script body —
+          # ENTRY originates from a PR title/body, which is untrusted input
+          # (GitHub's own guidance on script-injection via ${{ }}
+          # expressions). As an env var it's just a string value; it is
+          # never re-parsed as shell source. Python, not awk, because
+          # ENTRY is multi-line and awk's `-v` can't reliably hold an
+          # embedded newline across awk implementations (verified locally:
+          # BWK awk errors "newline in string" on macOS; gawk on the
+          # runner might tolerate it, but don't rely on that split).
+          VERSION: ${{ steps.bump.outputs.VERSION }}
+          ENTRY: ${{ steps.changelog.outputs.entry }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import datetime
+          import os
+
+          file = "CHANGELOG.md"
+          version = os.environ["VERSION"]
+          entry = os.environ["ENTRY"]
+          date = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+          anchor = "<!-- new entries are inserted below this line"
+
+          with open(file) as f:
+              lines = f.readlines()
+
+          out = []
+          inserted = False
+          for line in lines:
+              out.append(line)
+              if not inserted and line.startswith(anchor):
+                  out.append("\n")
+                  out.append(f"## [{version}] - {date}\n")
+                  out.append("\n")
+                  out.append(entry.strip() + "\n")
+                  inserted = True
+
+          if not inserted:
+              raise SystemExit(f"anchor comment not found in {file}")
+
+          with open(file, "w") as f:
+              f.writelines(out)
+          PY
+
       - name: Commit and push version bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add extension/package.json extension/package-lock.json
+          if [ "${{ steps.changelog.outputs.changed }}" = "true" ]; then
+            git add CHANGELOG.md
+          fi
           git commit -m "chore: bump version to ${{ steps.bump.outputs.VERSION }} [skip ci]"
           git push
 
