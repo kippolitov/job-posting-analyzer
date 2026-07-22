@@ -316,9 +316,11 @@ describe("savedJobsRepository delete / prune / export", () => {
       [
         "analysis",
         "canonicalUrl",
+        "filename",
         "notes",
         "savedAt",
         "schemaVersion",
+        "source",
         "sourceUrl",
         "status",
         "updatedAt",

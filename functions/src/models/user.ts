@@ -124,6 +124,9 @@ export interface ProfileEntity {
   schemaVersion: number;
 }
 
+/** Discriminates a saved posting's origin (data-model.md §2). */
+export type PostingSource = "url" | "document";
+
 /** `SavedJobs` row — PK sub, RK sha256(canonicalUrl) (data-model.md). */
 export interface SavedJobEntity {
   partitionKey: string;
@@ -140,6 +143,10 @@ export interface SavedJobEntity {
   savedAt: string;
   updatedAt: string;
   schemaVersion: number;
+  /** Absent on rows written before 004 — the repository defaults to "url" on read. */
+  source?: string;
+  /** Absent on rows written before 004 — the repository defaults to "" on read. */
+  filename?: string;
 }
 
 /** Wire shape of a saved job (matches the extension's `SavedJob`). */
@@ -147,6 +154,10 @@ export interface SavedJobPayload {
   schemaVersion: number;
   canonicalUrl: string;
   sourceUrl: string;
+  /** Discriminator (data-model.md §2). Absent/"url" on legacy PUT bodies. */
+  source: PostingSource;
+  /** The uploaded document's original filename; "" for source="url". */
+  filename: string;
   analysis: SavedJobAnalysis;
   status: JobStatus;
   notes: string;
@@ -195,20 +206,43 @@ function isSavedJobAnalysis(value: unknown): value is SavedJobAnalysis {
   return typeof v.model === "string" && typeof v.analyzedAt === "string";
 }
 
+const DOC_CANONICAL_URL_RE = /^doc:[0-9a-f]{64}$/;
+
+/**
+ * Discriminated on `source` (data-model.md §2.2): omitted/"url" validates
+ * exactly as before (isHttpUrl canonicalUrl); "document" requires
+ * canonicalUrl to match `doc:<sha256 hex>` and a non-empty filename, with
+ * sourceUrl allowed to be empty.
+ */
 export function isSavedJobPutBody(body: unknown): body is SavedJobPayload {
   if (typeof body !== "object" || body === null) return false;
   const v = body as Record<string, unknown>;
-  return (
-    typeof v.schemaVersion === "number" &&
-    isHttpUrl(v.canonicalUrl) &&
-    typeof v.sourceUrl === "string" &&
-    isSavedJobAnalysis(v.analysis) &&
-    JOB_STATUSES.includes(v.status as JobStatus) &&
-    typeof v.notes === "string" &&
-    v.notes.length <= NOTES_MAX &&
-    typeof v.savedAt === "string" &&
-    typeof v.updatedAt === "string"
-  );
+  if (
+    typeof v.schemaVersion !== "number" ||
+    typeof v.sourceUrl !== "string" ||
+    !isSavedJobAnalysis(v.analysis) ||
+    !JOB_STATUSES.includes(v.status as JobStatus) ||
+    typeof v.notes !== "string" ||
+    v.notes.length > NOTES_MAX ||
+    typeof v.savedAt !== "string" ||
+    typeof v.updatedAt !== "string"
+  ) {
+    return false;
+  }
+
+  const source = v.source === undefined ? "url" : v.source;
+  if (source === "document") {
+    return (
+      typeof v.canonicalUrl === "string" &&
+      DOC_CANONICAL_URL_RE.test(v.canonicalUrl) &&
+      typeof v.filename === "string" &&
+      v.filename.length > 0
+    );
+  }
+  if (source === "url") {
+    return isHttpUrl(v.canonicalUrl);
+  }
+  return false;
 }
 
 /**

@@ -15,12 +15,14 @@
     "eval:postings": "npx tsx scripts/evalPostings.ts",
     "coverage": "vitest run --coverage"
   },
-  "main": "dist/src/index.js",
+  "main": "dist/functions/src/index.js",
   "dependencies": {
     "@azure/data-tables": "^13.2.2",
     "@azure/functions": "^4.3.0",
     "google-auth-library": "^9.11.0",
-    "openai": "^6.42.0"
+    "mammoth": "^1.12.0",
+    "openai": "^6.42.0",
+    "unpdf": "^1.6.2"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.13.1",
