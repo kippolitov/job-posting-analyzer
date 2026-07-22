@@ -1,6 +1,7 @@
 import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { OAuth2Client } from "google-auth-library";
 import type { AuthenticatedUser } from "../models/user";
+import { corsHeaders, requestOrigin } from "./http";
 import { getOrCreate, normalizeEmail } from "./usersStore";
 
 /**
@@ -59,9 +60,23 @@ interface VerifiedToken {
   emailVerified: boolean;
 }
 
+/**
+ * GOOGLE_OAUTH_CLIENT_IDS (comma-separated) accepts a token minted for
+ * either the extension's client ID or the web app's client ID; falls back
+ * to the single GOOGLE_OAUTH_CLIENT_ID (contracts/web-auth.md, research.md
+ * R3). Signature / iss / exp / email_verified checks are unchanged.
+ */
+function configuredClientIds(): string[] {
+  const raw = process.env.GOOGLE_OAUTH_CLIENT_IDS ?? process.env.GOOGLE_OAUTH_CLIENT_ID;
+  return (raw ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
 async function verifyIdToken(idToken: string): Promise<VerifiedToken> {
-  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
-  if (!clientId) {
+  const clientIds = configuredClientIds();
+  if (clientIds.length === 0) {
     throw new Error("GOOGLE_OAUTH_CLIENT_ID is not configured");
   }
   // verifySignedJwtWithCertsAsync = the internals of verifyIdToken with the
@@ -71,7 +86,7 @@ async function verifyIdToken(idToken: string): Promise<VerifiedToken> {
   const ticket = await oauthClient.verifySignedJwtWithCertsAsync(
     idToken,
     await getGoogleCerts(),
-    [clientId],
+    clientIds,
     GOOGLE_ISSUERS
   );
   const payload = ticket.getPayload();
@@ -95,20 +110,13 @@ function extractBearerToken(request: HttpRequest): string | null {
 function authErrorResponse(
   status: 401 | 403,
   code: "UNAUTHENTICATED" | "NOT_AUTHORIZED",
-  message: string
+  message: string,
+  origin: string | null
 ): HttpResponseInit {
   return {
     status,
-    headers: authCorsHeaders(),
+    headers: corsHeaders(origin),
     jsonBody: { error: { code, message } },
-  };
-}
-
-function authCorsHeaders(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, x-functions-key, Authorization",
   };
 }
 
@@ -127,6 +135,7 @@ export function withAuth(handler: AuthedHandler) {
     }
 
     const token = extractBearerToken(request);
+    const origin = requestOrigin(request);
 
     if (!authRequired()) {
       if (token) {
@@ -148,7 +157,8 @@ export function withAuth(handler: AuthedHandler) {
       return authErrorResponse(
         401,
         "UNAUTHENTICATED",
-        "Sign-in required. Send a Google ID token as a Bearer token."
+        "Sign-in required. Send a Google ID token as a Bearer token.",
+        origin
       );
     }
 
@@ -163,7 +173,8 @@ export function withAuth(handler: AuthedHandler) {
       return authErrorResponse(
         401,
         "UNAUTHENTICATED",
-        "Your session is invalid or has expired. Sign in again."
+        "Your session is invalid or has expired. Sign in again.",
+        origin
       );
     }
 
@@ -171,7 +182,8 @@ export function withAuth(handler: AuthedHandler) {
       return authErrorResponse(
         403,
         "NOT_AUTHORIZED",
-        "Sign-in requires a verified Google email address. Verify your email in your Google Account settings (myaccount.google.com), then try again."
+        "Sign-in requires a verified Google email address. Verify your email in your Google Account settings (myaccount.google.com), then try again.",
+        origin
       );
     }
 
@@ -183,7 +195,7 @@ export function withAuth(handler: AuthedHandler) {
       context.error("Users lookup failed:", err);
       return {
         status: 500,
-        headers: authCorsHeaders(),
+        headers: corsHeaders(origin),
         jsonBody: {
           error: {
             code: "SERVICE_ERROR",
@@ -197,7 +209,8 @@ export function withAuth(handler: AuthedHandler) {
       return authErrorResponse(
         403,
         "NOT_AUTHORIZED",
-        "Your access has been suspended. Contact the developer to request access."
+        "Your access has been suspended. Contact the developer to request access.",
+        origin
       );
     }
 

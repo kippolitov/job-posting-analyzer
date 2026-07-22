@@ -27,6 +27,7 @@ const hybridAnalysis = JSON.parse(
 function makeRequest(body: unknown, method = "POST"): HttpRequest {
   return {
     method,
+    headers: { get: () => null },
     json: () =>
       body instanceof Error ? Promise.reject(body) : Promise.resolve(body),
   } as unknown as HttpRequest;
