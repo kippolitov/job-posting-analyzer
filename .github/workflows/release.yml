@@ -95,6 +95,10 @@ jobs:
             echo "ERROR: WXT_GOOGLE_OAUTH_CLIENT_ID secret is not set"
             exit 1
           fi
+          if [ -z "${{ secrets.WXT_WEB_APP_URL }}" ]; then
+            echo "ERROR: WXT_WEB_APP_URL secret is not set"
+            exit 1
+          fi
 
       - name: Build extension
         env:
@@ -102,10 +106,11 @@ jobs:
           WXT_AZURE_FUNCTION_KEY: ${{ secrets.AZURE_FUNCTION_KEY }}
           WXT_API_BASE_URL: ${{ secrets.WXT_API_BASE_URL }}
           WXT_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.WXT_GOOGLE_OAUTH_CLIENT_ID }}
+          WXT_WEB_APP_URL: ${{ secrets.WXT_WEB_APP_URL }}
         run: npm run build
         working-directory: extension
 
-      - name: Verify URL baked into zipped extension
+      - name: Verify URLs baked into zipped extension
         run: |
           echo "Checking all JS output files for guard string..."
           if grep -rl 'not configured' extension/output/chrome-mv3/; then
@@ -117,7 +122,13 @@ jobs:
             echo "ERROR: Azure function URL not found in background.js after zip"
             exit 1
           fi
-          echo "OK: URL correctly baked in after zip rebuild"
+          echo "Checking build output contains the web app URL..."
+          if ! grep -rq 'azurestaticapps.net' extension/output/chrome-mv3/; then
+            echo "ERROR: Web app URL (WXT_WEB_APP_URL) not found anywhere in the build output —"
+            echo "the AccountBar 'Open web app' link would silently not render (regression from #11)."
+            exit 1
+          fi
+          echo "OK: URLs correctly baked in after zip rebuild"
 
       - name: Create archive
         run: |
