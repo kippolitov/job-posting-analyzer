@@ -25,6 +25,13 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.30] - 2026-07-22
+
+- Adds `CHANGELOG.md` (Keep a Changelog style), starting with the `[0.0.29]` entry for the 004-web-companion-app release (PR #11): companion web app, document-upload analysis, the Azure Static Web Apps hosting switch, backend auth delta, and the legal/CWS/CI follow-ups from that work. Links to it from README.md.
+- **Fully automates every future entry**: `cd.yml`'s version-bump job (which already auto-bumps `extension/package.json` and tags a release on every merge to `main`) now resolves the merged PR's number from the squash-merge commit message, pulls that PR's title + `## Summary` via the GitHub API, and inserts it into `CHANGELOG.md` as `## [X.Y.Z] - <date>` in the same commit that bumps the version. No one — not even the PR author — edits `CHANGELOG.md` by hand. Falls back to the PR title if `## Summary` is empty; skips the changelog step (not the release) if no PR number can be resolved.
+- Adds `.github/pull_request_template.md` so every PR is prompted for `## Summary` — previously just my own habit, now the field the automation actually depends on.
+- **Constitution v1.1.0 → v1.2.0**: a "Changelog" bullet under Development Workflow makes the above a MUST requirement — every release must get an automatically generated entry, and that automation must stay in place.
+
 ## [0.0.29] - 2026-07-22
 
 ### Companion web app ([`004-web-companion-app`](specs/004-web-companion-app/))
