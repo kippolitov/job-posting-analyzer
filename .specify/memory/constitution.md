@@ -6,14 +6,22 @@ Modified principles: N/A
 Added sections:
   - Development Workflow: new "Changelog" bullet — every release (every merge
     to `main`, which auto-bumps the version and auto-publishes) MUST have an
-    automatically generated changelog entry. Codifies the mechanism already
-    implemented for the 004 release: PR authors add their own bullets to
-    CHANGELOG.md's `## [Unreleased]` section; cd.yml's version-bump job
-    renames it to `## [X.Y.Z] - <date>` in the same commit that bumps the
-    version, so the version-to-changelog link can never be a forgotten manual
-    step. A Development Workflow bullet (peer to the existing "Documentation"
-    bullet), not a new Core Principle — this is a process rule, not an
-    architectural constraint on the level of Cost Discipline (V).
+    automatically generated changelog entry, with zero manual CHANGELOG.md
+    editing by anyone. `cd.yml`'s version-bump job resolves the merged PR's
+    number from the squash-merge commit message, pulls that PR's title and
+    `## Summary` section via the GitHub API, and inserts it as
+    `## [X.Y.Z] - <date>` in CHANGELOG.md, in the same commit that bumps the
+    version — falling back to the PR title alone if `## Summary` is empty,
+    and skipping the changelog step entirely if no PR number can be resolved
+    (a direct push or unusual merge) rather than guessing. Depends on
+    `.github/pull_request_template.md` (new) prompting every PR for a
+    `## Summary`. A Development Workflow bullet (peer to the existing
+    "Documentation" bullet), not a new Core Principle — this is a process
+    rule, not an architectural constraint on the level of Cost Discipline (V).
+    (Revised in place before first merge: the initial draft of this bullet
+    described a hand-written `## [Unreleased]` section PR authors edited
+    directly; replaced with PR-extraction so nobody — not even the PR author
+    — has to write CHANGELOG.md by hand.)
 Removed sections: N/A
 Templates reviewed:
   - .specify/templates/plan-template.md ✅ aligned (Constitution Check section
@@ -24,6 +32,8 @@ Templates reviewed:
   - .specify/templates/commands/ — directory absent, skipped
   - README.md ✅ aligned (already links to CHANGELOG.md, added alongside the
     file itself)
+  - .github/pull_request_template.md ✅ added (prompts every PR for the
+    `## Summary` the changelog extraction depends on)
 Deferred TODOs: None
 -->
 
@@ -147,15 +157,16 @@ by the project maintainer before merge.
 - **Documentation**: public APIs and CLI commands MUST have updated documentation in the
   same PR that introduces or changes them.
 - **Changelog**: every release MUST have a changelog entry, generated automatically —
-  never a manual, skippable step. Any PR with a user-facing or notable change MUST add
-  its own bullet points (Added/Changed/Fixed/Removed, as applicable) to `CHANGELOG.md`'s
-  `## [Unreleased]` section. Because every merge to `main` auto-bumps the version and
+  never a manual, skippable step, and never something a PR author has to hand-write.
+  Every PR MUST use `.github/pull_request_template.md`'s `## Summary` section to
+  describe what changed. Because every merge to `main` auto-bumps the version and
   publishes a release (`cd.yml`'s version-and-tag job, `release.yml`'s Chrome Web Store
-  publish), that same automation MUST rename `## [Unreleased]` to `## [X.Y.Z] - <date>`
-  in the same commit that bumps the version, then open a fresh empty `[Unreleased]`
-  above it — keeping the changelog and the shipped version permanently in lockstep. A
-  release whose `[Unreleased]` section is empty (a pure CI/infra-only merge) simply gets
-  no changelog section, rather than an empty heading.
+  publish), that same automation MUST resolve the merged PR's number from the
+  squash-merge commit message, pull that PR's title and `## Summary` via the GitHub
+  API, and insert it into `CHANGELOG.md` as `## [X.Y.Z] - <date>` in the same commit
+  that bumps the version — falling back to the PR title alone if `## Summary` is
+  empty, and skipping the changelog step entirely (no entry for that release) if no
+  PR number can be resolved from the commit message, rather than guessing at content.
 
 ## Governance
 

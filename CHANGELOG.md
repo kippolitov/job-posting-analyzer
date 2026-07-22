@@ -12,25 +12,18 @@ launch that preceded it, see [`specs/003-freemium-premium-tier/`](specs/003-free
 [`specs/001-job-posting-analyzer/`](specs/001-job-posting-analyzer/) and
 [`specs/002-account-persistent-storage/`](specs/002-account-persistent-storage/).
 
-**How this stays current:** every PR with a user-facing or notable change adds
-its own bullet points under `## [Unreleased]` below (Added/Changed/Fixed/
-Removed, whichever apply — see the `[0.0.29]` entry for the shape). On merge
-to `main`, `cd.yml`'s version-bump step automatically renames
-`## [Unreleased]` to `## [X.Y.Z] - <date>` matching the version it just
-tagged, and opens a fresh empty `## [Unreleased]` above it — the same commit
-that bumps `extension/package.json`. If `[Unreleased]` has no entries at
-bump time (a pure CI/infra tweak, say), that release simply gets no
-changelog section rather than an empty heading.
+**How this stays current:** there is no manual editing step. Every PR uses
+[`.github/pull_request_template.md`](.github/pull_request_template.md)'s
+`## Summary` section to describe what changed. On merge to `main`, `cd.yml`'s
+version-bump job resolves the PR number from the squash-merge commit message
+(`<title> (#N)`), fetches that PR's title and `## Summary` via the GitHub API,
+and inserts it as `## [X.Y.Z] - <date>` right below the marker line below —
+the same commit that bumps `extension/package.json`. Falls back to the PR
+title alone if `## Summary` is empty; skips the changelog entirely if no PR
+number can be resolved from the commit message (a direct push, or an
+unusual merge) rather than guessing.
 
-## [Unreleased]
-
-### Added
-
-- `CHANGELOG.md` itself, and the `cd.yml` automation that stamps `[Unreleased]`
-  with the version on every merge to `main`.
-- Constitution v1.2.0: a "Changelog" bullet under Development Workflow making
-  the automatic changelog-per-release mechanism above a MUST requirement,
-  not just an implementation detail.
+<!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
 ## [0.0.29] - 2026-07-22
 
