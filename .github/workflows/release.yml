@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    name: Build and Release Extension
+  build-and-release:
+    name: Build, Package, and Create Release
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,10 +27,8 @@ jobs:
       pull-requests: write
     env:
       TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
-      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+    outputs:
+      version: ${{ steps.validate.outputs.VERSION }}
     steps:
 
       - uses: actions/checkout@v4
@@ -39,6 +37,7 @@ jobs:
           ref: ${{ inputs.tag_name || github.ref_name }}
 
       - name: Validate version matches tag
+        id: validate
         run: |
           PKG_VERSION=$(jq -r '.version' extension/package.json)
           TAG_VERSION="${TAG_NAME#v}"
@@ -47,6 +46,7 @@ jobs:
             exit 1
           fi
           echo "VERSION=$PKG_VERSION" >> "$GITHUB_ENV"
+          echo "VERSION=$PKG_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check for duplicate release
         env:
@@ -130,6 +130,18 @@ jobs:
           fi
           echo "OK: URLs correctly baked in after zip rebuild"
 
+      - name: Verify no e2e-only permissions in build
+        run: |
+          # Store builds must never carry the e2e-only localhost host
+          # permissions (npm run build:e2e); they trigger a manual review
+          # justification. A plain `npm run build` omits them. Checked here,
+          # before any release exists, so a bad build never blocks a retry
+          # behind the duplicate-release guard below.
+          if grep -q '127\.0\.0\.1' extension/output/chrome-mv3/manifest.json; then
+            echo "ERROR: built manifest contains localhost host permissions (e2e build?); refusing to release"
+            exit 1
+          fi
+
       - name: Create archive
         run: |
           ARCHIVE="job-posting-analyzer-v${{ env.VERSION }}.zip"
@@ -149,34 +161,68 @@ jobs:
             --notes "Built from ${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
             "${{ env.ARCHIVE }}"
 
-      # Publishes to the live listing (item kbdecogbebgmeefjkppickfgegbheipc).
-      # Requires all four CHROME_* secrets: the item id plus a Google Cloud
-      # OAuth client + refresh token with the chromewebstore scope. With the
-      # item id unset the step is skipped entirely (forks / private-repo-only
-      # releases); with the id set but credentials incomplete it warns and
-      # skips rather than failing — a failed release cannot simply be re-run,
-      # because the duplicate-release guard above rejects the existing tag.
-      - name: Publish to Chrome Web Store
-        if: env.CHROME_EXTENSION_ID != ''
+      - name: Package Chrome Web Store archive
         run: |
-          if [ -z "$CHROME_CLIENT_ID" ] || [ -z "$CHROME_CLIENT_SECRET" ] || [ -z "$CHROME_REFRESH_TOKEN" ]; then
-            echo "::warning title=Chrome Web Store publish skipped::CHROME_EXTENSION_ID is set but CHROME_CLIENT_ID / CHROME_CLIENT_SECRET / CHROME_REFRESH_TOKEN are missing. v${VERSION} was NOT submitted to the store."
-            exit 0
-          fi
-
-          # Store builds must never carry the e2e-only localhost host
-          # permissions (npm run build:e2e); they trigger a manual review
-          # justification. A plain `npm run build` omits them.
-          if grep -q '127\.0\.0\.1' extension/output/chrome-mv3/manifest.json; then
-            echo "ERROR: built manifest contains localhost host permissions (e2e build?); refusing to upload"
-            exit 1
-          fi
-
           # The Chrome Web Store API requires manifest.json at the zip root;
           # $ARCHIVE above wraps it in a versioned folder for the releases
           # repo, so build a second, flat archive just for this upload.
           CWS_ARCHIVE="chrome-web-store-v${{ env.VERSION }}.zip"
           (cd extension/output/chrome-mv3 && 7za a -tzip "../../../$CWS_ARCHIVE" .)
+          echo "CWS_ARCHIVE=$CWS_ARCHIVE" >> "$GITHUB_OUTPUT"
+        id: package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chrome-web-store-zip
+          retention-days: 5
+          path: ${{ steps.package.outputs.CWS_ARCHIVE }}
+
+  publish-chrome-web-store:
+    name: Publish to Chrome Web Store
+    runs-on: ubuntu-latest
+    needs: [build-and-release]
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.build-and-release.outputs.version }}
+      CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+    # Publishes to the live listing (item kbdecogbebgmeefjkppickfgegbheipc).
+    # A separate job from build-and-release on purpose: that job's
+    # duplicate-release guard means it can never be safely re-run once the
+    # GitHub release exists, but this job (which owns nothing but the CWS
+    # upload) can be re-run on its own via "Re-run failed jobs" — e.g. after
+    # a transient CWS-side rejection like ITEM_NOT_UPDATABLE (item was
+    # mid-review) clears, with no risk of a duplicate-release conflict.
+    # No job-level `if:` needed — the default needs: behavior already skips
+    # this job if build-and-release fails.
+    steps:
+      - name: Skip if Chrome Web Store credentials are not configured
+        id: check
+        run: |
+          if [ -z "$CHROME_EXTENSION_ID" ]; then
+            echo "::notice title=Chrome Web Store publish skipped::CHROME_EXTENSION_ID is not set (fork / private-repo-only release)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$CHROME_CLIENT_ID" ] || [ -z "$CHROME_CLIENT_SECRET" ] || [ -z "$CHROME_REFRESH_TOKEN" ]; then
+            echo "::warning title=Chrome Web Store publish skipped::CHROME_EXTENSION_ID is set but CHROME_CLIENT_ID / CHROME_CLIENT_SECRET / CHROME_REFRESH_TOKEN are missing. v${VERSION} was NOT submitted to the store."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          name: chrome-web-store-zip
+
+      - name: Upload and publish
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          CWS_ARCHIVE="chrome-web-store-v${VERSION}.zip"
 
           npx --yes chrome-webstore-upload-cli@3 upload \
             --source "$CWS_ARCHIVE" \
