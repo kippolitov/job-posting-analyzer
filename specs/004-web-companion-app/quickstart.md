@@ -6,7 +6,7 @@ How to run the new `web/` SPA against the local Functions API and validate every
 
 - Node 20, npm.
 - The existing `functions/` and `extension/` packages install and build (per their READMEs).
-- A **web OAuth client ID** (Google Cloud console → OAuth 2.0 Client, type *Web*, with the local dev origin and the Pages origin as authorized JavaScript origins).
+- A **web OAuth client ID** (Google Cloud console → OAuth 2.0 Client, type *Web*, with the local dev origin and the Azure Static Web Apps origin as authorized JavaScript origins).
 - Azurite for storage integration tests (`functions` already depends on it).
 
 ## One-time setup
@@ -33,15 +33,15 @@ cd functions && npm run azurite &        # local tables
 cd functions && npm start                # Functions host on :7071
 
 # Terminal 2 — web SPA
-cd web && npm run dev                     # Vite on http://localhost:5173  (app at /app/ base, hash routes)
+cd web && npm run dev                     # Vite on http://localhost:5173  (base "/", clean paths)
 ```
 
-Open `http://localhost:5173/app/`.
+Open `http://localhost:5173/`.
 
 ## Validate by user story
 
 ### US1 — Sign in and see the same data (P1)
-1. Signed out, load `/app/` → **landing page** renders, no account data, no API calls fire (check network tab).
+1. Signed out, load `/` → **landing page** renders, no account data, no API calls fire (check network tab).
 2. Sign in with a Google account that has saved postings + a profile in the extension.
 3. Expect the **same** library and profile to appear. Edit a posting in the extension, refresh web → change shows (and vice-versa).
 4. Sign in with an unverified-email Google account → `403` plain-language verify-email message; no data shown.
@@ -86,7 +86,7 @@ cd functions && npm run test:integration      # Azurite: reject-before-increment
 
 # Web unit (filter/sort/search, auth store, save-key) + MSW contract tests
 cd web && npm test
-cd web && npm run build                        # base "/app/" static build → dist/
+cd web && npm run build                        # base "/" static build → dist/
 ```
 
 **Coverage gate**: ≥ 80% on changed modules (constitution QG-2), enforced in `ci.yml`'s new `web/` job and the existing `functions/` job.
@@ -101,4 +101,4 @@ cd web && npm run build                        # base "/app/" static build → d
 ## Deploy (CI/CD)
 
 - `ci.yml` gains a `web-ci` job (lint + test + build) on feature branches.
-- `cd.yml`'s `publish-coverage` (Pages) job also runs `cd web && npm ci && npm run build` and copies `web/dist` → `pages/app/`, so the SPA ships to `<pages-origin>/app/` on merge to `main`. **No Azure resource is added**; the only new backend deploy surface is the `analyze-document` function within the existing Functions app.
+- `cd.yml` gains a `deploy-web` job that ships `web/dist` to a dedicated **Azure Static Web Apps (Free tier)** resource (`job-posting-analyzer-web`, `job-posting-analyzer-rg`, East US 2) via `Azure/static-web-apps-deploy@v1`, authenticated with a deployment token stored as the `AZURE_STATIC_WEB_APPS_API_TOKEN` GitHub secret. This is a deliberate exception to the "no new Azure resources" habit, permitted under constitution Principle V (Cost Discipline) — Free tier, $0, no metered overage at this traffic scale. GitHub Pages' `publish-coverage` job no longer bundles `web-dist`; it continues to serve only the marketing landing page, legal pages, and coverage reports.

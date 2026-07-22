@@ -10,7 +10,9 @@ Phase 0 decisions for `004-web-companion-app`. Each item resolves an open questi
 
 **Alternatives considered**:
 - *404.html redirect fallback* — rejected: pollutes the shared Pages origin's 404 handling; brittle with the coverage site.
-- *Separate Pages site / custom domain for the app* — rejected: new infra/config, contradicts the zero-new-resources posture; `/app/` on the existing site is sufficient.
+- *Separate Pages site / custom domain for the app* — rejected: new infra/config, contradicted the zero-new-resources posture at the time; `/app/` on the existing site was sufficient.
+
+**Addendum (2026-07-21) — superseded by the Azure Static Web Apps hosting switch**: The app now deploys to its own Azure Static Web Apps (Free tier) origin instead of sharing the GitHub Pages origin, under constitution Principle V (Cost Discipline) — the Free tier is $0 and, unlike GitHub Pages, supports real response headers (CSP/HSTS/etc.), closing a security gap on an authenticated surface. Static Web Apps supports a genuine `navigationFallback` rewrite scoped to its own origin (no shared-origin collision, since the app is no longer sharing an origin with the coverage report or legal pages), so the app now uses **clean-path routing** (`BrowserRouter` + `staticwebapp.config.json`'s `navigationFallback`) instead of hash routing. GitHub Pages continues to host the marketing landing page, legal pages, and coverage reports unchanged.
 
 ## R2 — GIS session story: silent re-auth vs prompt; token lifetime
 

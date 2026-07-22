@@ -48,7 +48,7 @@ No data migration job. Reads default a missing `source` to `"url"` and a missing
 |--------|----------|-------|
 | **UploadedDocumentBytes** | Request-scoped, in-memory only | The raw `.docx`/`.pdf` bytes from `request.formData()`. Never written to storage; discarded when the request ends. 10 MB hard cap at the boundary. |
 | **ExtractedText** | Request-scoped | Result of mammoth/unpdf extraction; capped at `MAIN_TEXT_CAP` (40,000) before the orchestrator. Its `sha256` becomes the document identity/`saveKey`. |
-| **DocumentAnalysisResult** (wire, response) | Returned to client, not stored server-side | `{ analysis: JobAnalysisResponse, source: "document", filename: string, saveKey: string, usage: {count,limit,resetsAt,tier} }`. `saveKey = sha256("doc:" + sha256(extractedText))`. The client uses `saveKey` to PUT into `/api/jobs/{saveKey}` if the user chooses to save. |
+| **DocumentAnalysisResult** (wire, response) | Returned to client, not stored server-side | `{ analysis: JobAnalysisResponse, source: "document", filename: string, canonicalUrl: string, saveKey: string, usage: {count,limit,resetsAt,tier} }`. `canonicalUrl = "doc:" + sha256(extractedText)`; `saveKey = sha256(canonicalUrl)`. The client never sees the raw extracted text, so `canonicalUrl` must be returned verbatim for the client to round-trip in the save body — it PUTs into `/api/jobs/{saveKey}` with that exact `canonicalUrl` if the user chooses to save. |
 
 **Retention invariant (FR-025, SC-008)**: after any document request — success, rejection, or mid-way failure — zero document bytes persist. Only a *saved* result persists, and only as the analysis snapshot + `filename` (never the original file); document-sourced rows expose no file download.
 

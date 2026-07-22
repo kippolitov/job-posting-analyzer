@@ -34,7 +34,7 @@ await oauthClient.verifySignedJwtWithCertsAsync(idToken, certs, clientIds, GOOGL
 ## Server side — change 2: CORS origin allowlist
 
 - Current handlers emit `Access-Control-Allow-Origin: *` with **no** `Access-Control-Allow-Credentials` — safe today because the API uses Bearer tokens, not cookies.
-- Add `ALLOWED_ORIGINS` (comma-separated, e.g. the Pages origin) consumed in the shared `services/http.ts` CORS helper:
+- Add `ALLOWED_ORIGINS` (comma-separated, e.g. the Azure Static Web Apps origin — `https://<app>.azurestaticapps.net`, or a custom domain if later added) consumed in the shared `services/http.ts` CORS helper:
   - request `Origin` ∈ allowlist → echo that origin in `Access-Control-Allow-Origin` and add `Vary: Origin`.
   - no `Origin` (extension, server-to-server) or unmatched → preserve current behavior so the extension keeps working.
 - Applies uniformly (shared helper) including the `analyze-document` preflight and response.
@@ -48,4 +48,4 @@ await oauthClient.verifySignedJwtWithCertsAsync(idToken, certs, clientIds, GOOGL
 
 - A valid **web-client** ID token is accepted; a valid **extension-client** ID token is still accepted; a token for an unknown client ID is `401`.
 - An unverified-email Google account is `403 NOT_AUTHORIZED` with the existing verify-your-email message (FR-001, spec US1 scenario 5).
-- A browser request from the Pages origin receives that origin echoed in `Access-Control-Allow-Origin`; the extension (no browser `Origin`) is unaffected.
+- A browser request from the Static Web Apps origin receives that origin echoed in `Access-Control-Allow-Origin`; the extension (no browser `Origin`) is unaffected.

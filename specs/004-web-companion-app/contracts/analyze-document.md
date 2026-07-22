@@ -56,12 +56,13 @@ The single new backend endpoint. Extracts text from an uploaded document server-
   },
   "source": "document",
   "filename": "job-description.pdf",
-  "saveKey": "<sha256 of ('doc:' + sha256(extractedText))>",
+  "canonicalUrl": "doc:<sha256 of extractedText>",
+  "saveKey": "<sha256 of canonicalUrl, i.e. sha256('doc:' + sha256(extractedText))>",
   "usage": { "count": 12, "limit": 50, "resetsAt": "2026-08-01T00:00:00.000Z", "tier": "free" }
 }
 ```
 
-`analysis` is byte-for-byte the same shape as `analyze-job`'s body (identical `JobAnalysisResponse`). The **only** additions are `source`, `filename`, `saveKey`, and the shared `usage` echo.
+`analysis` is byte-for-byte the same shape as `analyze-job`'s body (identical `JobAnalysisResponse`). The additions are `source`, `filename`, `canonicalUrl`, `saveKey`, and the shared `usage` echo. `canonicalUrl` is returned because the client never sees the raw extracted text and so cannot derive `doc:<hash>` itself — it must round-trip the server-computed value verbatim in the `PUT /api/jobs/{saveKey}` body so `saveJob`'s `sha256Hex(canonicalUrl) === key` check passes (data-model.md §2).
 
 ## Error responses
 
