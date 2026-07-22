@@ -149,6 +149,12 @@ cd functions && npm run test:integration   # endpoint/auth/perf tests against Az
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for what shipped in each release.
+
+---
+
 ## License
 
 [PolyForm Noncommercial 1.0.0](LICENSE.md) — you're welcome to read, run, and learn from this code for any noncommercial purpose. Commercial use (including republishing the extension or selling access to it) is not permitted.
