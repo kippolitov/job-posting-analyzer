@@ -13,6 +13,7 @@ import {
   jsonResponse,
   noContent,
   preflightResponse,
+  requestOrigin,
 } from "../services/http";
 import {
   ImmutableFieldError,
@@ -33,24 +34,25 @@ export async function jobsCollectionHandler(
   context: InvocationContext,
   user: AuthenticatedUser
 ): Promise<HttpResponseInit> {
-  if (request.method === "OPTIONS") return preflightResponse();
+  const origin = requestOrigin(request);
+  if (request.method === "OPTIONS") return preflightResponse(origin);
   try {
     const arrangement = request.query.get("arrangement") ?? undefined;
     const status = request.query.get("status") ?? undefined;
     if (arrangement && !ARRANGEMENTS.includes(arrangement as Arrangement)) {
-      return errorResponse(400, "INVALID_REQUEST", "Unknown arrangement filter.");
+      return errorResponse(400, "INVALID_REQUEST", "Unknown arrangement filter.", origin);
     }
     if (status && !JOB_STATUSES.includes(status as JobStatus)) {
-      return errorResponse(400, "INVALID_REQUEST", "Unknown status filter.");
+      return errorResponse(400, "INVALID_REQUEST", "Unknown status filter.", origin);
     }
     const jobs = await listJobs(user.sub, {
       arrangement: arrangement as Arrangement | undefined,
       status: status as JobStatus | undefined,
     });
-    return jsonResponse(200, { jobs });
+    return jsonResponse(200, { jobs }, origin);
   } catch (err) {
     context.error("jobs list failed:", err);
-    return errorResponse(500, "SERVICE_ERROR", "Storage failed. Please try again.");
+    return errorResponse(500, "SERVICE_ERROR", "Storage failed. Please try again.", origin);
   }
 }
 
@@ -60,41 +62,42 @@ export async function jobsItemHandler(
   context: InvocationContext,
   user: AuthenticatedUser
 ): Promise<HttpResponseInit> {
-  if (request.method === "OPTIONS") return preflightResponse();
+  const origin = requestOrigin(request);
+  if (request.method === "OPTIONS") return preflightResponse(origin);
   const key = request.params.key ?? "";
   if (!/^[0-9a-f]{64}$/.test(key)) {
-    return errorResponse(400, "INVALID_REQUEST", "Malformed job key.");
+    return errorResponse(400, "INVALID_REQUEST", "Malformed job key.", origin);
   }
 
   try {
     switch (request.method) {
       case "GET": {
         const job = await getJob(user.sub, key);
-        if (!job) return errorResponse(404, "JOB_NOT_FOUND", "No such saved job.");
-        return jsonResponse(200, job);
+        if (!job) return errorResponse(404, "JOB_NOT_FOUND", "No such saved job.", origin);
+        return jsonResponse(200, job, origin);
       }
       case "PUT": {
         let body: unknown;
         try {
           body = await request.json();
         } catch {
-          return errorResponse(400, "INVALID_REQUEST", "Body must be valid JSON.");
+          return errorResponse(400, "INVALID_REQUEST", "Body must be valid JSON.", origin);
         }
         if (!isSavedJobPutBody(body)) {
-          return errorResponse(400, "INVALID_REQUEST", "Malformed saved-job record.");
+          return errorResponse(400, "INVALID_REQUEST", "Malformed saved-job record.", origin);
         }
         try {
-          return jsonResponse(200, await saveJob(user.sub, key, body, user.tier));
+          return jsonResponse(200, await saveJob(user.sub, key, body, user.tier), origin);
         } catch (err) {
           if (err instanceof KeyMismatchError) {
-            return errorResponse(400, "INVALID_REQUEST", err.message);
+            return errorResponse(400, "INVALID_REQUEST", err.message, origin);
           }
           if (err instanceof LibraryCapError) {
             const action =
               user.tier === "premium"
                 ? "Prune archived postings or export your library to free up space."
                 : "Upgrade to Premium for a 1,000-job library, or remove a posting to save this one.";
-            return errorResponse(409, "LIBRARY_FULL", `${err.message} ${action}`);
+            return errorResponse(409, "LIBRARY_FULL", `${err.message} ${action}`, origin);
           }
           throw err;
         }
@@ -104,34 +107,34 @@ export async function jobsItemHandler(
         try {
           body = await request.json();
         } catch {
-          return errorResponse(400, "INVALID_REQUEST", "Body must be valid JSON.");
+          return errorResponse(400, "INVALID_REQUEST", "Body must be valid JSON.", origin);
         }
         if (!isSavedJobPatchBody(body)) {
-          return errorResponse(400, "INVALID_REQUEST", "Malformed job patch.");
+          return errorResponse(400, "INVALID_REQUEST", "Malformed job patch.", origin);
         }
         try {
           const updated = await patchJob(user.sub, key, body);
           if (!updated) {
-            return errorResponse(404, "JOB_NOT_FOUND", "No such saved job.");
+            return errorResponse(404, "JOB_NOT_FOUND", "No such saved job.", origin);
           }
-          return jsonResponse(200, updated);
+          return jsonResponse(200, updated, origin);
         } catch (err) {
           if (err instanceof ImmutableFieldError) {
-            return errorResponse(400, "INVALID_REQUEST", err.message);
+            return errorResponse(400, "INVALID_REQUEST", err.message, origin);
           }
           throw err;
         }
       }
       case "DELETE": {
         await deleteJob(user.sub, key);
-        return noContent();
+        return noContent(origin);
       }
       default:
-        return errorResponse(405, "INVALID_REQUEST", "Method not allowed.");
+        return errorResponse(405, "INVALID_REQUEST", "Method not allowed.", origin);
     }
   } catch (err) {
     context.error("jobs item failed:", err);
-    return errorResponse(500, "SERVICE_ERROR", "Storage failed. Please try again.");
+    return errorResponse(500, "SERVICE_ERROR", "Storage failed. Please try again.", origin);
   }
 }
 
@@ -141,13 +144,14 @@ export async function jobsExportHandler(
   context: InvocationContext,
   user: AuthenticatedUser
 ): Promise<HttpResponseInit> {
-  if (request.method === "OPTIONS") return preflightResponse();
+  const origin = requestOrigin(request);
+  if (request.method === "OPTIONS") return preflightResponse(origin);
   try {
     const exported = await exportJobs(user.sub);
     return {
       status: 200,
       headers: {
-        ...corsHeaders(),
+        ...corsHeaders(origin),
         "Content-Disposition": 'attachment; filename="saved-jobs.json"',
       },
       // Serialized exactly like the current local exportAll (FR-009).
@@ -155,7 +159,7 @@ export async function jobsExportHandler(
     };
   } catch (err) {
     context.error("jobs export failed:", err);
-    return errorResponse(500, "SERVICE_ERROR", "Export failed. Please try again.");
+    return errorResponse(500, "SERVICE_ERROR", "Export failed. Please try again.", origin);
   }
 }
 
@@ -165,13 +169,14 @@ export async function jobsPruneHandler(
   context: InvocationContext,
   user: AuthenticatedUser
 ): Promise<HttpResponseInit> {
-  if (request.method === "OPTIONS") return preflightResponse();
+  const origin = requestOrigin(request);
+  if (request.method === "OPTIONS") return preflightResponse(origin);
   try {
     let body: unknown;
     try {
       body = await request.json();
     } catch {
-      return errorResponse(400, "INVALID_REQUEST", "Body must be valid JSON.");
+      return errorResponse(400, "INVALID_REQUEST", "Body must be valid JSON.", origin);
     }
     const count = (body as { count?: unknown })?.count;
     if (
@@ -180,20 +185,23 @@ export async function jobsPruneHandler(
       count < 1 ||
       count > 1000
     ) {
-      return errorResponse(400, "INVALID_REQUEST", "count must be an integer 1–1000.");
+      return errorResponse(400, "INVALID_REQUEST", "count must be an integer 1–1000.", origin);
     }
-    return jsonResponse(200, { pruned: await pruneArchived(user.sub, count) });
+    return jsonResponse(200, { pruned: await pruneArchived(user.sub, count) }, origin);
   } catch (err) {
     context.error("jobs prune failed:", err);
-    return errorResponse(500, "SERVICE_ERROR", "Prune failed. Please try again.");
+    return errorResponse(500, "SERVICE_ERROR", "Prune failed. Please try again.", origin);
   }
 }
 
-const preflight = () => ({ status: 204, headers: corsHeaders() });
+const preflight = (request: HttpRequest) => ({
+  status: 204,
+  headers: corsHeaders(requestOrigin(request)),
+});
 
 app.http("jobs-collection", {
   methods: ["GET"],
-  authLevel: "function",
+  authLevel: "anonymous", // withAuth (Google ID token) is the real gate; anonymous so the public web SPA can call this route too
   route: "jobs",
   handler: withAuth(jobsCollectionHandler),
 });
@@ -208,7 +216,7 @@ app.http("jobs-collection-preflight", {
 // the Functions host prefers literal segments over {key}.
 app.http("jobs-export", {
   methods: ["GET"],
-  authLevel: "function",
+  authLevel: "anonymous", // withAuth (Google ID token) is the real gate; anonymous so the public web SPA can call this route too
   route: "jobs/export",
   handler: withAuth(jobsExportHandler),
 });
@@ -221,7 +229,7 @@ app.http("jobs-export-preflight", {
 
 app.http("jobs-prune", {
   methods: ["POST"],
-  authLevel: "function",
+  authLevel: "anonymous", // withAuth (Google ID token) is the real gate; anonymous so the public web SPA can call this route too
   route: "jobs/prune",
   handler: withAuth(jobsPruneHandler),
 });
@@ -234,7 +242,7 @@ app.http("jobs-prune-preflight", {
 
 app.http("jobs-item", {
   methods: ["GET", "PUT", "PATCH", "DELETE"],
-  authLevel: "function",
+  authLevel: "anonymous", // withAuth (Google ID token) is the real gate; anonymous so the public web SPA can call this route too
   route: "jobs/{key}",
   handler: withAuth(jobsItemHandler),
 });

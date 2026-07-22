@@ -2,6 +2,7 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/fu
 import { isAnalyzeJobRequest, MAIN_TEXT_CAP } from "../models/job";
 import type { AuthenticatedUser } from "../models/user";
 import { withAuth, type AuthedHandler } from "../services/auth";
+import { corsHeaders, errorResponse as httpErrorResponse, requestOrigin } from "../services/http";
 import {
   orchestrateJobAnalysis,
   JobSchemaError,
@@ -18,8 +19,9 @@ export async function analyzeJobHandler(
   context: InvocationContext,
   user: AuthenticatedUser
 ): Promise<HttpResponseInit> {
+  const origin = requestOrigin(request);
   if (request.method === "OPTIONS") {
-    return { status: 204, headers: corsHeaders() };
+    return { status: 204, headers: corsHeaders(origin) };
   }
 
   context.log("analyze-job function triggered");
@@ -28,22 +30,24 @@ export async function analyzeJobHandler(
   try {
     body = await request.json();
   } catch {
-    return errorResponse(400, "INVALID_REQUEST", "Request body must be valid JSON.");
+    return httpErrorResponse(400, "INVALID_REQUEST", "Request body must be valid JSON.", origin);
   }
 
   if (!isAnalyzeJobRequest(body)) {
-    return errorResponse(
+    return httpErrorResponse(
       400,
       "INVALID_REQUEST",
-      "Missing or invalid extract: url, title, jsonLd, and mainText are required."
+      "Missing or invalid extract: url, title, jsonLd, and mainText are required.",
+      origin
     );
   }
 
   if (body.extract.mainText.length > MAIN_TEXT_CAP) {
-    return errorResponse(
+    return httpErrorResponse(
       413,
       "EXTRACT_TOO_LARGE",
-      `Page text exceeds the ${MAIN_TEXT_CAP.toLocaleString()}-character limit.`
+      `Page text exceeds the ${MAIN_TEXT_CAP.toLocaleString()}-character limit.`,
+      origin
     );
   }
 
@@ -51,18 +55,19 @@ export async function analyzeJobHandler(
     const result = await orchestrateJobAnalysis(body, user.tier, (message) =>
       context.warn(message)
     );
-    return { status: 200, headers: corsHeaders(), jsonBody: result };
+    return { status: 200, headers: corsHeaders(origin), jsonBody: result };
   } catch (err) {
     if (err instanceof JobSchemaError) {
       context.error("analyze-job schema failure:", err.message);
-      return errorResponse(
+      return httpErrorResponse(
         502,
         "SCHEMA_PARSE_FAILED",
-        "The analysis service returned an unusable result. Please try again."
+        "The analysis service returned an unusable result. Please try again.",
+        origin
       );
     }
     context.error("orchestrateJobAnalysis failed:", err);
-    return errorResponse(500, "SERVICE_ERROR", "Analysis failed. Please try again.");
+    return httpErrorResponse(500, "SERVICE_ERROR", "Analysis failed. Please try again.", origin);
   }
 }
 
@@ -104,15 +109,17 @@ export function withUsageMetering(handler: AuthedHandler): AuthedHandler {
   ): Promise<HttpResponseInit> => {
     if (request.method === "OPTIONS") return handler(request, context, user);
 
+    const origin = requestOrigin(request);
     let usage: CheckAndIncrementResult;
     try {
       usage = await checkAndIncrement(user.sub, user.tier);
     } catch (err) {
       context.error("usage metering check failed:", err);
-      return errorResponse(
+      return httpErrorResponse(
         503,
         "SERVICE_ERROR",
-        "Couldn't verify your usage allowance. Please try again."
+        "Couldn't verify your usage allowance. Please try again.",
+        origin
       );
     }
 
@@ -124,7 +131,7 @@ export function withUsageMetering(handler: AuthedHandler): AuthedHandler {
       const tierLabel = usage.tier === "premium" ? "premium" : "free";
       return {
         status: 429,
-        headers: corsHeaders(),
+        headers: corsHeaders(origin),
         jsonBody: {
           error: {
             code: "USAGE_LIMIT_REACHED",
@@ -154,23 +161,6 @@ export function withUsageMetering(handler: AuthedHandler): AuthedHandler {
   };
 }
 
-function errorResponse(status: number, code: string, message: string): HttpResponseInit {
-  return {
-    status,
-    headers: corsHeaders(),
-    jsonBody: { error: { code, message } },
-  };
-}
-
-function corsHeaders(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, x-functions-key, Authorization",
-  };
-}
-
 app.http("analyze-job", {
   methods: ["POST"],
   authLevel: "function",
@@ -182,5 +172,8 @@ app.http("analyze-job-preflight", {
   methods: ["OPTIONS"],
   authLevel: "anonymous",
   route: "analyze-job",
-  handler: () => ({ status: 204, headers: corsHeaders() }),
+  handler: (request: HttpRequest) => ({
+    status: 204,
+    headers: corsHeaders(requestOrigin(request)),
+  }),
 });

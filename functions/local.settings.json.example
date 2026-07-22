@@ -7,8 +7,14 @@
     "AZURE_OPENAI_API_KEY": "",
     "AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini",
 
-    "//GOOGLE_OAUTH_CLIENT_ID": "OAuth Web-application client ID — the expected `aud` of incoming Google ID tokens (quickstart.md step 1). Same value as the extension's WXT_GOOGLE_OAUTH_CLIENT_ID.",
+    "//GOOGLE_OAUTH_CLIENT_ID": "OAuth Web-application client ID — the expected `aud` of incoming Google ID tokens (quickstart.md step 1). Same value as the extension's WXT_GOOGLE_OAUTH_CLIENT_ID. Fallback used when GOOGLE_OAUTH_CLIENT_IDS is unset.",
     "GOOGLE_OAUTH_CLIENT_ID": "<client-id>.apps.googleusercontent.com",
+
+    "//GOOGLE_OAUTH_CLIENT_IDS": "specs/004-web-companion-app — comma-separated set of accepted `aud` values, so both the extension's client ID and the web app's client ID verify. Takes precedence over GOOGLE_OAUTH_CLIENT_ID when set.",
+    "GOOGLE_OAUTH_CLIENT_IDS": "<extension-client-id>.apps.googleusercontent.com,<web-client-id>.apps.googleusercontent.com",
+
+    "//ALLOWED_ORIGINS": "specs/004-web-companion-app — comma-separated browser Origins to echo in Access-Control-Allow-Origin (+ Vary: Origin). Least-privilege hardening for the web app; the extension (no browser Origin) is unaffected either way. Local Vite dev origin below.",
+    "ALLOWED_ORIGINS": "http://localhost:5173",
 
     "//TABLES_CONNECTION_STRING": "Optional override: Table Storage connection for tables only (falls back to AzureWebJobsStorage). UseDevelopmentStorage=true points tables at Azurite (npm run azurite).",
 
@@ -28,6 +34,6 @@
     "PADDLE_PREMIUM_PRICE_ID": ""
   },
   "Host": {
-    "CORS": "chrome-extension://REPLACE_WITH_EXTENSION_ID"
+    "CORS": "chrome-extension://REPLACE_WITH_EXTENSION_ID,http://localhost:5173"
   }
 }

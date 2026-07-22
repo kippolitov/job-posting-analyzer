@@ -94,6 +94,11 @@ function entityFromPayload(
     savedAt,
     updatedAt,
     schemaVersion: payload.schemaVersion,
+    // Defensive default: callers that construct a payload without going
+    // through isSavedJobPutBody (internal tests, PATCH's echo path) still
+    // persist a valid discriminator (data-model.md §2.3).
+    source: payload.source ?? "url",
+    filename: payload.filename ?? "",
   };
 }
 
@@ -102,6 +107,10 @@ function payloadFromEntity(entity: SavedJobEntity): SavedJobPayload {
     schemaVersion: entity.schemaVersion,
     canonicalUrl: entity.canonicalUrl,
     sourceUrl: entity.sourceUrl,
+    // Back-compat: rows written before 004 have no source/filename columns
+    // at all (data-model.md §2.3) — default rather than surface undefined.
+    source: (entity.source as SavedJobPayload["source"]) ?? "url",
+    filename: entity.filename ?? "",
     analysis: decodeJsonProperty<SavedJobAnalysis>(
       entity.analysisJson,
       {} as SavedJobAnalysis
