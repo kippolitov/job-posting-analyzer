@@ -291,11 +291,42 @@ jobs:
           VERSION=$(jq -r '.version' package.json)
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Stamp CHANGELOG.md [Unreleased] with this version (skip if empty)
+        id: changelog
+        run: |
+          set -euo pipefail
+          FILE=CHANGELOG.md
+          VERSION="${{ steps.bump.outputs.VERSION }}"
+          DATE=$(date -u +%Y-%m-%d)
+
+          # Everything between "## [Unreleased]" and the next "## [" heading.
+          UNRELEASED_BODY=$(awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' "$FILE")
+          TRIMMED=$(printf '%s\n' "$UNRELEASED_BODY" | sed '/^[[:space:]]*$/d')
+
+          if [ -z "$TRIMMED" ]; then
+            echo "CHANGELOG.md [Unreleased] is empty — no changelog section for v$VERSION."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            awk -v version="$VERSION" -v date="$DATE" '
+              /^## \[Unreleased\]/ {
+                print
+                print ""
+                print "## [" version "] - " date
+                next
+              }
+              { print }
+            ' "$FILE" > "$FILE.tmp" && mv "$FILE.tmp" "$FILE"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Commit and push version bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add extension/package.json extension/package-lock.json
+          if [ "${{ steps.changelog.outputs.changed }}" = "true" ]; then
+            git add CHANGELOG.md
+          fi
           git commit -m "chore: bump version to ${{ steps.bump.outputs.VERSION }} [skip ci]"
           git push
 
