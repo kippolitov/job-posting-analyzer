@@ -1,0 +1,95 @@
+{
+  "slug": "ashby-linear",
+  "platform": "Ashby",
+  "note": "Client-rendered React board; posting body arrives after hydration.",
+  "url": "https://jobs.ashbyhq.com/linear/1bfdcabe-aa5f-4999-9a6d-b8a824dd779b",
+  "capturedAt": "2026-07-25T05:54:19.112Z",
+  "timeToReadyMs": 10,
+  "timeToTextMs": 369,
+  "timeToSettleMs": 1005,
+  "readyOnFirstPoll": true,
+  "trace": [
+    {
+      "t": 10,
+      "ready": true,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 266,
+      "ready": true,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 369,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4249,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 473,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4249,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 575,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4249,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 686,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4249,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 793,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4249,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 898,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4249,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 1005,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4249,
+      "jsonLdCount": 1
+    }
+  ],
+  "baseline": {
+    "jsonLdCount": 1,
+    "textLen": 4249,
+    "strategy": "body",
+    "ready": true,
+    "textReady": true,
+    "discovered": [],
+    "signals": {
+      "microdata": 0,
+      "nextData": false,
+      "nuxtData": false,
+      "remixContext": false,
+      "phenomDdo": false,
+      "initialState": false
+    },
+    "head": "Account Executive, Enterprise LocationNorth AmericaEmployment TypeFull timeLocation TypeRemoteDepartmentGTMAt Linear, we're building the product development system for teams and agents. AI is fundamen"
+  },
+  "servedBytes": 39751,
+  "settledBytes": 52228
+}

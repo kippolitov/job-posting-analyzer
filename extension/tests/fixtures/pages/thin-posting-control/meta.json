@@ -1,0 +1,109 @@
+{
+  "slug": "thin-posting-control",
+  "platform": "SmartRecruiters",
+  "note": "TRUE NEGATIVE, not a failure. A stub posting: 2,061 chars in the whole document, 414 in main, stable to 15s. No extraction strategy can rescue it. Guards against 'improvements' that fabricate content on thin pages, and is the correct target for the thin-content error.",
+  "url": "https://jobs.smartrecruiters.com/Visa/744000133907678-sr-manager",
+  "capturedAt": "2026-07-25T05:54:26.293Z",
+  "timeToReadyMs": 327,
+  "timeToTextMs": 327,
+  "timeToSettleMs": 1063,
+  "readyOnFirstPoll": false,
+  "trace": [
+    {
+      "t": 9,
+      "ready": false,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 116,
+      "ready": false,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 222,
+      "ready": false,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 327,
+      "ready": true,
+      "textReady": true,
+      "textLen": 398,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 437,
+      "ready": true,
+      "textReady": true,
+      "textLen": 414,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 539,
+      "ready": true,
+      "textReady": true,
+      "textLen": 414,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 642,
+      "ready": true,
+      "textReady": true,
+      "textLen": 414,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 745,
+      "ready": true,
+      "textReady": true,
+      "textLen": 414,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 854,
+      "ready": true,
+      "textReady": true,
+      "textLen": 414,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 958,
+      "ready": true,
+      "textReady": true,
+      "textLen": 414,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 1063,
+      "ready": true,
+      "textReady": true,
+      "textLen": 414,
+      "jsonLdCount": 0
+    }
+  ],
+  "baseline": {
+    "jsonLdCount": 0,
+    "textLen": 414,
+    "strategy": "semantic",
+    "ready": true,
+    "textReady": true,
+    "discovered": [],
+    "signals": {
+      "microdata": 1,
+      "nextData": false,
+      "nuxtData": false,
+      "remixContext": false,
+      "phenomDdo": false,
+      "initialState": false
+    },
+    "head": "Sr. ManagerFull-timeJob Family Group: Engineering and TechnologyAdditional InformationAll your information will be kept confidential according to EEO guidelines.By clicking the link above or any third"
+  },
+  "servedBytes": 101670,
+  "settledBytes": 156650
+}
