@@ -1,0 +1,5 @@
+# Extraction fixtures are byte-exact captures of live pages, used as a
+# measurement baseline (specs/005-resilient-extraction). Line-ending
+# normalization would silently alter the bytes the extractor is measured
+# against, so store and check them out verbatim.
+extension/tests/fixtures/pages/**/*.html -text

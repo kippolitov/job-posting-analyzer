@@ -1,0 +1,142 @@
+{
+  "slug": "phenom-intuit",
+  "platform": "Phenom People",
+  "note": "The reported failure. Client-hydrated main; extraction succeeds once settled.",
+  "url": "https://jobs.intuit.com/job/new-york/staff-software-engineer/27595/97097980048?cid=seo_google",
+  "capturedAt": "2026-07-25T05:54:13.197Z",
+  "timeToReadyMs": 3314,
+  "timeToTextMs": 3440,
+  "timeToSettleMs": 4883,
+  "readyOnFirstPoll": false,
+  "trace": [
+    {
+      "t": 1165,
+      "ready": false,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 1269,
+      "ready": false,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 3314,
+      "ready": true,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 3440,
+      "ready": true,
+      "textReady": true,
+      "textLen": 24070,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 3568,
+      "ready": true,
+      "textReady": true,
+      "textLen": 24064,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 3689,
+      "ready": true,
+      "textReady": true,
+      "textLen": 24064,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 3841,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11509,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4004,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11844,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4118,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11844,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4253,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11970,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4427,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11970,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4540,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11970,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4654,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11970,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4769,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11970,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 4883,
+      "ready": true,
+      "textReady": true,
+      "textLen": 11970,
+      "jsonLdCount": 1
+    }
+  ],
+  "baseline": {
+    "jsonLdCount": 1,
+    "textLen": 11970,
+    "strategy": "semantic",
+    "ready": true,
+    "textReady": true,
+    "discovered": [
+      {
+        "where": "window.wa",
+        "bytes": 372
+      }
+    ],
+    "signals": {
+      "microdata": 0,
+      "nextData": false,
+      "nuxtData": false,
+      "remixContext": false,
+      "phenomDdo": false,
+      "initialState": false
+    },
+    "head": "Job Search\nSearch Jobs by Keyword\nLocation\nWhen autocomplete results are available use up and down arrows to review and enter to select. Touch device users, explore by touch or with swipe gestures.\nSe"
+  },
+  "servedBytes": 645944,
+  "settledBytes": 399956
+}
