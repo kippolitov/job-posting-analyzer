@@ -1,5 +1,6 @@
 import {
   analyzeJobPage,
+  cancelAnalysis,
   handleActionClick,
   resolveActiveTab,
   trackContentTabs,
@@ -38,6 +39,9 @@ export default defineBackground({
         }
         if (message.type === MessageType.ANALYZE_JOB_PAGE) {
           void analyzeJobPage(message, broadcastToSidePanel);
+        }
+        if (message.type === MessageType.CANCEL_ANALYSIS) {
+          cancelAnalysis(message);
         }
         sendResponse({ received: true });
         return true;

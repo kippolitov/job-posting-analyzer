@@ -165,6 +165,19 @@ export function JobPanel({
 
   const handleCancel = () => {
     cancelledRef.current = true;
+    // Tell the background to actually stop. Until readiness, cancelling only
+    // made the panel ignore the late result — the request was still sent and
+    // the user's allowance still spent. There is now a real window to cancel
+    // inside, so the request must not be sent at all (spec FR-006).
+    if (tabId !== null) {
+      // Promise.resolve so a sendMessage that returns void (older typings, and
+      // the test double) cannot throw on .catch.
+      void Promise.resolve(
+        chrome.runtime.sendMessage({ type: MessageType.CANCEL_ANALYSIS, tabId })
+      ).catch(() => {
+        // Background asleep or already finished — the panel is idle either way.
+      });
+    }
     setView((prev) => ({ ...prev, status: "idle" }));
   };
 

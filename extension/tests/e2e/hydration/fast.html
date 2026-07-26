@@ -1,0 +1,35 @@
+<!doctype html>
+<!--
+  Fast-path readiness fixture (tasks.md T009).
+
+  A shell that hydrates quickly: ~4,000 characters of posting text land at
+  200 ms. Represents the five corpus fixtures that settle in 973-1589 ms, which
+  is the population SC-004 protects — the stability window's cost is charged to
+  them on every analysis, so it must stay small.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Senior Platform Engineer - Fixture Corp</title>
+  </head>
+  <body>
+    <nav>Home Jobs Teams About</nav>
+    <main id="posting"></main>
+    <footer>© Fixture Corp</footer>
+
+    <script>
+      const PARAGRAPH =
+        "We are hiring a Senior Platform Engineer to own our build and deploy " +
+        "tooling. You will design continuous integration pipelines, reduce " +
+        "build times, and partner with product teams on release readiness. " +
+        "Requirements include five years of backend experience, fluency in " +
+        "TypeScript or Go, and comfort operating production services. This " +
+        "role is hybrid, three days per week in our Austin office. ";
+
+      setTimeout(() => {
+        const body = PARAGRAPH.repeat(Math.ceil(4000 / PARAGRAPH.length));
+        document.getElementById("posting").textContent = body.slice(0, 4000);
+      }, 200);
+    </script>
+  </body>
+</html>

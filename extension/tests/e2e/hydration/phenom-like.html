@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  Slow-hydration readiness fixture (tasks.md T010).
+
+  Mirrors the measured phenom-intuit profile (research R1): text starts landing
+  at ~3,400 ms and keeps growing until ~4,300 ms, ending near 11,900 characters.
+
+  This is the fixture that makes FR-002 concrete. Returning at the first moment
+  text clears 300 characters captures roughly 3% of this posting, which is why
+  readiness keys on stability rather than on a threshold crossing. The captured
+  snapshots cannot express this: a saved DOM is ready by construction.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Staff Software Engineer - Fixture People</title>
+  </head>
+  <body>
+    <nav>Job Search Search Jobs by Keyword Location</nav>
+    <main id="posting"></main>
+
+    <script>
+      const CHUNK =
+        "The Staff Software Engineer will lead architecture for our payments " +
+        "platform, mentor engineers across three teams, and set technical " +
+        "direction for service decomposition. Responsibilities include design " +
+        "review, incident command rotation, and roadmap planning with product " +
+        "partners. Qualifications: eight years building distributed systems, " +
+        "deep knowledge of relational data modeling, and a track record of " +
+        "shipping large migrations without downtime. ";
+
+      // Growing chunks across the 3,400 - 4,300 ms window, ending at ~11,900.
+      const TARGET = 11900;
+      const START = 3400;
+      const END = 4300;
+      const STEPS = 10;
+
+      let text = "";
+      for (let step = 1; step <= STEPS; step += 1) {
+        const at = START + ((END - START) * (step - 1)) / (STEPS - 1);
+        const upTo = Math.round((TARGET * step) / STEPS);
+        setTimeout(() => {
+          while (text.length < upTo) text += CHUNK;
+          document.getElementById("posting").textContent = text.slice(0, upTo);
+        }, at);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<!--
+  Budget-expiry readiness fixture (tasks.md T011).
+
+  A shell that never yields posting text. Guards the other half of FR-003: the
+  readiness loop must give up *within* its budget rather than hanging, and must
+  report budgetExpired so the error copy can say "the page was still loading"
+  instead of "this page has no content" (FR-005).
+
+  The spinner below mutates on a timer on purpose. A readiness loop driven only
+  by "has the DOM changed" would keep re-attempting forever here; the hard
+  budget is what stops it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Loading - Fixture Board</title>
+  </head>
+  <body>
+    <nav>Fixture Board</nav>
+    <main id="posting"><span id="spinner">Loading</span></main>
+
+    <script>
+      let dots = 0;
+      setInterval(() => {
+        dots = (dots + 1) % 4;
+        document.getElementById("spinner").textContent = "Loading" + ".".repeat(dots);
+      }, 150);
+    </script>
+  </body>
+</html>

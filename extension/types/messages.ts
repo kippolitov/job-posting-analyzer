@@ -4,6 +4,7 @@ export const MessageType = {
   GET_ACTIVE_TAB: "GET_ACTIVE_TAB",
   ACTIVE_TAB_CHANGED: "ACTIVE_TAB_CHANGED",
   ANALYZE_JOB_PAGE: "ANALYZE_JOB_PAGE",
+  CANCEL_ANALYSIS: "CANCEL_ANALYSIS",
   JOB_ANALYSIS_RESULT: "JOB_ANALYSIS_RESULT",
   JOB_ANALYSIS_ERROR: "JOB_ANALYSIS_ERROR",
 } as const;
@@ -47,6 +48,20 @@ export interface AnalyzeJobPageMessage {
   cachedOnly?: boolean;
 }
 
+/**
+ * Panel → background: abandon the in-flight analysis for this tab.
+ *
+ * Until readiness, cancelling was purely cosmetic — the panel ignored the late
+ * result via cancelledRef while the background still sent the analysis request
+ * and spent the user's allowance. With up to 6 s of readiness waiting ahead of
+ * the model call there is now a real window to cancel inside, so the request
+ * must actually not be sent (spec FR-006).
+ */
+export interface CancelAnalysisMessage {
+  type: typeof MessageType.CANCEL_ANALYSIS;
+  tabId: number;
+}
+
 export interface JobAnalysisResultMessage {
   type: typeof MessageType.JOB_ANALYSIS_RESULT;
   analysis: JobAnalysis;
@@ -69,5 +84,6 @@ export type ExtensionMessage =
   | GetActiveTabMessage
   | ActiveTabChangedMessage
   | AnalyzeJobPageMessage
+  | CancelAnalysisMessage
   | JobAnalysisResultMessage
   | JobAnalysisErrorMessage;
