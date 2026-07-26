@@ -85,6 +85,14 @@ its `onClicked` handler carries its own `activeTab` grant, which is what makes
 "Analyze selection" work without the panel being open. Learned selectors never
 leave the browser (spec FR-033).
 
+The learned selector reaches the extractor as an **argument**, not by reading
+storage from inside it: `jobFlow` calls `learnedSelectors.get(host)` and passes
+the result via `chrome.scripting.executeScript({ func: extractPage, args: [{
+learnedSelector }] })` (the call site at `jobFlow.ts:231` passes no `args`
+today). `extractPage` therefore stays free of `chrome.*` and of a second copy of
+the store's semantics, and `touch` / `recordMiss` stay in `learnedSelectors.ts`
+where they are testable in jsdom.
+
 **Scale/Scope**: 6 corpus fixtures (2 platform gaps accepted: iCIMS, and
 SmartRecruiters beyond a stub). ~200 learned hosts per user. One new panel
 surface (paste composer), one new in-page overlay (picker), one context-menu item.
@@ -202,7 +210,7 @@ Each story is independently shippable and independently measurable.
 |---|---|---|---|
 | 1 | Readiness (P1) | Async extractor, corrected predicate, 6 s budget, "still loading" error copy | SC-001, SC-003; synthetic hydration fixtures |
 | 2 | Signals + containers (P2) | Scorer, microdata harvest, `structuredSources` wire field, **evidence haystack fix** | SC-002; Playwright over corpus |
-| 3 | Paste (P3) | `PostingSource: "paste"`, persistent third tab, draft retention | SC-007 |
+| 3 | Paste (P3) | `PostingSource: "paste"`, persistent **header action button** + paste composer (FR-017a: a sibling of the tablist, never a tab), draft retention | SC-007 |
 | 4 | Page scoping + learned hosts (P4) | Picker overlay, `contextMenus` + selection reader, shared selector generation, storage, options controls | SC-008, SC-008a, SC-008b, SC-009 |
 
 Phase 2 must not ship without the evidence-haystack change in the same commit —
