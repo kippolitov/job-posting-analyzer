@@ -16,11 +16,16 @@ export type {
 } from "../../shared/types/job";
 export { JOB_STATUSES, ARRANGEMENTS } from "../../shared/types/job";
 
+/** Discriminates a saved posting's origin. Absent/"url" for every save the extension made before this feature. */
+export type PostingSource = "url" | "document" | "paste";
+
 /** A persisted posting in the saved-jobs library. */
 export interface SavedJob {
   schemaVersion: number;
   canonicalUrl: string;
   sourceUrl: string;
+  /** Absent means "url" — every pre-005 saved job (FR-020). */
+  source?: PostingSource;
   analysis: import("../../shared/types/job").JobAnalysisResponse;
   status: import("../../shared/types/job").JobStatus;
   notes: string;

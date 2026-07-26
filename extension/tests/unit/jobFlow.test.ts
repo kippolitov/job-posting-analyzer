@@ -1,9 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  analyzeJobPage,
+  analyzeScopedRegion,
+  cancelAnalysis,
   handleActionClick,
   resolveActiveTab,
   trackContentTabs,
 } from "../../services/jobFlow";
+import { learnedSelectors } from "../../services/learnedSelectors";
+import { postJobAnalysis } from "../../services/jobAnalysisClient";
+import { installMemoryStorage } from "./helpers/memoryStorage";
+import { MessageType } from "../../types/messages";
+
+vi.mock("../../services/learnedSelectors", () => ({
+  learnedSelectors: {
+    get: vi.fn(),
+    put: vi.fn(),
+    touch: vi.fn(),
+    recordMiss: vi.fn(),
+    clear: vi.fn(),
+    clearAll: vi.fn(),
+    list: vi.fn(),
+  },
+}));
+vi.mock("../../services/jobAnalysisClient", () => ({
+  postJobAnalysis: vi.fn(),
+}));
 
 function stubActiveTab(tab: Partial<chrome.tabs.Tab> | undefined): void {
   vi.mocked(chrome.tabs.query).mockResolvedValue(
@@ -253,5 +275,306 @@ describe("jobFlow — trackContentTabs broadcasts", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(broadcasts).toEqual([]);
+  });
+});
+
+describe("jobFlow — analyzeJobPage learned-selector wiring (FR-028, FR-029, T076)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(chrome.tabs.get).mockResolvedValue({
+      id: 5,
+      url: "https://jobs.example.com/posting/1",
+    } as chrome.tabs.Tab);
+  });
+
+  function stubExtraction(raw: {
+    url: string;
+    strategy: string;
+    learnedSelectorMissed: boolean;
+    mainText?: string;
+  }): void {
+    vi.mocked(chrome.scripting.executeScript).mockResolvedValue([
+      {
+        result: {
+          url: raw.url,
+          title: "A posting",
+          jsonLd: [],
+          structuredSources: [],
+          mainText: raw.mainText ?? "A genuine posting body. ".repeat(20),
+          extractedAt: "2026-07-04T12:00:00Z",
+          provenance: {
+            strategy: raw.strategy,
+            attempts: 1,
+            elapsedMs: 10,
+            budgetExpired: false,
+            learnedSelectorMissed: raw.learnedSelectorMissed,
+          },
+        },
+      },
+    ] as never);
+  }
+
+  it("looks up the learned selector for the tab's host before injection", async () => {
+    vi.mocked(learnedSelectors.get).mockResolvedValue(null);
+    stubExtraction({
+      url: "https://jobs.example.com/posting/1",
+      strategy: "semantic",
+      learnedSelectorMissed: false,
+    });
+
+    await analyzeJobPage({ type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 }, vi.fn());
+
+    expect(learnedSelectors.get).toHaveBeenCalledWith("jobs.example.com");
+  });
+
+  it("passes the resolved selector into extractPage's args", async () => {
+    vi.mocked(learnedSelectors.get).mockResolvedValue({
+      host: "jobs.example.com",
+      selector: ".job-body",
+      learnedAt: "2026-01-01T00:00:00Z",
+      lastUsedAt: "2026-01-01T00:00:00Z",
+      consecutiveMisses: 0,
+    });
+    stubExtraction({
+      url: "https://jobs.example.com/posting/1",
+      strategy: "learned-selector",
+      learnedSelectorMissed: false,
+    });
+
+    await analyzeJobPage({ type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 }, vi.fn());
+
+    expect(chrome.scripting.executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({ args: [{ learnedSelector: ".job-body" }] })
+    );
+  });
+
+  it("calls touch(host) when the learned selector was used successfully", async () => {
+    vi.mocked(learnedSelectors.get).mockResolvedValue(null);
+    stubExtraction({
+      url: "https://jobs.example.com/posting/1",
+      strategy: "learned-selector",
+      learnedSelectorMissed: false,
+    });
+
+    await analyzeJobPage({ type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 }, vi.fn());
+
+    expect(learnedSelectors.touch).toHaveBeenCalledWith("jobs.example.com");
+    expect(learnedSelectors.recordMiss).not.toHaveBeenCalled();
+  });
+
+  it("calls recordMiss(host) exactly once when the learned selector missed, never touch", async () => {
+    vi.mocked(learnedSelectors.get).mockResolvedValue(null);
+    stubExtraction({
+      url: "https://jobs.example.com/posting/1",
+      strategy: "semantic",
+      learnedSelectorMissed: true,
+    });
+
+    await analyzeJobPage({ type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 }, vi.fn());
+
+    expect(learnedSelectors.recordMiss).toHaveBeenCalledWith("jobs.example.com");
+    expect(learnedSelectors.recordMiss).toHaveBeenCalledTimes(1);
+    expect(learnedSelectors.touch).not.toHaveBeenCalled();
+  });
+
+  it("calls neither touch nor recordMiss on an ordinary automatic extraction", async () => {
+    vi.mocked(learnedSelectors.get).mockResolvedValue(null);
+    stubExtraction({
+      url: "https://jobs.example.com/posting/1",
+      strategy: "semantic",
+      learnedSelectorMissed: false,
+    });
+
+    await analyzeJobPage({ type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 }, vi.fn());
+
+    expect(learnedSelectors.touch).not.toHaveBeenCalled();
+    expect(learnedSelectors.recordMiss).not.toHaveBeenCalled();
+  });
+
+  it("proceeds without a learned selector when the tab's host cannot be resolved ahead of extraction", async () => {
+    vi.mocked(chrome.tabs.get).mockRejectedValue(new Error("no access yet"));
+    stubExtraction({
+      url: "https://jobs.example.com/posting/1",
+      strategy: "semantic",
+      learnedSelectorMissed: false,
+    });
+
+    await expect(
+      analyzeJobPage({ type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 }, vi.fn())
+    ).resolves.toBeUndefined();
+    expect(learnedSelectors.get).not.toHaveBeenCalled();
+    expect(chrome.scripting.executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({ args: [{ learnedSelector: undefined }] })
+    );
+  });
+});
+
+describe("jobFlow — cancel then immediately re-trigger (FR-006c, T094)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    installMemoryStorage("session");
+    vi.mocked(chrome.tabs.get).mockResolvedValue({
+      id: 5,
+      url: "https://jobs.example.com/posting/1",
+    } as chrome.tabs.Tab);
+    vi.mocked(learnedSelectors.get).mockResolvedValue(null);
+    vi.mocked(postJobAnalysis).mockResolvedValue({
+      isJobPosting: true,
+      title: "A posting",
+      company: null,
+      location: null,
+      arrangement: "unspecified",
+      arrangementConfidence: "none",
+      arrangementEvidence: null,
+      daysInOffice: null,
+      daysRemote: null,
+      remoteRestrictions: null,
+      salary: null,
+      seniority: "unspecified",
+      techStack: [],
+      fit: null,
+      model: "gpt-4o-mini",
+      analyzedAt: "2026-07-04T12:00:04Z",
+    });
+  });
+
+  it("a fresh analysis right after a cancel completes normally — no lockout, no cooldown, no leftover generation mismatch", async () => {
+    vi.mocked(chrome.scripting.executeScript).mockResolvedValue([
+      {
+        result: {
+          url: "https://jobs.example.com/posting/1",
+          title: "A posting",
+          jsonLd: [],
+          structuredSources: [],
+          mainText: "A genuine posting body. ".repeat(20),
+          extractedAt: "2026-07-04T12:00:00Z",
+          provenance: {
+            strategy: "semantic",
+            attempts: 1,
+            elapsedMs: 10,
+            budgetExpired: false,
+            learnedSelectorMissed: false,
+          },
+        },
+      },
+    ] as never);
+
+    // Cancel a would-be in-flight attempt for this tab...
+    cancelAnalysis({ type: MessageType.CANCEL_ANALYSIS, tabId: 5 });
+
+    // ...then immediately re-trigger. This is a brand-new call — analyzeJobPage
+    // reads the CURRENT generation at its own start, so it is never born
+    // already-cancelled by the bump above.
+    const broadcasts: unknown[] = [];
+    await analyzeJobPage(
+      { type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 },
+      (m) => broadcasts.push(m)
+    );
+
+    expect(broadcasts.length).toBeGreaterThan(0);
+    const result = broadcasts[0] as { type: string };
+    // A full, normal result — not silently suppressed as a stale generation.
+    expect(result.type).not.toBe(MessageType.JOB_ANALYSIS_ERROR);
+  });
+
+  it("repeated cancel/re-trigger cycles never accumulate a lockout", async () => {
+    vi.mocked(chrome.scripting.executeScript).mockResolvedValue([
+      {
+        result: {
+          url: "https://jobs.example.com/posting/1",
+          title: "A posting",
+          jsonLd: [],
+          structuredSources: [],
+          mainText: "A genuine posting body. ".repeat(20),
+          extractedAt: "2026-07-04T12:00:00Z",
+          provenance: {
+            strategy: "semantic",
+            attempts: 1,
+            elapsedMs: 10,
+            budgetExpired: false,
+            learnedSelectorMissed: false,
+          },
+        },
+      },
+    ] as never);
+
+    for (let i = 0; i < 5; i += 1) {
+      cancelAnalysis({ type: MessageType.CANCEL_ANALYSIS, tabId: 5 });
+    }
+
+    const broadcasts: unknown[] = [];
+    await analyzeJobPage(
+      { type: MessageType.ANALYZE_JOB_PAGE, tabId: 5 },
+      (m) => broadcasts.push(m)
+    );
+
+    const result = broadcasts[0] as { type: string };
+    expect(result.type).toBe(MessageType.JOB_ANALYSIS_RESULT);
+  });
+});
+
+describe("jobFlow — no selector, host, or scoped content reaches the backend (FR-033, contracts §4, T081)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("a scoped-region analysis request carries no selector or host field anywhere in its payload", async () => {
+    vi.mocked(chrome.tabs.get).mockResolvedValue({
+      id: 9,
+      url: "https://jobs.example.com/posting/42",
+    } as chrome.tabs.Tab);
+    vi.mocked(postJobAnalysis).mockResolvedValue({
+      isJobPosting: true,
+      title: "Engineer",
+      company: null,
+      location: null,
+      arrangement: "unspecified",
+      arrangementConfidence: "none",
+      arrangementEvidence: null,
+      daysInOffice: null,
+      daysRemote: null,
+      remoteRestrictions: null,
+      salary: null,
+      seniority: "unspecified",
+      techStack: [],
+      fit: null,
+      model: "gpt-4o-mini",
+      analyzedAt: "2026-07-04T12:00:04Z",
+    });
+
+    await analyzeScopedRegion(
+      {
+        type: MessageType.ANALYZE_SCOPED_REGION,
+        tabId: 9,
+        text: "A scoped job posting body. ".repeat(20),
+        selector: "main .job-description-secret-path",
+        mechanism: "picked",
+      },
+      vi.fn()
+    );
+
+    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
+    const [request] = vi.mocked(postJobAnalysis).mock.calls[0]!;
+    const requestJson = JSON.stringify(request);
+    // The learned-selector STRING must never appear anywhere in the
+    // transmitted request. (The page's own URL, which naturally contains its
+    // host, is unrelated and expected — FR-033 is about the learned-selector
+    // mechanism's own data, not about hiding the page being analyzed.)
+    expect(requestJson).not.toContain("job-description-secret-path");
+    expect(request.extract).not.toHaveProperty("selector");
+    expect(request.extract).not.toHaveProperty("learnedSelector");
+    expect(request.extract).not.toHaveProperty("provenance");
+  });
+
+  it("learnedSelectors is never imported by the request-building modules (jobAnalysisClient)", async () => {
+    // A static check that the request layer has no path to a selector/host
+    // even in principle: jobAnalysisClient does not import learnedSelectors.
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const source = fs.readFileSync(
+      path.join(__dirname, "../../services/jobAnalysisClient.ts"),
+      "utf-8"
+    );
+    expect(source).not.toContain("learnedSelectors");
   });
 });

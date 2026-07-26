@@ -278,4 +278,97 @@ describe("JobPanel", () => {
     expect(stored!.status).toBe("interested");
     expect(stored!.sourceUrl).toBe("https://example.com/jobs/1?utm_source=x");
   });
+
+  describe("paste composer (spec FR-017)", () => {
+    it("opens the composer, exposing aria-pressed, and disables the tabs (FR-017a, FR-017b)", async () => {
+      render(<JobPanel tabId={null} />);
+      const pasteButton = screen.getByRole("button", { name: "Paste text" });
+      expect(pasteButton).toHaveAttribute("aria-pressed", "false");
+
+      await userEvent.click(pasteButton);
+      expect(pasteButton).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("region", { name: "Paste a job posting" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "This Page" })).toBeDisabled();
+      expect(screen.getByRole("tab", { name: "Saved" })).toBeDisabled();
+    });
+
+    it("Escape closes the composer and returns focus to the header button (FR-017b)", async () => {
+      render(<JobPanel tabId={null} />);
+      const pasteButton = screen.getByRole("button", { name: "Paste text" });
+      await userEvent.click(pasteButton);
+      const textarea = screen.getByRole("textbox", { name: "Pasted job posting text" });
+      textarea.focus();
+
+      await userEvent.keyboard("{Escape}");
+      expect(
+        screen.queryByRole("region", { name: "Paste a job posting" })
+      ).not.toBeInTheDocument();
+      expect(pasteButton).toHaveFocus();
+    });
+
+    it("preserves the draft across closing and reopening the composer (FR-017c)", async () => {
+      render(<JobPanel tabId={null} />);
+      await userEvent.click(screen.getByRole("button", { name: "Paste text" }));
+      const textarea = screen.getByRole("textbox", { name: "Pasted job posting text" });
+      await userEvent.type(textarea, "A pasted posting");
+
+      await userEvent.keyboard("{Escape}");
+      await userEvent.click(screen.getByRole("button", { name: "Paste text" }));
+      expect(
+        screen.getByRole("textbox", { name: "Pasted job posting text" })
+      ).toHaveValue("A pasted posting");
+    });
+
+    it("sends ANALYZE_PASTED_TEXT with the draft text on submit", async () => {
+      render(<JobPanel tabId={null} />);
+      await userEvent.click(screen.getByRole("button", { name: "Paste text" }));
+      const longText = "A genuine job posting description. ".repeat(10);
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "Pasted job posting text" }),
+        longText
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Analyze" }));
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        type: MessageType.ANALYZE_PASTED_TEXT,
+        text: longText,
+        assumeJobPosting: false,
+      });
+    });
+
+    it("renders the result on PASTE_ANALYSIS_RESULT without touching the This Page view", async () => {
+      render(<JobPanel tabId={null} />);
+      await userEvent.click(screen.getByRole("button", { name: "Paste text" }));
+
+      dispatch({
+        type: MessageType.PASTE_ANALYSIS_RESULT,
+        analysis,
+        canonicalUrl: "paste:" + "a".repeat(64),
+        saved: null,
+      });
+      expect(screen.getByText("Senior Backend Engineer")).toBeInTheDocument();
+
+      await userEvent.keyboard("{Escape}");
+      expect(screen.getByRole("button", { name: "Analyze this page" })).toBeInTheDocument();
+    });
+
+    it("saves a paste-sourced analysis with source 'paste' and an empty sourceUrl", async () => {
+      render(<JobPanel tabId={null} />);
+      await userEvent.click(screen.getByRole("button", { name: "Paste text" }));
+      const canonicalUrl = "paste:" + "b".repeat(64);
+      dispatch({
+        type: MessageType.PASTE_ANALYSIS_RESULT,
+        analysis,
+        canonicalUrl,
+        saved: null,
+      });
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await screen.findByText(/Saved to your library/);
+
+      const { jobStorage } = await import("../../services/jobStorage");
+      const stored = await jobStorage.get(canonicalUrl);
+      expect(stored).not.toBeNull();
+      expect(stored!.source).toBe("paste");
+      expect(stored!.sourceUrl).toBe("");
+    });
+  });
 });

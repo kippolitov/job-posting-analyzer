@@ -99,7 +99,7 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   const lines = [
     "You are a precise job-posting analyzer. Extract structured facts from the page content.",
     "Rules:",
-    "- JSON-LD JobPosting values are trusted ground truth for title, company, location, and salary unless the body text contradicts them; when the body contradicts JSON-LD, follow the body.",
+    "- JSON-LD and microdata JobPosting values are trusted ground truth for title, company, location, and salary unless the body text contradicts them; when the body contradicts structured data, follow the body. Where JSON-LD and microdata disagree with each other, prefer JSON-LD.",
     "- NEVER invent a work arrangement or day counts. If the posting does not state or clearly imply the arrangement, answer arrangement=\"unspecified\" with arrangementConfidence=\"none\" and arrangementEvidence=null.",
     "- arrangementEvidence MUST be a verbatim substring of the provided content — copy it exactly, never paraphrase.",
     "- arrangementConfidence is \"explicit\" when the arrangement is stated outright, \"inferred\" when derived from indirect wording (inference still requires a verbatim evidence quote).",
@@ -140,6 +140,9 @@ function buildUserMessage(req: AnalyzeJobRequest): string {
   if (req.extract.jsonLd.length > 0) {
     parts.push(`JSON-LD JobPosting data:\n${JSON.stringify(req.extract.jsonLd)}`);
   }
+  for (const source of req.extract.structuredSources ?? []) {
+    parts.push(`Structured data (${source.kind}):\n${JSON.stringify(source.data)}`);
+  }
   parts.push(`Page title: ${req.extract.title}`);
   parts.push(`Page content:\n${req.extract.mainText}`);
   return parts.join("\n\n");
@@ -158,7 +161,7 @@ function validateEvidence(
   if (payload.arrangement === "unspecified") return payload;
 
   const haystack = normalizeWhitespace(
-    `${JSON.stringify(req.extract.jsonLd)} ${req.extract.title} ${req.extract.mainText}`
+    `${JSON.stringify(req.extract.jsonLd)} ${JSON.stringify(req.extract.structuredSources ?? [])} ${req.extract.title} ${req.extract.mainText}`
   );
   const evidence = payload.arrangementEvidence
     ? normalizeWhitespace(payload.arrangementEvidence)
