@@ -46,6 +46,7 @@ function renderTab(
 ) {
   return render(
     <ThisPageTab
+      tabId={1}
       view={view}
       onAnalyze={handlers?.onAnalyze ?? noop}
       onCancel={handlers?.onCancel ?? noop}
@@ -176,6 +177,67 @@ describe("ThisPageTab", () => {
     expect(screen.getByRole("button", { name: "Paste text instead" })).toBeInTheDocument();
   });
 
+  it("offers 'Analyze a region' as a secondary action alongside Retry and paste (FR-007b, T090)", () => {
+    renderTab({
+      ...baseView,
+      status: "error",
+      analysis: null,
+      error: {
+        code: "thin-content",
+        message: "Not enough page content to analyze.",
+        action: "Open the full job posting page, then re-analyze.",
+        retryable: true,
+      },
+    });
+    const region = screen.getByRole("button", { name: "Analyze a region" });
+    expect(region).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("disables both scoping affordances with a stated, cause-specific reason on a no-access page, pointing at paste (FR-036a, T064, T104)", () => {
+    renderTab({
+      ...baseView,
+      status: "error",
+      analysis: null,
+      error: {
+        code: "no-access",
+        message: "The extension doesn't have permission to read this page.",
+        action: "Click the extension icon to grant access.",
+        retryable: false,
+      },
+    });
+    const region = screen.getByRole("button", { name: "Analyze a region" });
+    expect(region).toBeDisabled();
+    expect(region).toHaveAttribute("aria-describedby", "region-disabled-reason");
+    const reason = document.getElementById("region-disabled-reason");
+    expect(reason).toHaveTextContent(/can't read this page/i);
+    expect(reason).toHaveTextContent(/paste/i);
+  });
+
+  it("opens the region list when 'Analyze a region' is clicked from an error state", async () => {
+    const user = userEvent.setup();
+    renderTab({
+      ...baseView,
+      status: "error",
+      analysis: null,
+      error: {
+        code: "thin-content",
+        message: "Not enough page content to analyze.",
+        action: "Open the full job posting page, then re-analyze.",
+        retryable: true,
+      },
+    });
+    await user.click(screen.getByRole("button", { name: "Analyze a region" }));
+    expect(await screen.findByRole("region", { name: "Regions on this page" })).toBeInTheDocument();
+  });
+
+  it("also offers 'Analyze a region' from a successful-but-wrong ready state (FR-023)", () => {
+    renderTab(baseView);
+    expect(
+      screen.getByRole("button", { name: /Wrong region\? Analyze a region/ })
+    ).toBeEnabled();
+  });
+
   it("shows the learned-region badge when strategy is learned-selector (FR-032)", () => {
     renderTab({
       ...baseView,
@@ -269,6 +331,7 @@ describe("ThisPageTab", () => {
     const onReanalyze = vi.fn();
     render(
       <ThisPageTab
+        tabId={1}
         view={{
           ...baseView,
           cached: true,
@@ -302,6 +365,7 @@ describe("ThisPageTab", () => {
     const onUpgrade = vi.fn();
     render(
       <ThisPageTab
+        tabId={1}
         view={{
           ...baseView,
           status: "error",

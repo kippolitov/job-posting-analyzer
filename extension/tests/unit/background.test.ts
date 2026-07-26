@@ -184,6 +184,7 @@ describe("background entrypoint", () => {
     vi.mocked(readLiveSelection).mockResolvedValue({
       ok: false,
       reason: "This part of the page can't be scoped.",
+      cause: "unscopeable",
     });
 
     const addListener = chrome.contextMenus.onClicked.addListener as ReturnType<typeof vi.fn>;
@@ -202,6 +203,46 @@ describe("background entrypoint", () => {
     expect(broadcastPayload).toMatchObject({
       type: MessageType.JOB_ANALYSIS_ERROR,
       error: { message: "This part of the page can't be scoped." },
+    });
+  });
+
+  it("'Analyze selection' distinguishes an unscopeable selection from an empty one with different action text (FR-036a, T107)", async () => {
+    vi.mocked(readLiveSelection).mockResolvedValue({
+      ok: false,
+      reason: "No text is selected on the page.",
+      cause: "empty",
+    });
+    const addListener = chrome.contextMenus.onClicked.addListener as ReturnType<typeof vi.fn>;
+    const onClicked = addListener.mock.calls[0]![0] as (
+      info: chrome.contextMenus.OnClickData,
+      tab?: chrome.tabs.Tab
+    ) => void;
+    onClicked(
+      { menuItemId: "analyze-selection" } as chrome.contextMenus.OnClickData,
+      { id: 11, windowId: 4 } as chrome.tabs.Tab
+    );
+
+    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalled());
+    const [broadcastPayload] = vi.mocked(chrome.runtime.sendMessage).mock.calls.at(-1)!;
+    expect(broadcastPayload).toMatchObject({
+      error: { action: "Select the posting text on the page, then try again." },
+    });
+
+    vi.mocked(chrome.runtime.sendMessage).mockClear();
+    vi.mocked(readLiveSelection).mockResolvedValue({
+      ok: false,
+      reason: "This part of the page can't be scoped.",
+      cause: "unscopeable",
+    });
+    onClicked(
+      { menuItemId: "analyze-selection" } as chrome.contextMenus.OnClickData,
+      { id: 11, windowId: 4 } as chrome.tabs.Tab
+    );
+
+    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalled());
+    const [secondPayload] = vi.mocked(chrome.runtime.sendMessage).mock.calls.at(-1)!;
+    expect(secondPayload).toMatchObject({
+      error: { action: "Try a different part of the page, or paste the text instead." },
     });
   });
 });

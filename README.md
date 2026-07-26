@@ -22,6 +22,7 @@ A companion **web app** (hosted on Azure Static Web Apps) signs in with the same
 | **Saved library** | Save postings with status and notes; deduplicated by canonicalized URL; export and import as JSON; soft cap of 1,000 with prune-at-cap |
 | **Account sync** | Google sign-in via `chrome.identity`; data saved before sign-in is offered a one-time migration into the account |
 | **Web companion app** | Sign in on the web with the same Google account to browse/search/filter/sort/compare your library, edit your profile, and analyze a job posting from an uploaded `.docx`/`.pdf` |
+| **Resilient extraction** | Waits for a hydrating page to finish rendering before reading it, scores containers instead of guessing three fixed selectors, and never gets permanently stuck: paste the posting text directly, hand-pick or select the right part of the page when extraction gets it wrong, and — once corrected — that site is always analyzed correctly from then on |
 
 ---
 
@@ -47,6 +48,8 @@ A companion **web app** (hosted on Azure Static Web Apps) signs in with the same
 
 **Billing never trusts the client.** Checkout transactions are created server-side with the verified account identity in `custom_data`; tier changes happen only when a Paddle webhook arrives with a valid HMAC signature over the raw body (replay-windowed, rotation-tolerant). The extension can ask for a checkout URL — it can never assert a tier. Free-tier metering is enforced in the same request path that does the work, so an exhausted allowance is a clear "resets on <date>" state, never a silent failure.
 
+**Extraction waits, then degrades honestly.** `extractPage` runs a bounded readiness loop (6 s budget, a short stability window once text clears the usable minimum) before reading a hydrating SPA, instead of grabbing whatever's on screen at click time. A text-density/link-density scorer replaces a fixed three-selector guess for picking the right container. When automatic extraction still gets it wrong, three escape hatches exist: paste the posting text directly (no page involved), hand-pick a region with the pointer, or select text and use "Analyze selection" from the right-click menu — and a correction the user accepts is remembered per-site in `chrome.storage.local` (never transmitted) so the next posting on that board extracts correctly with no further action. State-blob harvesting (scanning `window.__NEXT_DATA__` and friends for a posting payload) was evaluated and deliberately **not** built — see `extension/tests/fixtures/pages/README.md` finding 3 — because no fixture in the measurement corpus had posting content recoverable only that way; don't re-propose it without new evidence.
+
 ---
 
 ## AI-assisted workflow
@@ -63,6 +66,7 @@ Every feature lives in `specs/`:
 - **[`002-account-persistent-storage`](specs/002-account-persistent-storage/)** — Google sign-in, allowlisting (since retired), server-side profiles and saved postings, migration
 - **[`003-freemium-premium-tier`](specs/003-freemium-premium-tier/)** — self-serve signup, free-tier metering, Premium subscription via Paddle (checkout, webhooks, customer portal), legacy-allowlist migration
 - **[`004-web-companion-app`](specs/004-web-companion-app/)** — the `web/` SPA (shared library/profile/account views, search/filter/sort/compare), document-upload analysis (`POST /api/analyze-document`), and the two-line backend auth delta (`aud` set + CORS allowlist) that lets it call the same API as the extension
+- **[`005-resilient-extraction`](specs/005-resilient-extraction/)** — readiness-aware extraction for hydrating SPAs, a text-density/link-density container scorer, structured-data (JSON-LD + microdata) harvesting, a paste-text escape hatch, and hand-scoped regions (pointer pick or selection) with per-site learned corrections
 
 Each feature carries its full paper trail: `spec.md` (user stories and acceptance scenarios), `plan.md` (stack and architecture decisions), `tasks.md` (dependency-ordered tickets), plus `research.md`, `data-model.md`, API `contracts/`, and a `quickstart.md`. Every decision is auditable because it's in a file — not buried in a chat log.
 

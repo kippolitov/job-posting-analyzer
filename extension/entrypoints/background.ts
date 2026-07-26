@@ -49,12 +49,20 @@ export default defineBackground({
         const tabId = tab.id as number;
         const selection = await readLiveSelection(tabId);
         if (!selection.ok) {
+          // FR-036a: cause-specific wording, not one generic message — an
+          // empty selection is fixed by selecting again; a shadow-root or
+          // cross-origin-iframe selection never can be, so it points at the
+          // one path that does work instead (paste).
+          const action =
+            selection.cause === "unscopeable"
+              ? "Try a different part of the page, or paste the text instead."
+              : "Select the posting text on the page, then try again.";
           broadcastToSidePanel({
             type: MessageType.JOB_ANALYSIS_ERROR,
             error: {
               code: "thin-content",
               message: selection.reason,
-              action: "Select the posting text on the page, then try again.",
+              action,
               retryable: false,
             },
             fallback: null,
