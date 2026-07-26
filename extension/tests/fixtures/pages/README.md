@@ -88,3 +88,40 @@ The correct outcome is the thin-content error.
   that have since expired and the timings move with network conditions. Phenom's
   time-to-text was stable across 5 runs (3408–3600 ms); treat single-run numbers
   from other fixtures as indicative.
+
+## Rescore — current extractor against the frozen snapshots above (`npm run corpus:rescore`, 2026-07-26)
+
+`corpus:rescore` (T008a) replays the **current** `extractPage` over the same
+`settled.html` snapshots the baseline table above was captured from — it is
+the only one of the two scoreboards that can observe a change to
+`pageExtractor.ts`. `corpus:baseline`'s numbers are frozen at capture time and
+never move; do not expect them to.
+
+| fixture | text (baseline) | text (now) | strategy (baseline) | strategy (now) |
+|---|---|---|---|---|
+| ashby-linear | 4249 | 4249 | body | scored |
+| greenhouse-discord | 10960 | 10960 | semantic | semantic |
+| lever-palantir | 4867 | 4648 | body | scored |
+| phenom-intuit | 11970 | 11970 | semantic | semantic |
+| thin-posting-control | 414 | 414 | semantic | semantic |
+| workday-nvidia | 4369 | 4125 | body | scored |
+
+- **Body-fallback container: 3/6 → 0/6** (SC-002's ≤1/6 target). Every fixture
+  that fell through to `document.body` now resolves via the FR-012 scorer
+  (`strategy: "scored"`) instead.
+- **Selected text shrank on 2/6** (lever-palantir −219 chars, workday-nvidia
+  −244 chars) — both shrink only by the cookie-consent banner and the
+  skip-link/footer chrome the scorer's noise penalty was built to exclude, not
+  by losing posting content. No fixture shrank below what SC-002 treats as a
+  regression.
+- **greenhouse-discord and phenom-intuit are byte-for-byte unchanged**
+  (FR-013's regression pair, research R3) — the two fixtures the semantic path
+  already handled correctly are untouched by the scorer.
+- **"predicate passed before text" has no post-change counterpart.** That
+  baseline metric is derived from capture-time page timings
+  (`timeToTextMs > timeToReadyMs`), not from extractor behavior — see T028. No
+  code change in this feature can move it; re-running `corpus:baseline` and
+  expecting a different number is a category error.
+- Re-capturing the corpus (`captureCorpus.ts`) invalidates **both** columns —
+  the baseline is a snapshot of what live boards served on 2026-07-25, and the
+  rescore is measured against those exact bytes.

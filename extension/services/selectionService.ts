@@ -23,6 +23,13 @@ export interface LiveSelectionResult {
 export interface LiveSelectionFailure {
   ok: false;
   reason: string;
+  /**
+   * FR-036a requires cause-specific wording, not one generic message: an
+   * empty selection is fixable by selecting again; a shadow-root or
+   * cross-origin-iframe selection ("unscopeable") never is, no matter how
+   * many times the user re-selects.
+   */
+  cause: "empty" | "unscopeable";
 }
 
 export type LiveSelectionOutcome = LiveSelectionResult | LiveSelectionFailure;
@@ -89,7 +96,7 @@ export function readLiveSelectionInPage(): LiveSelectionOutcome {
   const selection = window.getSelection();
   const text = selection ? selection.toString() : "";
   if (!selection || selection.rangeCount === 0 || text.trim().length === 0) {
-    return { ok: false, reason: "No text is selected on the page." };
+    return { ok: false, reason: "No text is selected on the page.", cause: "empty" };
   }
 
   const range = selection.getRangeAt(0);
@@ -105,6 +112,7 @@ export function readLiveSelectionInPage(): LiveSelectionOutcome {
     return {
       ok: false,
       reason: "This part of the page can't be scoped.",
+      cause: "unscopeable",
     };
   }
 
@@ -122,9 +130,14 @@ export async function readLiveSelection(tabId: number): Promise<LiveSelectionOut
       (injection?.result as LiveSelectionOutcome | undefined) ?? {
         ok: false,
         reason: "Couldn't read the selection on this page.",
+        cause: "empty",
       }
     );
   } catch {
-    return { ok: false, reason: "Couldn't read the selection on this page." };
+    return {
+      ok: false,
+      reason: "Couldn't read the selection on this page.",
+      cause: "empty",
+    };
   }
 }

@@ -7,6 +7,19 @@ import { JobPanel } from "../../components/JobPanel/JobPanel";
 import { MessageType } from "../../types/messages";
 import type { ExtensionMessage } from "../../types/messages";
 import type { JobAnalysis } from "../../types/job";
+import { pickerService } from "../../services/pickerService";
+
+vi.mock("../../services/pickerService", () => ({
+  pickerService: {
+    beginSession: vi.fn(async () => {}),
+    listCandidates: vi.fn(async () => []),
+    highlightCandidate: vi.fn(async () => {}),
+    clearPickerHighlight: vi.fn(async () => {}),
+    resolveCandidateText: vi.fn(),
+    startPointerPick: vi.fn(),
+    cancelPointerPick: vi.fn(async () => {}),
+  },
+}));
 
 // jobStorage is server-backed since 002; run it against the contract-faithful
 // fake API instead of chrome.storage.
@@ -344,6 +357,7 @@ describe("JobPanel", () => {
         analysis,
         canonicalUrl: "paste:" + "a".repeat(64),
         saved: null,
+        strategy: "paste",
       });
       expect(screen.getByText("Senior Backend Engineer")).toBeInTheDocument();
 
@@ -360,6 +374,7 @@ describe("JobPanel", () => {
         analysis,
         canonicalUrl,
         saved: null,
+        strategy: "paste",
       });
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
       await screen.findByText(/Saved to your library/);
@@ -369,6 +384,138 @@ describe("JobPanel", () => {
       expect(stored).not.toBeNull();
       expect(stored!.source).toBe("paste");
       expect(stored!.sourceUrl).toBe("");
+    });
+
+    it("falls back to an excerpt of the pasted text as the title when analysis produced none (FR-020a)", async () => {
+      render(<JobPanel tabId={null} />);
+      await userEvent.click(screen.getByRole("button", { name: "Paste text" }));
+      const draft =
+        "A fully remote backend engineering role focused on distributed systems and reliability work. ".repeat(
+          4
+        );
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "Pasted job posting text" }),
+        draft
+      );
+
+      const canonicalUrl = "paste:" + "c".repeat(64);
+      dispatch({
+        type: MessageType.PASTE_ANALYSIS_RESULT,
+        analysis: { ...analysis, title: null },
+        canonicalUrl,
+        saved: null,
+        strategy: "paste",
+      });
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      await screen.findByText(/Saved to your library/);
+
+      const { jobStorage } = await import("../../services/jobStorage");
+      const stored = await jobStorage.get(canonicalUrl);
+      expect(stored!.analysis.title).not.toBeNull();
+      expect(stored!.analysis.title).not.toBe("");
+      expect(stored!.analysis.title).not.toMatch(/^paste:/);
+      expect(stored!.analysis.title).toContain("A fully remote backend engineering role");
+    });
+  });
+
+  describe("region scoping (spec FR-023, FR-026, FR-026a, T095, T105)", () => {
+    it("commits a picked region: shows analyzing immediately, bypasses to ANALYZE_SCOPED_REGION, and re-runs the same region on Retry after a failure", async () => {
+      vi.mocked(pickerService.listCandidates).mockResolvedValue([
+        { selector: "main", label: "Main content", textLength: 500, excerpt: "excerpt" },
+      ]);
+      vi.mocked(pickerService.resolveCandidateText).mockResolvedValue({
+        ok: true,
+        text: "the picked region's text",
+      });
+
+      render(<JobPanel tabId={7} />);
+      dispatch({
+        type: MessageType.JOB_ANALYSIS_RESULT,
+        analysis,
+        canonicalUrl: "https://example.com/jobs/1",
+        sourceUrl: "https://example.com/jobs/1",
+        multiplePostings: false,
+        cached: false,
+        saved: null,
+      });
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /Wrong region\? Analyze a region/ })
+      );
+      await screen.findByRole("listbox");
+      await userEvent.keyboard("{Enter}");
+
+      // T095: the indicator appears synchronously with the commit, not only
+      // once a response arrives.
+      expect(await screen.findByRole("status")).toBeInTheDocument();
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        type: MessageType.ANALYZE_SCOPED_REGION,
+        tabId: 7,
+        text: "the picked region's text",
+        selector: "main",
+        mechanism: "picked",
+      });
+
+      vi.mocked(chrome.runtime.sendMessage).mockClear();
+      dispatch({
+        type: MessageType.JOB_ANALYSIS_ERROR,
+        error: {
+          code: "service-error",
+          message: "The analysis service encountered an error.",
+          action: "Try again.",
+          retryable: true,
+        },
+        fallback: null,
+        canonicalUrl: "https://example.com/jobs/1",
+        sourceUrl: "https://example.com/jobs/1",
+      });
+
+      await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      // T105: Retry re-runs against the SAME committed region, not a normal
+      // page re-extraction.
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        type: MessageType.ANALYZE_SCOPED_REGION,
+        tabId: 7,
+        text: "the picked region's text",
+        selector: "main",
+        mechanism: "picked",
+      });
+    });
+
+    it("clears the pending scoped region on navigation, so a later Retry does a normal page analysis", async () => {
+      vi.mocked(pickerService.listCandidates).mockResolvedValue([
+        { selector: "main", label: "Main content", textLength: 500, excerpt: "excerpt" },
+      ]);
+      vi.mocked(pickerService.resolveCandidateText).mockResolvedValue({
+        ok: true,
+        text: "the picked region's text",
+      });
+
+      const { rerender } = render(<JobPanel tabId={7} navigationId={0} />);
+      dispatch({
+        type: MessageType.JOB_ANALYSIS_RESULT,
+        analysis,
+        canonicalUrl: "https://example.com/jobs/1",
+        sourceUrl: "https://example.com/jobs/1",
+        multiplePostings: false,
+        cached: false,
+        saved: null,
+      });
+      await userEvent.click(
+        screen.getByRole("button", { name: /Wrong region\? Analyze a region/ })
+      );
+      await screen.findByRole("listbox");
+      await userEvent.keyboard("{Enter}");
+      await screen.findByRole("status");
+
+      rerender(<JobPanel tabId={7} navigationId={1} />);
+      vi.mocked(chrome.runtime.sendMessage).mockClear();
+      await userEvent.click(screen.getByRole("button", { name: "Analyze this page" }));
+
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: MessageType.ANALYZE_JOB_PAGE })
+      );
     });
   });
 });

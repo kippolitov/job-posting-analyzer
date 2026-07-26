@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   analyzeJobPage,
+  analyzePastedText,
   analyzeScopedRegion,
   cancelAnalysis,
   handleActionClick,
@@ -576,5 +577,48 @@ describe("jobFlow — no selector, host, or scoped content reaches the backend (
       "utf-8"
     );
     expect(source).not.toContain("learnedSelectors");
+  });
+});
+
+describe("jobFlow — analyzePastedText records its strategy (FR-035, T082)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("broadcasts PASTE_ANALYSIS_RESULT with strategy 'paste'", async () => {
+    vi.mocked(postJobAnalysis).mockResolvedValue({
+      isJobPosting: true,
+      title: "Engineer",
+      company: null,
+      location: null,
+      arrangement: "unspecified",
+      arrangementConfidence: "none",
+      arrangementEvidence: null,
+      daysInOffice: null,
+      daysRemote: null,
+      remoteRestrictions: null,
+      salary: null,
+      seniority: "unspecified",
+      techStack: [],
+      fit: null,
+      model: "gpt-4o-mini",
+      analyzedAt: "2026-07-04T12:00:04Z",
+    });
+    const broadcast = vi.fn();
+
+    await analyzePastedText(
+      {
+        type: MessageType.ANALYZE_PASTED_TEXT,
+        text: "A pasted job posting body. ".repeat(20),
+      },
+      broadcast
+    );
+
+    expect(broadcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.PASTE_ANALYSIS_RESULT,
+        strategy: "paste",
+      })
+    );
   });
 });

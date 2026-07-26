@@ -6,6 +6,7 @@ import { PasteComposer } from "./PasteComposer";
 import type { JobView } from "./ThisPageTab";
 import type { PasteView } from "./PasteComposer";
 import { jobStorage } from "../../services/jobStorage";
+import { excerptOf } from "../../lib/textExcerpt";
 import { startCheckout } from "../../services/accountService";
 import { MessageType } from "../../types/messages";
 import type { ExtensionMessage } from "../../types/messages";
@@ -69,6 +70,17 @@ export function JobPanel({
   const viewStatusRef = useRef(view.status);
   viewStatusRef.current = view.status;
 
+  // T105: if a scoped (picked) analysis fails after the region was
+  // committed, Retry must re-run against that SAME region rather than
+  // silently falling back to automatic extraction — the user already
+  // corrected the extractor once. Cleared on navigation (a new page has no
+  // committed region) and overwritten by the next scoped commit. A
+  // selection-mechanism scoped analysis (the context-menu path) is never
+  // tracked here: it is issued directly by the background script, and by
+  // the time an error could show, the live page selection it depended on
+  // may no longer exist — there is nothing stable left to retry against.
+  const pendingScopedRegionRef = useRef<{ text: string; selector: string } | null>(null);
+
   // Paste (spec FR-017): draft and result state live here, at the panel
   // level, so they survive the composer unmounting/remounting on close/
   // reopen (FR-017c) and are untouched by the navigation-reset effect below
@@ -98,12 +110,19 @@ export function JobPanel({
   const handleSavePaste = async () => {
     if (!pasteView.analysis || !pasteView.canonicalUrl) return;
     const now = new Date().toISOString();
+    // FR-020a: list surfaces must never show a blank title, a URL-shaped
+    // placeholder, or the raw paste:<sha256> key for a paste-sourced
+    // posting that extraction didn't title — an excerpt of what was
+    // actually pasted is always available and always meaningful.
+    const analysis = pasteView.analysis.title
+      ? pasteView.analysis
+      : { ...pasteView.analysis, title: excerptOf(pasteDraft) };
     const job: SavedJob = {
       schemaVersion: 1,
       canonicalUrl: pasteView.canonicalUrl,
       sourceUrl: "",
       source: "paste",
-      analysis: pasteView.analysis,
+      analysis,
       status: "interested",
       notes: "",
       savedAt: now,
@@ -165,8 +184,43 @@ export function JobPanel({
     if (navigationId === navigationRef.current) return;
     navigationRef.current = navigationId;
     cancelledRef.current = true;
+    pendingScopedRegionRef.current = null;
     setView(INITIAL_VIEW);
   }, [navigationId]);
+
+  // FR-026/FR-026a: re-runs analysis against a hand-picked region, bypassing
+  // the cache (jobFlow.ts's analyzeScopedRegion always does). FR-007a/T095:
+  // the analyzing indicator must appear within 300ms of ANY analysis
+  // trigger, not just a page load, so this sets it synchronously exactly
+  // like requestAnalysis does, before the message is even sent.
+  const analyzeRegion = useCallback(
+    (result: { text: string; selector: string }) => {
+      if (tabId === null) return;
+      cancelledRef.current = false;
+      pendingScopedRegionRef.current = result;
+      setView((prev) => ({ ...prev, status: "analyzing", error: null }));
+      void chrome.runtime.sendMessage({
+        type: MessageType.ANALYZE_SCOPED_REGION,
+        tabId,
+        text: result.text,
+        selector: result.selector,
+        mechanism: "picked",
+      });
+    },
+    [tabId]
+  );
+
+  // Used for both idle's "Analyze this page" and the error card's Retry.
+  // Idle is only ever reached right after a navigation reset, which just
+  // cleared pendingScopedRegionRef above, so the branch below is only live
+  // for an error that followed a scoped commit (T105).
+  const retryAnalysis = useCallback(() => {
+    if (pendingScopedRegionRef.current) {
+      analyzeRegion(pendingScopedRegionRef.current);
+      return;
+    }
+    requestAnalysis();
+  }, [analyzeRegion, requestAnalysis]);
 
   // Toolbar-icon click while the panel is open: analyze under the fresh
   // activeTab grant. Skipped mid-analysis — when the same click both opened
@@ -354,9 +408,10 @@ export function JobPanel({
                 className="h-full overflow-y-auto"
               >
                 <ThisPageTab
+                  tabId={tabId}
                   view={view}
                   saveError={saveError}
-                  onAnalyze={() => requestAnalysis()}
+                  onAnalyze={retryAnalysis}
                   onCancel={handleCancel}
                   onForceAnalyze={() =>
                     // bypassCache is load-bearing: the "not a job posting" verdict
@@ -370,6 +425,7 @@ export function JobPanel({
                   onPruneArchived={() => void handlePruneArchived()}
                   onUpgrade={() => void handleUpgrade()}
                   onOpenPaste={handleOpenPaste}
+                  onRegionCommitted={analyzeRegion}
                 />
               </div>
             )}

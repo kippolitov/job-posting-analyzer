@@ -71,6 +71,7 @@ test("fails with an explanation when nothing is selected", async ({ page }) => {
   expect(result.ok).toBe(false);
   if (!result.ok) {
     expect(result.reason).toMatch(/no text is selected/i);
+    expect(result.cause).toBe("empty");
   }
 });
 
@@ -98,5 +99,9 @@ test("fails with an explanation and a distinguishable reason for a selection ins
   expect(result.ok).toBe(false);
   if (!result.ok) {
     expect(result.reason).toMatch(/can't be scoped/i);
+    // FR-036a: distinguishable from an empty selection — re-selecting can
+    // never fix this one, so the background script's follow-up wording
+    // must differ (T107).
+    expect(result.cause).toBe("unscopeable");
   }
 });

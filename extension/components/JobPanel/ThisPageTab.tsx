@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatSalary } from "../../lib/formatSalary";
 import { learnedSelectors } from "../../services/learnedSelectors";
+import { pickerService } from "../../services/pickerService";
+import { RegionList } from "./RegionList";
 import type { ExtractionStrategy, JobAnalysis, JobPanelError, SavedJob } from "../../types/job";
 import { ArrangementBadge } from "./ArrangementBadge";
 import { FitScore } from "./FitScore";
@@ -25,6 +27,7 @@ export interface JobView {
 }
 
 interface ThisPageTabProps {
+  tabId: number | null;
   view: JobView;
   saveError?: string | null;
   onAnalyze: () => void;
@@ -37,9 +40,12 @@ interface ThisPageTabProps {
   onUpgrade?: () => void;
   /** Opens the paste composer (spec FR-017e) — the sole remedy on a no-access page. */
   onOpenPaste?: () => void;
+  /** A region was committed via the picker or the panel's keyboard list (spec FR-026). */
+  onRegionCommitted?: (result: { text: string; selector: string }) => void;
 }
 
 export function ThisPageTab({
+  tabId,
   view,
   saveError,
   onAnalyze,
@@ -51,7 +57,34 @@ export function ThisPageTab({
   onPruneArchived,
   onUpgrade,
   onOpenPaste,
+  onRegionCommitted,
 }: ThisPageTabProps) {
+  // FR-023: reachable from a failed extraction AND from a successful-but-
+  // wrong one. FR-036a: both scoping mechanisms need page access, so on a
+  // no-access page the control is shown disabled with a stated reason
+  // rather than hidden or present-and-broken.
+  const [regionScopingOpen, setRegionScopingOpen] = useState(false);
+  const regionButtonRef = useRef<HTMLButtonElement>(null);
+  const noAccess = view.status === "error" && view.error?.code === "no-access";
+
+  const closeRegionScoping = (): void => {
+    setRegionScopingOpen(false);
+    regionButtonRef.current?.focus();
+  };
+
+  if (regionScopingOpen && tabId !== null) {
+    return (
+      <RegionScoping
+        tabId={tabId}
+        onCommit={(result) => {
+          setRegionScopingOpen(false);
+          onRegionCommitted?.(result);
+        }}
+        onCancel={closeRegionScoping}
+      />
+    );
+  }
+
   if (view.status === "idle") {
     return (
       <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
@@ -106,14 +139,15 @@ export function ThisPageTab({
       );
     }
 
-    // Action hierarchy (FR-007b): Retry is primary (a filled button, free
-    // and needs no further input); a paste shortcut is the quietest action —
-    // a plain-text link, not a button — since paste is the remedy for pages
-    // the other actions cannot fix (a login wall, a bot check, a no-access
-    // page), not a first response to an ordinary parsing miss.
-    const showPasteShortcut =
-      onOpenPaste &&
-      (view.error.code === "thin-content" || view.error.code === "no-access");
+    // Action hierarchy (FR-007b, T090): Retry is primary (a filled button,
+    // free and needs no further input); "Analyze a region" is secondary (an
+    // outlined button — it needs the user to choose something); a paste
+    // shortcut is the quietest action — a plain-text link, not a button —
+    // since paste is the remedy for pages the other actions cannot fix (a
+    // login wall, a bot check, a no-access page), not a first response to
+    // an ordinary parsing miss.
+    const showScopingAndPaste =
+      view.error.code === "thin-content" || view.error.code === "no-access";
 
     return (
       <div className="space-y-4 p-4">
@@ -133,7 +167,18 @@ export function ThisPageTab({
                 Retry
               </button>
             )}
-            {showPasteShortcut && (
+            {showScopingAndPaste && (
+              <button
+                ref={regionButtonRef}
+                onClick={() => setRegionScopingOpen(true)}
+                disabled={noAccess}
+                aria-describedby={noAccess ? "region-disabled-reason" : undefined}
+                className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+              >
+                Analyze a region
+              </button>
+            )}
+            {showScopingAndPaste && onOpenPaste && (
               <button
                 onClick={onOpenPaste}
                 className="text-xs font-medium text-red-700 underline hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
@@ -142,6 +187,15 @@ export function ThisPageTab({
               </button>
             )}
           </div>
+          {noAccess && (
+            <p
+              id="region-disabled-reason"
+              className="mt-2 text-xs text-red-600/80 dark:text-red-400/80"
+            >
+              The extension can&apos;t read this page, so regions can&apos;t be
+              analyzed here. Paste the text instead.
+            </p>
+          )}
         </div>
         {view.fallback && (
           <section aria-label="Fields extracted from page data">
@@ -230,6 +284,17 @@ export function ThisPageTab({
               from cache
             </span>
           )}
+          {/* FR-023: reachable from a successful-but-wrong result, too — the
+              extraction can succeed and still have picked the wrong part of
+              the page. */}
+          <button
+            ref={regionButtonRef}
+            onClick={() => setRegionScopingOpen(true)}
+            disabled={tabId === null}
+            className="ml-auto text-xs font-medium text-gray-500 underline hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            Wrong region? Analyze a region
+          </button>
         </div>
         {saveError && (
           <div
@@ -412,6 +477,152 @@ function AlwaysAnalyzeOffer({
           className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
         >
           Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface RegionScopingProps {
+  tabId: number;
+  onCommit: (result: { text: string; selector: string }) => void;
+  onCancel: () => void;
+}
+
+/**
+ * FR-023/FR-024/FR-024a: both scoping mechanisms are reachable from this one
+ * entry point. The keyboard list is the default surface — FR-024a forbids
+ * gating the keyboard path behind the pointer one — with the pointer
+ * overlay offered as an alternative rather than run at the same time: both
+ * are live, page-side, promise-resolving sessions (`pickerService`'s
+ * pointer pick holds exclusive page listeners until it resolves), and
+ * running them together would leave whichever one the user didn't use
+ * dangling with no way to tear it down from here. This toggle keeps exactly
+ * one session live while keeping both reachable without leaving the entry
+ * point.
+ */
+function RegionScoping({ tabId, onCommit, onCancel }: RegionScopingProps) {
+  const [mode, setMode] = useState<"list" | "pointer">("list");
+
+  if (mode === "pointer") {
+    return (
+      <PointerScoping
+        tabId={tabId}
+        onCommit={onCommit}
+        onUseList={() => setMode("list")}
+        onCancel={onCancel}
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1">
+        <RegionList tabId={tabId} onCommit={onCommit} onCancel={onCancel} />
+      </div>
+      <div className="shrink-0 border-t border-gray-200/70 px-3 py-2 text-center dark:border-gray-800">
+        <button
+          onClick={() => setMode("pointer")}
+          className="text-xs font-medium text-blue-600 underline hover:text-blue-700 dark:text-blue-400"
+        >
+          Use the pointer on the page instead
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The pointer path (FR-024, FR-024c, FR-025): the page itself shows the
+ * highlight and cursor-adjacent character count (pickerService.startPointerPick,
+ * T100), so this surface is mostly a status line plus the two ways out. A
+ * "no region found there" outcome is not a dismissal — it re-starts the same
+ * pointer session so the user can just click again, rather than dropping
+ * them out of pointer mode on a miss (T101 also lives in pickerService: the
+ * page's own cleanup runs on every dismissal already).
+ */
+function PointerScoping({
+  tabId,
+  onCommit,
+  onUseList,
+  onCancel,
+}: {
+  tabId: number;
+  onCommit: (result: { text: string; selector: string }) => void;
+  onUseList: () => void;
+  onCancel: () => void;
+}) {
+  const [notFound, setNotFound] = useState(false);
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      while (!cancelled) {
+        const outcome = await pickerService.startPointerPick(tabId);
+        if (cancelled) return;
+        if (outcome.ok) {
+          onCommitRef.current({ text: outcome.text, selector: outcome.selector });
+          return;
+        }
+        if (outcome.reason === "dismissed") {
+          onCancelRef.current();
+          return;
+        }
+        setNotFound(true);
+      }
+    })();
+    // The pointer session may still be pending when this unmounts (the
+    // buttons below exit via cancelPointerPick too, but a parent-driven
+    // unmount — e.g. switching tabs — would not otherwise reach the page at
+    // all). Harmless if the session already resolved on its own.
+    return () => {
+      cancelled = true;
+      void pickerService.cancelPointerPick(tabId);
+    };
+  }, [tabId]);
+
+  // Exits FROM THE PANEL never send an Escape keydown to the page, so the
+  // still-pending pointer promise needs an explicit external cancel or it
+  // would never resolve — the page would be stuck in crosshair mode with
+  // live listeners (see pickerService's cancelPointerPick).
+  const exitToList = (): void => {
+    void pickerService.cancelPointerPick(tabId);
+    onUseList();
+  };
+  const exitToCancel = (): void => {
+    void pickerService.cancelPointerPick(tabId);
+    onCancel();
+  };
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+        Point at a region on the page and click it.
+      </p>
+      <p className="text-xs text-gray-400 dark:text-gray-500">
+        Press Escape on the page to cancel.
+      </p>
+      {notFound && (
+        <p role="alert" className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+          No region was found there. Try clicking directly on the posting text.
+        </p>
+      )}
+      <div className="flex gap-4">
+        <button
+          onClick={exitToList}
+          className="text-xs font-medium text-blue-600 underline hover:text-blue-700 dark:text-blue-400"
+        >
+          Use the list instead
+        </button>
+        <button
+          onClick={exitToCancel}
+          className="text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400"
+        >
+          Cancel
         </button>
       </div>
     </div>

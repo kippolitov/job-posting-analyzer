@@ -132,6 +132,8 @@ export interface PasteAnalysisResultMessage {
   analysis: JobAnalysis;
   canonicalUrl: string;
   saved: SavedJob | null;
+  /** Always "paste" — carried for FR-035 (every extraction result records its strategy), not consumed by any UI branch. */
+  strategy: "paste";
 }
 
 export interface PasteAnalysisErrorMessage {

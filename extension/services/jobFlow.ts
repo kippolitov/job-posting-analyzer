@@ -514,6 +514,7 @@ export async function analyzePastedText(
         analysis: stored.analysis,
         canonicalUrl,
         saved: stored.saved,
+        strategy: "paste",
       });
       return;
     }
@@ -561,6 +562,7 @@ export async function analyzePastedText(
       analysis,
       canonicalUrl,
       saved,
+      strategy: "paste",
     });
   } catch (err) {
     broadcast({
