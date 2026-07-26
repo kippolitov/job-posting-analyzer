@@ -5,6 +5,7 @@ import { installMemoryStorage } from "./helpers/memoryStorage";
 import { installFakeStorageApi } from "./helpers/mswStorageServer";
 import { OptionsApp } from "../../entrypoints/options/OptionsApp";
 import { getProfile, setProfile } from "../../services/profileStorage";
+import { learnedSelectors } from "../../services/learnedSelectors";
 
 // profileStorage is server-backed since 002; run it against the
 // contract-faithful fake API instead of chrome.storage.
@@ -128,5 +129,54 @@ describe("OptionsApp", () => {
     await waitFor(() =>
       expect(screen.getByLabelText(/Your background/)).toBeEnabled()
     );
+  });
+
+  describe("always-analyzed regions (spec FR-031)", () => {
+    it("shows the empty state when nothing is learned", async () => {
+      render(<OptionsApp />);
+      expect(
+        await screen.findByText(/No sites are set to always analyze/)
+      ).toBeInTheDocument();
+    });
+
+    it("lists every learned host", async () => {
+      await learnedSelectors.put("jobs.example.com", ".job-body");
+      await learnedSelectors.put("careers.example.org", "main");
+      render(<OptionsApp />);
+
+      expect(await screen.findByText("jobs.example.com")).toBeInTheDocument();
+      expect(screen.getByText("careers.example.org")).toBeInTheDocument();
+    });
+
+    it("clears a single host without touching the others", async () => {
+      await learnedSelectors.put("jobs.example.com", ".job-body");
+      await learnedSelectors.put("careers.example.org", "main");
+      render(<OptionsApp />);
+      await screen.findByText("jobs.example.com");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Clear region for jobs.example.com" })
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByText("jobs.example.com")).not.toBeInTheDocument()
+      );
+      expect(screen.getByText("careers.example.org")).toBeInTheDocument();
+      expect(await learnedSelectors.get("jobs.example.com")).toBeNull();
+    });
+
+    it("'Clear all site regions' removes everything, immediately, with no confirmation dialog", async () => {
+      await learnedSelectors.put("jobs.example.com", ".job-body");
+      await learnedSelectors.put("careers.example.org", "main");
+      render(<OptionsApp />);
+      await screen.findByText("jobs.example.com");
+
+      await userEvent.click(screen.getByRole("button", { name: "Clear all site regions" }));
+
+      expect(
+        await screen.findByText(/No sites are set to always analyze/)
+      ).toBeInTheDocument();
+      expect(await learnedSelectors.list()).toEqual([]);
+    });
   });
 });

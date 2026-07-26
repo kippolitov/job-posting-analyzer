@@ -1,12 +1,17 @@
 import {
   analyzeJobPage,
+  analyzePastedText,
+  analyzeScopedRegion,
   cancelAnalysis,
   handleActionClick,
   resolveActiveTab,
   trackContentTabs,
 } from "../services/jobFlow";
+import { readLiveSelection } from "../services/selectionService";
 import { MessageType } from "../types/messages";
 import type { ActiveTabResponse, ExtensionMessage } from "../types/messages";
+
+const ANALYZE_SELECTION_MENU_ID = "analyze-selection";
 
 declare const WXT_AZURE_FUNCTION_URL: string;
 
@@ -26,6 +31,51 @@ export default defineBackground({
     });
     trackContentTabs(broadcastToSidePanel);
 
+    // "Analyze selection" (spec FR-023a): works without the panel already
+    // open, because the contextMenus onClicked handler carries its own
+    // activeTab grant — unlike everything else here, which depends on the
+    // toolbar-click grant.
+    chrome.contextMenus.create({
+      id: ANALYZE_SELECTION_MENU_ID,
+      title: "Analyze selection",
+      contexts: ["selection"],
+    });
+    chrome.contextMenus.onClicked.addListener((info, tab) => {
+      if (info.menuItemId !== ANALYZE_SELECTION_MENU_ID || tab?.id === undefined) return;
+      if (tab.windowId !== undefined) {
+        void chrome.sidePanel.open({ windowId: tab.windowId });
+      }
+      void (async () => {
+        const tabId = tab.id as number;
+        const selection = await readLiveSelection(tabId);
+        if (!selection.ok) {
+          broadcastToSidePanel({
+            type: MessageType.JOB_ANALYSIS_ERROR,
+            error: {
+              code: "thin-content",
+              message: selection.reason,
+              action: "Select the posting text on the page, then try again.",
+              retryable: false,
+            },
+            fallback: null,
+            canonicalUrl: null,
+            sourceUrl: null,
+          });
+          return;
+        }
+        await analyzeScopedRegion(
+          {
+            type: MessageType.ANALYZE_SCOPED_REGION,
+            tabId,
+            text: selection.text,
+            selector: selection.selector,
+            mechanism: "selection",
+          },
+          broadcastToSidePanel
+        );
+      })();
+    });
+
     chrome.runtime.onMessage.addListener(
       (message: ExtensionMessage, sender, sendResponse) => {
         if (message.type === MessageType.GET_ACTIVE_TAB) {
@@ -42,6 +92,12 @@ export default defineBackground({
         }
         if (message.type === MessageType.CANCEL_ANALYSIS) {
           cancelAnalysis(message);
+        }
+        if (message.type === MessageType.ANALYZE_PASTED_TEXT) {
+          void analyzePastedText(message, broadcastToSidePanel);
+        }
+        if (message.type === MessageType.ANALYZE_SCOPED_REGION) {
+          void analyzeScopedRegion(message, broadcastToSidePanel);
         }
         sendResponse({ received: true });
         return true;

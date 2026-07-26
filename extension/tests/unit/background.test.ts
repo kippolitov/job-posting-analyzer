@@ -4,17 +4,24 @@ import type { ExtensionMessage } from "../../types/messages";
 
 vi.mock("../../services/jobFlow", () => ({
   analyzeJobPage: vi.fn(),
+  analyzePastedText: vi.fn(),
+  analyzeScopedRegion: vi.fn(),
   handleActionClick: vi.fn(),
   resolveActiveTab: vi.fn(),
   trackContentTabs: vi.fn(),
 }));
+vi.mock("../../services/selectionService", () => ({
+  readLiveSelection: vi.fn(),
+}));
 
 import {
   analyzeJobPage,
+  analyzeScopedRegion,
   handleActionClick,
   resolveActiveTab,
   trackContentTabs,
 } from "../../services/jobFlow";
+import { readLiveSelection } from "../../services/selectionService";
 
 type MessageListener = (
   message: ExtensionMessage,
@@ -45,6 +52,8 @@ describe("background entrypoint", () => {
     vi.mocked(analyzeJobPage).mockReset();
     vi.mocked(resolveActiveTab).mockReset();
     vi.mocked(handleActionClick).mockReset();
+    vi.mocked(analyzeScopedRegion).mockReset();
+    vi.mocked(readLiveSelection).mockReset();
   });
 
   it("opens the side panel and hands the click to jobFlow", () => {
@@ -110,5 +119,89 @@ describe("background entrypoint", () => {
 
     await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalled());
     // no unhandled rejection — reaching this point is the assertion
+  });
+
+  it("registers the 'Analyze selection' context menu item, contexts: selection only", () => {
+    expect(chrome.contextMenus.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "analyze-selection",
+        title: "Analyze selection",
+        contexts: ["selection"],
+      })
+    );
+  });
+
+  it("ANALYZE_SCOPED_REGION delegates to jobFlow.analyzeScopedRegion", async () => {
+    vi.mocked(analyzeScopedRegion).mockResolvedValue(undefined);
+    const sendResponse = vi.fn();
+    listener(
+      {
+        type: MessageType.ANALYZE_SCOPED_REGION,
+        tabId: 7,
+        text: "some scoped text",
+        selector: ".body",
+        mechanism: "picked",
+      },
+      {},
+      sendResponse
+    );
+    expect(sendResponse).toHaveBeenCalledWith({ received: true });
+    await vi.waitFor(() => expect(analyzeScopedRegion).toHaveBeenCalled());
+  });
+
+  it("'Analyze selection' click reads the live selection and forwards it to analyzeScopedRegion with mechanism 'selection'", async () => {
+    vi.mocked(readLiveSelection).mockResolvedValue({
+      ok: true,
+      text: "the selected posting text",
+      selector: "#posting",
+    });
+    vi.mocked(analyzeScopedRegion).mockResolvedValue(undefined);
+
+    const addListener = chrome.contextMenus.onClicked.addListener as ReturnType<typeof vi.fn>;
+    const onClicked = addListener.mock.calls[0]![0] as (
+      info: chrome.contextMenus.OnClickData,
+      tab?: chrome.tabs.Tab
+    ) => void;
+    onClicked(
+      { menuItemId: "analyze-selection" } as chrome.contextMenus.OnClickData,
+      { id: 11, windowId: 4 } as chrome.tabs.Tab
+    );
+
+    await vi.waitFor(() => expect(analyzeScopedRegion).toHaveBeenCalled());
+    expect(chrome.sidePanel.open).toHaveBeenCalledWith({ windowId: 4 });
+    expect(analyzeScopedRegion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tabId: 11,
+        text: "the selected posting text",
+        selector: "#posting",
+        mechanism: "selection",
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("'Analyze selection' click broadcasts a plain-language error when nothing is addressable (spec Edge Cases)", async () => {
+    vi.mocked(readLiveSelection).mockResolvedValue({
+      ok: false,
+      reason: "This part of the page can't be scoped.",
+    });
+
+    const addListener = chrome.contextMenus.onClicked.addListener as ReturnType<typeof vi.fn>;
+    const onClicked = addListener.mock.calls[0]![0] as (
+      info: chrome.contextMenus.OnClickData,
+      tab?: chrome.tabs.Tab
+    ) => void;
+    onClicked(
+      { menuItemId: "analyze-selection" } as chrome.contextMenus.OnClickData,
+      { id: 11, windowId: 4 } as chrome.tabs.Tab
+    );
+
+    await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalled());
+    expect(analyzeScopedRegion).not.toHaveBeenCalled();
+    const [broadcastPayload] = vi.mocked(chrome.runtime.sendMessage).mock.calls.at(-1)!;
+    expect(broadcastPayload).toMatchObject({
+      type: MessageType.JOB_ANALYSIS_ERROR,
+      error: { message: "This part of the page can't be scoped." },
+    });
   });
 });

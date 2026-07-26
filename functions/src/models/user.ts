@@ -124,8 +124,8 @@ export interface ProfileEntity {
   schemaVersion: number;
 }
 
-/** Discriminates a saved posting's origin (data-model.md §2). */
-export type PostingSource = "url" | "document";
+/** Discriminates a saved posting's origin (data-model.md §2; "paste" added by 005 FR-020/FR-021). */
+export type PostingSource = "url" | "document" | "paste";
 
 /** `SavedJobs` row — PK sub, RK sha256(canonicalUrl) (data-model.md). */
 export interface SavedJobEntity {
@@ -208,11 +208,17 @@ function isSavedJobAnalysis(value: unknown): value is SavedJobAnalysis {
 
 const DOC_CANONICAL_URL_RE = /^doc:[0-9a-f]{64}$/;
 
+/** 005 FR-021: a paste-sourced posting's stable, content-derived identity. */
+export const PASTE_CANONICAL_URL_RE = /^paste:[0-9a-f]{64}$/;
+
 /**
  * Discriminated on `source` (data-model.md §2.2): omitted/"url" validates
  * exactly as before (isHttpUrl canonicalUrl); "document" requires
  * canonicalUrl to match `doc:<sha256 hex>` and a non-empty filename, with
- * sourceUrl allowed to be empty.
+ * sourceUrl allowed to be empty. "paste" (005 FR-020/FR-021) mirrors
+ * "document" structurally: canonicalUrl matches `paste:<sha256 hex>`, and
+ * sourceUrl/filename are both empty — a pasted posting has neither a URL nor
+ * a file.
  */
 export function isSavedJobPutBody(body: unknown): body is SavedJobPayload {
   if (typeof body !== "object" || body === null) return false;
@@ -237,6 +243,14 @@ export function isSavedJobPutBody(body: unknown): body is SavedJobPayload {
       DOC_CANONICAL_URL_RE.test(v.canonicalUrl) &&
       typeof v.filename === "string" &&
       v.filename.length > 0
+    );
+  }
+  if (source === "paste") {
+    return (
+      typeof v.canonicalUrl === "string" &&
+      PASTE_CANONICAL_URL_RE.test(v.canonicalUrl) &&
+      v.sourceUrl === "" &&
+      (v.filename === undefined || v.filename === "")
     );
   }
   if (source === "url") {

@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { formatSalary } from "../../lib/formatSalary";
-import type { JobAnalysis, JobPanelError, SavedJob } from "../../types/job";
+import { learnedSelectors } from "../../services/learnedSelectors";
+import type { ExtractionStrategy, JobAnalysis, JobPanelError, SavedJob } from "../../types/job";
 import { ArrangementBadge } from "./ArrangementBadge";
 import { FitScore } from "./FitScore";
 import { UsageExhausted } from "../UsageExhausted";
@@ -16,6 +18,10 @@ export interface JobView {
   multiplePostings: boolean;
   cached: boolean;
   saved: SavedJob | null;
+  /** How this result was produced (spec FR-035) — drives the learned-region badge (FR-032). */
+  strategy?: ExtractionStrategy;
+  /** Present when `strategy` is "picked"/"selection" — offers the always-analyze prompt (FR-026b). */
+  scopedRegion?: { selector: string; host: string };
 }
 
 interface ThisPageTabProps {
@@ -29,6 +35,8 @@ interface ThisPageTabProps {
   onExport?: () => void;
   onPruneArchived?: () => void;
   onUpgrade?: () => void;
+  /** Opens the paste composer (spec FR-017e) — the sole remedy on a no-access page. */
+  onOpenPaste?: () => void;
 }
 
 export function ThisPageTab({
@@ -42,6 +50,7 @@ export function ThisPageTab({
   onExport,
   onPruneArchived,
   onUpgrade,
+  onOpenPaste,
 }: ThisPageTabProps) {
   if (view.status === "idle") {
     return (
@@ -97,6 +106,15 @@ export function ThisPageTab({
       );
     }
 
+    // Action hierarchy (FR-007b): Retry is primary (a filled button, free
+    // and needs no further input); a paste shortcut is the quietest action —
+    // a plain-text link, not a button — since paste is the remedy for pages
+    // the other actions cannot fix (a login wall, a bot check, a no-access
+    // page), not a first response to an ordinary parsing miss.
+    const showPasteShortcut =
+      onOpenPaste &&
+      (view.error.code === "thin-content" || view.error.code === "no-access");
+
     return (
       <div className="space-y-4 p-4">
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
@@ -106,14 +124,24 @@ export function ThisPageTab({
           <p className="mt-1 text-sm text-red-700 dark:text-red-500">
             {view.error.action}
           </p>
-          {view.error.retryable && (
-            <button
-              onClick={onAnalyze}
-              className="mt-3 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
-            >
-              Retry
-            </button>
-          )}
+          <div className="mt-3 flex items-center gap-3">
+            {view.error.retryable && (
+              <button
+                onClick={onAnalyze}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+              >
+                Retry
+              </button>
+            )}
+            {showPasteShortcut && (
+              <button
+                onClick={onOpenPaste}
+                className="text-xs font-medium text-red-700 underline hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+              >
+                Paste text instead
+              </button>
+            )}
+          </div>
         </div>
         {view.fallback && (
           <section aria-label="Fields extracted from page data">
@@ -151,6 +179,13 @@ export function ThisPageTab({
 
     return (
       <div className="space-y-4 p-4">
+        {view.strategy === "learned-selector" && view.canonicalUrl && (
+          <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+            Always analyzing this region on {hostOf(view.canonicalUrl)}
+          </p>
+        )}
+        {(view.strategy === "picked" || view.strategy === "selection") &&
+          view.scopedRegion && <AlwaysAnalyzeOffer scopedRegion={view.scopedRegion} />}
         {view.multiplePostings && (
           <p className="rounded-lg bg-gray-100 px-3 py-2 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-400">
             Multiple postings were found on this page; the first one was
@@ -321,4 +356,64 @@ function Field({ label, value }: { label: string; value: string }) {
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Offered after a successful scoped analysis, never imposed by the act of
+ * scoping (spec FR-026b) — a one-off correction on an unusual posting must
+ * not silently teach a selector that misapplies to every posting on the
+ * host. Accepting writes straight to `learnedSelectors` (chrome.storage.local
+ * is reachable from any extension context; no background round-trip needed)
+ * and shows a confirmation naming the site — declining leaves nothing
+ * learned and shows nothing further.
+ */
+function AlwaysAnalyzeOffer({
+  scopedRegion,
+}: {
+  scopedRegion: { selector: string; host: string };
+}) {
+  const [state, setState] = useState<"offering" | "accepted" | "declined">("offering");
+
+  if (state === "declined") return null;
+
+  if (state === "accepted") {
+    return (
+      <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+        Will always analyze this region on {scopedRegion.host}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-lg bg-gray-100 px-3 py-2 dark:bg-gray-800">
+      <p className="text-xs text-gray-600 dark:text-gray-400">
+        Always analyze this region on {scopedRegion.host}?
+      </p>
+      <div className="flex shrink-0 gap-2">
+        <button
+          onClick={() => {
+            void learnedSelectors.put(scopedRegion.host, scopedRegion.selector);
+            setState("accepted");
+          }}
+          className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+        >
+          Always
+        </button>
+        <button
+          onClick={() => setState("declined")}
+          className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  );
 }

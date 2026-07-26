@@ -108,4 +108,23 @@ describe("library view (FR-007/FR-008, US1 scenario 2)", () => {
     await screen.findByText("job-description.pdf");
     expect(screen.queryByText(fullJob.sourceUrl)).not.toBeInTheDocument();
   });
+
+  it("renders 'Pasted' instead of a URL for a paste-sourced posting (005 FR-020)", async () => {
+    seedSession();
+    api.setJobs([
+      {
+        ...fullJob,
+        source: "paste",
+        filename: "",
+        canonicalUrl: `paste:${"b".repeat(64)}`,
+        sourceUrl: "",
+      },
+    ]);
+
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    await screen.findByText("Pasted");
+    expect(screen.queryByText(fullJob.sourceUrl)).not.toBeInTheDocument();
+  });
 });

@@ -104,6 +104,45 @@ describe("analyze-job handler", () => {
     expect(res.jsonBody).toMatchObject({ arrangement: "hybrid", daysInOffice: 3 });
   });
 
+  it("accepts a request with structuredSources absent (old extension) — FR-014, contracts §1", async () => {
+    vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
+      ...hybridAnalysis,
+      model: "gpt-4o-mini",
+      analyzedAt: "2026-07-04T12:00:04Z",
+    } as never);
+
+    // validBody.extract carries no structuredSources field at all.
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), testUser);
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts a request with structuredSources present, including an unknown kind — FR-014, contracts §1", async () => {
+    vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
+      ...hybridAnalysis,
+      model: "gpt-4o-mini",
+      analyzedAt: "2026-07-04T12:00:04Z",
+    } as never);
+
+    const bodyWithStructuredSources = {
+      extract: {
+        ...validBody.extract,
+        structuredSources: [
+          { kind: "microdata", data: { title: "Sr. Manager" } },
+          // A future harvester kind an older/newer backend doesn't recognize
+          // yet — must be tolerated, not rejected (contracts §1).
+          { kind: "state-blob-future-convention", data: { anything: true } },
+        ],
+      },
+    };
+
+    const res = await analyzeJobHandler(
+      makeRequest(bodyWithStructuredSources),
+      makeContext(),
+      testUser
+    );
+    expect(res.status).toBe(200);
+  });
+
   it("passes profile and assumeJobPosting through to the orchestrator", async () => {
     vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
       ...hybridAnalysis,

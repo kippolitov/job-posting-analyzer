@@ -34,7 +34,8 @@ export const MIN_TEXT_CHARS = 300;
  * references to module scope, no chrome.* (constants are duplicated inline on
  * purpose). Everything it needs from the extension arrives in `args`.
  */
-export function extractPage(_args: ExtractArgs = {}): Promise<RawPageExtract> {
+export function extractPage(args: ExtractArgs = {}): Promise<RawPageExtract> {
+  const learnedSelector = args.learnedSelector;
   const CAP = 40_000; // keep in sync with MAIN_TEXT_CAP
   const MIN = 300; // keep in sync with MIN_TEXT_CHARS
   /**
@@ -103,6 +104,155 @@ export function extractPage(_args: ExtractArgs = {}): Promise<RawPageExtract> {
       .trim();
   }
 
+  /** class/id substrings that mark chrome rather than posting content (FR-012). */
+  const NOISE_KEYWORDS_RE =
+    /nav|menu|footer|cookie|consent|banner|sidebar|related|similar|promo|skip/i;
+
+  /** Minimum text length for an element to be considered a scoring candidate. */
+  const CANDIDATE_MIN_CHARS = 200;
+
+  function attrsOf(el: Element): string {
+    const id = typeof el.id === "string" ? el.id : "";
+    const className = typeof el.className === "string" ? el.className : "";
+    const role = el.getAttribute("role") ?? "";
+    // Frameworks that hash class names for CSS-in-JS (Workday's Emotion
+    // classes, e.g. "css-3zv1wr", are opaque) instead carry the semantic
+    // label on a data-* attribute (data-automation-id="footerContainer").
+    // class/id alone would never see this signal.
+    let dataAttrs = "";
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.startsWith("data-")) dataAttrs += ` ${attr.value}`;
+    }
+    return `${id} ${className} ${role}${dataAttrs}`;
+  }
+
+  /**
+   * Text-density / link-density container scorer (FR-012). Body-fallback
+   * loses on 3/6 corpus fixtures today because the three-selector guess has
+   * no middle ground between "a semantic container exists" and "swallow the
+   * entire body" — this replaces that cliff with a score every element earns.
+   *
+   * score = textLength * (1 - linkDensity) * penalty
+   *
+   * `penalty` is 1 for a clean candidate. It drops sharply (0.1) when the
+   * candidate itself, or an ancestor up to (not including) <body>, carries a
+   * noise-keyword class/id — this is what keeps a cookie-consent dialog's own
+   * subtree from ever winning even though its text alone clears the minimum.
+   * It also drops proportionally to how much of the candidate's OWN text
+   * lives inside a noise-keyword descendant (a skip-link or footer sitting
+   * alongside real content inside the same wrapping element) — without this
+   * second term, a big-enough wrapper containing both the posting and a
+   * banner would still out-score a tighter container purely on raw length,
+   * exactly the failure mode a naive length-only scorer has.
+   */
+  function scoreCandidate(el: Element): { text: string; score: number } | null {
+    // NOISE_SELECTOR strips these as DESCENDANTS of some other candidate, but
+    // that never disqualifies the noise element itself from being scored AS
+    // a candidate — a <script type="application/ld+json"> is plain text with
+    // zero link density and no noise-keyword class, so it would otherwise
+    // outscore the real content it sits beside.
+    if (el.matches(NOISE_SELECTOR)) return null;
+
+    const text = textOf(el);
+    if (text.length < CANDIDATE_MIN_CHARS) return null;
+
+    const clone = el.cloneNode(true) as HTMLElement;
+    for (const noise of Array.from(clone.querySelectorAll(NOISE_SELECTOR))) {
+      noise.remove();
+    }
+
+    let anchorLength = 0;
+    for (const anchor of Array.from(clone.querySelectorAll("a"))) {
+      anchorLength += (anchor.textContent ?? "").length;
+    }
+    const linkDensity = text.length > 0 ? Math.min(1, anchorLength / text.length) : 0;
+
+    let selfOrAncestorNoisy = false;
+    for (
+      let node: Element | null = el;
+      node && node !== document.body && node !== document.documentElement;
+      node = node.parentElement
+    ) {
+      if (NOISE_KEYWORDS_RE.test(attrsOf(node))) {
+        selfOrAncestorNoisy = true;
+        break;
+      }
+    }
+
+    let noiseDescendantLength = 0;
+    if (!selfOrAncestorNoisy) {
+      const seen = new Set<Element>();
+      for (const descendant of Array.from(clone.querySelectorAll("*"))) {
+        if (!NOISE_KEYWORDS_RE.test(attrsOf(descendant))) continue;
+        // Skip a match nested inside an already-counted match, so a banner's
+        // own inner divs are not double-charged against the total.
+        let counted = false;
+        for (const seenEl of seen) {
+          if (seenEl.contains(descendant)) {
+            counted = true;
+            break;
+          }
+        }
+        if (counted) continue;
+        seen.add(descendant);
+        noiseDescendantLength += textOf(descendant).length;
+      }
+    }
+    const noiseFraction = text.length > 0 ? noiseDescendantLength / text.length : 0;
+
+    const penalty = selfOrAncestorNoisy ? 0.1 : Math.max(0.15, 1 - noiseFraction);
+    const score = text.length * (1 - linkDensity) * penalty;
+    return { text, score };
+  }
+
+  /** JobPosting microdata (`itemscope itemtype=".../JobPosting"`), FR-008. */
+  function harvestMicrodata(): Record<string, unknown>[] {
+    const results: Record<string, unknown>[] = [];
+    const roots = Array.from(
+      document.querySelectorAll('[itemscope][itemtype*="JobPosting"]')
+    );
+    for (const root of roots) {
+      results.push(readMicrodataItem(root));
+    }
+    return results;
+  }
+
+  function readMicrodataItem(scope: Element): Record<string, unknown> {
+    const data: Record<string, unknown> = {};
+    for (const el of Array.from(scope.querySelectorAll("[itemprop]"))) {
+      // Don't cross into a nested itemscope's own props — read it as one
+      // nested object instead of flattening it into the parent.
+      let owner: Element | null = el.parentElement;
+      let nested = false;
+      while (owner && owner !== scope) {
+        if (owner.hasAttribute("itemscope")) {
+          nested = true;
+          break;
+        }
+        owner = owner.parentElement;
+      }
+      if (nested) continue;
+
+      const prop = el.getAttribute("itemprop");
+      if (!prop) continue;
+      const value = el.hasAttribute("itemscope")
+        ? readMicrodataItem(el)
+        : microdataValueOf(el);
+      if (value === null || value === "") continue;
+      data[prop] = value;
+    }
+    return data;
+  }
+
+  function microdataValueOf(el: Element): string {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "meta") return el.getAttribute("content") ?? "";
+    if (tag === "a" || tag === "link") return el.getAttribute("href") ?? "";
+    if (tag === "img") return el.getAttribute("src") ?? "";
+    if (tag === "time") return el.getAttribute("datetime") ?? el.textContent ?? "";
+    return (el.textContent ?? "").trim();
+  }
+
   /**
    * One synchronous pass over the current DOM — the whole of what extraction
    * used to be. Pulled into a closure so the readiness loop can call it
@@ -114,8 +264,56 @@ export function extractPage(_args: ExtractArgs = {}): Promise<RawPageExtract> {
     jsonLd: Record<string, unknown>[];
     mainText: string;
     strategy: RawPageExtract["provenance"]["strategy"];
+    structuredSources: StructuredSource[];
+    /**
+     * Reflects THIS attempt only, never a running/sticky flag: a selector
+     * missing at t=0 on a hydrating SPA is not a miss (contract "Interaction
+     * with readiness") — if a later attempt within the same readiness cycle
+     * succeeds, this must read false again, not stay stuck true from an
+     * earlier attempt.
+     */
+    learnedSelectorMissed: boolean;
   } {
     const jsonLd = harvestJsonLd();
+    const microdata = harvestMicrodata();
+
+    const structuredSourcesRaw: StructuredSource[] = [
+      ...jsonLd.map((data): StructuredSource => ({ kind: "json-ld", data })),
+      ...microdata.map((data): StructuredSource => ({ kind: "microdata", data })),
+    ];
+    // FR-011: cap total transmitted size, dropping sources whole rather than
+    // truncating mid-object — a truncated JSON blob is worse than none.
+    const structuredSources: StructuredSource[] = [];
+    let structuredSize = 0;
+    for (const source of structuredSourcesRaw) {
+      const size = JSON.stringify([source]).length;
+      if (structuredSize + size > 20_000) continue;
+      structuredSources.push(source);
+      structuredSize += size;
+    }
+
+    // Learned selector (FR-028, FR-029, contracts/learned-selectors.md):
+    // applied AHEAD of every automatic strategy, including the Google overlay
+    // special case below. A miss here is not necessarily a site redesign — on
+    // a hydrating SPA the selector may simply not exist yet at this attempt,
+    // which is exactly why this runs inside the readiness loop rather than
+    // once before it. The caller (jobFlow.ts) is the one that turns a
+    // still-missing selector, after the budget expires, into recordMiss().
+    let learnedSelectorMissed = false;
+    if (learnedSelector) {
+      const learnedEl = document.querySelector(learnedSelector);
+      const learnedText = learnedEl ? textOf(learnedEl) : "";
+      if (learnedText.length >= MIN) {
+        return {
+          jsonLd,
+          mainText: learnedText,
+          strategy: "learned-selector",
+          structuredSources,
+          learnedSelectorMissed: false,
+        };
+      }
+      learnedSelectorMissed = true;
+    }
 
     // Google's job-detail overlay: the SERP itself is a list page, but the
     // selected posting is rendered inside a visible [role=dialog]. Prefer that
@@ -149,23 +347,62 @@ export function extractPage(_args: ExtractArgs = {}): Promise<RawPageExtract> {
       mainText = overlayText;
       strategy = "google-overlay";
     } else {
+      // The semantic container wins OUTRIGHT, verbatim, whenever it clears
+      // the minimum — exactly today's behavior (FR-013: "MUST NOT change the
+      // selected text on pages where the existing semantic-container path
+      // already yields the posting"). This is deliberately a hard rule, not
+      // an emergent property of the scorer: greenhouse-discord's and
+      // phenom-intuit's own <main> legitimately contains some
+      // noise-keyword-matched material today (a "related jobs" rail is
+      // *inside* phenom's <main>, not a sibling of it) that any density
+      // penalty strong enough to fix Workday's footer would also strip from
+      // these two protected fixtures, changing their byte count and failing
+      // FR-013. Scoring therefore only runs — per FR-012's first clause —
+      // when the semantic path "yields nothing" (or below-minimum text);
+      // FR-012's second clause ("or yields a container that scores worse")
+      // is not exercised by any corpus fixture and is intentionally left
+      // unimplemented rather than tuned against nothing.
+      let semanticText = "";
       for (const selector of ["main", "[role=main]", "article"]) {
-        const candidate = document.querySelector(selector);
-        if (candidate) {
-          const text = textOf(candidate);
-          if (text.length > mainText.length) mainText = text;
+        const el = document.querySelector(selector);
+        if (el) {
+          const text = textOf(el);
+          if (text.length > semanticText.length) semanticText = text;
         }
       }
-      if (mainText.length < MIN && document.body) {
-        const bodyText = textOf(document.body);
-        if (bodyText.length > mainText.length) {
-          mainText = bodyText;
-          strategy = "body";
+
+      if (semanticText.length >= MIN) {
+        mainText = semanticText;
+        strategy = "semantic";
+      } else {
+        let bestScore = -1;
+        let bestText = "";
+
+        if (document.body) {
+          for (const el of Array.from(document.body.querySelectorAll("*"))) {
+            const evaluated = scoreCandidate(el);
+            if (!evaluated) continue;
+            if (evaluated.score > bestScore) {
+              bestScore = evaluated.score;
+              bestText = evaluated.text;
+            }
+          }
+        }
+
+        if (bestText.length >= MIN) {
+          mainText = bestText;
+          strategy = "scored";
+        } else if (document.body) {
+          const bodyText = textOf(document.body);
+          if (bodyText.length > mainText.length) {
+            mainText = bodyText;
+            strategy = "body";
+          }
         }
       }
     }
 
-    return { jsonLd, mainText, strategy };
+    return { jsonLd, mainText, strategy, structuredSources, learnedSelectorMissed };
   }
 
   return new Promise<RawPageExtract>((resolve) => {
@@ -212,7 +449,7 @@ export function extractPage(_args: ExtractArgs = {}): Promise<RawPageExtract> {
         url: location.href,
         title: document.title,
         jsonLd: latest.jsonLd,
-        structuredSources: [],
+        structuredSources: latest.structuredSources,
         mainText: latest.mainText.slice(0, CAP),
         extractedAt: new Date().toISOString(),
         provenance: {
@@ -220,7 +457,7 @@ export function extractPage(_args: ExtractArgs = {}): Promise<RawPageExtract> {
           attempts,
           elapsedMs: Date.now() - startedAt,
           budgetExpired,
-          learnedSelectorMissed: false,
+          learnedSelectorMissed: latest.learnedSelectorMissed,
         },
       });
     };

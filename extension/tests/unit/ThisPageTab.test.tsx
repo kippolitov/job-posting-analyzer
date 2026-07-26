@@ -38,13 +38,19 @@ const baseView: JobView = {
 
 const noop = () => {};
 
-function renderTab(view: JobView, handlers?: Partial<Record<"onAnalyze" | "onCancel" | "onForceAnalyze", () => void>>) {
+function renderTab(
+  view: JobView,
+  handlers?: Partial<
+    Record<"onAnalyze" | "onCancel" | "onForceAnalyze" | "onOpenPaste", () => void>
+  >
+) {
   return render(
     <ThisPageTab
       view={view}
       onAnalyze={handlers?.onAnalyze ?? noop}
       onCancel={handlers?.onCancel ?? noop}
       onForceAnalyze={handlers?.onForceAnalyze ?? noop}
+      onOpenPaste={handlers?.onOpenPaste}
     />
   );
 }
@@ -128,6 +134,118 @@ describe("ThisPageTab", () => {
     expect(screen.getByText("Try again.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onAnalyze).toHaveBeenCalled();
+  });
+
+  it("thin-content and no-access errors offer a paste shortcut (FR-017e)", async () => {
+    const onOpenPaste = vi.fn();
+    renderTab(
+      {
+        ...baseView,
+        status: "error",
+        analysis: null,
+        error: {
+          code: "thin-content",
+          message: "Not enough page content to analyze.",
+          action: "Open the full job posting page, then re-analyze.",
+          retryable: true,
+        },
+      },
+      { onOpenPaste }
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Paste text instead" }));
+    expect(onOpenPaste).toHaveBeenCalled();
+  });
+
+  it("a no-access error (no Retry) still offers the paste shortcut — it is the sole remedy (FR-017e, FR-036a)", () => {
+    const onOpenPaste = vi.fn();
+    renderTab(
+      {
+        ...baseView,
+        status: "error",
+        analysis: null,
+        error: {
+          code: "no-access",
+          message: "The extension doesn't have permission to read this page.",
+          action: "Click the extension icon to grant access.",
+          retryable: false,
+        },
+      },
+      { onOpenPaste }
+    );
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Paste text instead" })).toBeInTheDocument();
+  });
+
+  it("shows the learned-region badge when strategy is learned-selector (FR-032)", () => {
+    renderTab({
+      ...baseView,
+      strategy: "learned-selector",
+      canonicalUrl: "https://jobs.example.com/posting/1",
+    });
+    expect(
+      screen.getByText("Always analyzing this region on jobs.example.com")
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the learned-region badge for an ordinary automatic result", () => {
+    renderTab({ ...baseView, strategy: "semantic" });
+    expect(screen.queryByText(/Always analyzing this region/)).not.toBeInTheDocument();
+  });
+
+  it("offers to always analyze the region after a scoped (picked/selection) result, and accepting shows a confirmation naming the site (FR-026b)", async () => {
+    renderTab({
+      ...baseView,
+      strategy: "selection",
+      scopedRegion: { selector: ".job-body", host: "jobs.example.com" },
+    });
+    expect(
+      screen.getByText("Always analyze this region on jobs.example.com?")
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Always" }));
+    expect(
+      screen.getByText("Will always analyze this region on jobs.example.com.")
+    ).toBeInTheDocument();
+  });
+
+  it("declining the always-analyze offer dismisses it with no confirmation shown", async () => {
+    renderTab({
+      ...baseView,
+      strategy: "picked",
+      scopedRegion: { selector: ".job-body", host: "jobs.example.com" },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(
+      screen.queryByText(/Always analyze this region/)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Will always analyze this region/)
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer to always analyze without a scopedRegion, even if strategy is scoped", () => {
+    renderTab({ ...baseView, strategy: "picked", scopedRegion: undefined });
+    expect(screen.queryByText(/Always analyze this region/)).not.toBeInTheDocument();
+  });
+
+  it("does not offer the paste shortcut for other error codes", () => {
+    renderTab(
+      {
+        ...baseView,
+        status: "error",
+        analysis: null,
+        error: {
+          code: "service-error",
+          message: "The analysis service encountered an error.",
+          action: "Try again.",
+          retryable: true,
+        },
+      },
+      { onOpenPaste: vi.fn() }
+    );
+    expect(
+      screen.queryByRole("button", { name: "Paste text instead" })
+    ).not.toBeInTheDocument();
   });
 
   it("renders JSON-LD fallback fields alongside a backend error", () => {

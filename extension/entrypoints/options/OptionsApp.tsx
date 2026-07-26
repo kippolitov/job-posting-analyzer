@@ -7,15 +7,89 @@ import {
   clearProfile,
   PROFILE_TEXT_MAX,
 } from "../../services/profileStorage";
+import { learnedSelectors } from "../../services/learnedSelectors";
+import type { LearnedHostSelector } from "../../services/learnedSelectors";
 
 export function OptionsApp() {
   return (
     <AuthGate showSignOut={false}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto">
         <AccountBar />
         <ProfileEditor />
+        <LearnedRegionsSection />
       </div>
     </AuthGate>
+  );
+}
+
+/**
+ * "Clear region for this site" / "Clear all site regions" (spec FR-031).
+ * Clearing is immediate with no confirmation dialog — a cleared site simply
+ * falls back to automatic extraction, and a future correction re-teaches it
+ * in one action (FR-026b), so the action is low-stakes and reversible.
+ */
+function LearnedRegionsSection() {
+  const [hosts, setHosts] = useState<LearnedHostSelector[] | null>(null);
+
+  const refresh = async () => {
+    setHosts(await learnedSelectors.list());
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const handleClear = async (host: string) => {
+    await learnedSelectors.clear(host);
+    await refresh();
+  };
+
+  const handleClearAll = async () => {
+    await learnedSelectors.clearAll();
+    await refresh();
+  };
+
+  if (hosts === null) return null;
+
+  return (
+    <section className="mx-auto w-full max-w-4xl shrink-0 border-t border-gray-200/70 px-8 py-6 dark:border-gray-800">
+      <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
+        Always-analyzed regions
+      </h2>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        Sites where you taught the extension which part of the page to
+        analyze. Stored only on this device (spec FR-033).
+      </p>
+
+      {hosts.length === 0 ? (
+        <p className="mt-3 text-sm text-gray-400 dark:text-gray-500">
+          No sites are set to always analyze a specific region yet.
+        </p>
+      ) : (
+        <>
+          <ul className="mt-3 divide-y divide-gray-200 dark:divide-gray-800">
+            {hosts.map((h) => (
+              <li key={h.host} className="flex items-center justify-between py-2">
+                <span className="text-sm text-gray-700 dark:text-gray-200">{h.host}</span>
+                <button
+                  onClick={() => void handleClear(h.host)}
+                  aria-label={`Clear region for ${h.host}`}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-red-600 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-red-400"
+                >
+                  Clear
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={() => void handleClearAll()}
+            className="mt-3 rounded-md px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+          >
+            Clear all site regions
+          </button>
+        </>
+      )}
+    </section>
   );
 }
 
