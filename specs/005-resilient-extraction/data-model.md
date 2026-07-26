@@ -82,12 +82,22 @@ eval harness.
 
 ```ts
 export type ExtractionStrategy =
-  | "learned-selector"   // user-taught region for this host
+  | "learned-selector"   // user-taught region for this host, applied automatically
+  | "picked"             // one-off region the user just picked with the overlay
+  | "selection"          // one-off region the user just highlighted on the page
   | "semantic"           // main / [role=main] / article won the scoring
   | "scored"             // density scorer picked a non-semantic container
   | "google-overlay"     // the SERP dialog branch
   | "body"               // last-resort full-body fallback
   | "paste";             // user-supplied text, no page involved
+```
+
+`"picked"` and `"selection"` are the *act* of scoping; `"learned-selector"` is the
+stored consequence being replayed on a later visit. Keeping them distinct is what
+lets the eval harness tell "the user just corrected this" from "the correction is
+still working."
+
+```ts
 
 export interface ExtractionProvenance {
   strategy: ExtractionStrategy;
@@ -105,6 +115,25 @@ export interface ExtractionProvenance {
 `budgetExpired` is what lets the thin-content error distinguish "the page was
 still loading" from "this page has no content" (spec FR-005) — today those are
 the same message on very different situations.
+
+### Scoped analyses are page analyses
+
+A `"picked"` or `"selection"` result keeps the page's **canonical URL** as its
+identity. It is not a new kind of posting — it is this page's analysis, scoped
+better, and it supersedes whatever automatic extraction stored. Two consequences
+follow, and both are easy to get wrong:
+
+- The analysis MUST run with `bypassCache` (spec FR-026a). `jobFlow.ts` consults
+  the saved library and session cache by canonical URL *before* analyzing; a
+  scoped region resolves to the same URL, so without the bypass the user's
+  correction returns the previous, wrong analysis and appears to have done
+  nothing.
+- After analyzing, the existing replace-the-snapshot path applies unchanged: a
+  saved posting keeps its status and notes while its analysis is refreshed.
+
+Paste is the opposite case — a `paste:<hash>` identity that never collides with
+any URL. That difference is the whole reason paste sits behind its own button and
+scoping does not.
 
 ---
 

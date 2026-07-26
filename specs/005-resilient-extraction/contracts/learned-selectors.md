@@ -3,8 +3,14 @@
 **Feature**: `005-resilient-extraction` | **Consumers**: `extension/` only
 
 A purely local contract — nothing here crosses a network boundary (spec FR-033).
-Documented as a contract because three modules read and write it: the picker,
-the extraction path, and the options page.
+Documented as a contract because four modules read and write it: the picker, the
+selection reader, the extraction path, and the options page.
+
+**Both scoping mechanisms write through the same door.** A picked element gives a
+node directly; a text selection gives one via its range's common ancestor (spec
+FR-023c). From `put()` onward they are indistinguishable, which is the point —
+selection is a lighter-weight picker, not a parallel mechanism with its own
+storage and its own bugs.
 
 ## Storage shape
 
@@ -34,7 +40,7 @@ posting on the board — which is the entire point of the feature (spec FR-028).
 | Operation | Behavior |
 |---|---|
 | `get(host)` | Returns the record or `null`. MUST NOT throw when storage is unavailable — return `null` and let automatic extraction proceed. |
-| `put(host, selector)` | Upserts; resets `consecutiveMisses` to 0; sets both timestamps. Triggers eviction. |
+| `put(host, selector)` | Upserts; resets `consecutiveMisses` to 0; sets both timestamps. Triggers eviction. Called only when the user **accepts** the offer to reuse a region (spec FR-026b) — never as a side effect of picking or selecting. |
 | `touch(host)` | On successful use: updates `lastUsedAt`, resets `consecutiveMisses` to 0. |
 | `recordMiss(host)` | Increments `consecutiveMisses`; deletes the record when it reaches **3**. |
 | `clear(host)` | Removes one host (spec FR-031). |
