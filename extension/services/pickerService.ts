@@ -46,9 +46,6 @@ export type PickerPageResult =
   | { kind: "commit"; outcome: CommitOutcome }
   | { kind: "pointerPick"; outcome: PointerPickOutcome };
 
-/** Cap on the ranked list shown in the panel (FR-024b) — enough to cover every corpus fixture's real candidates without overwhelming a screen-reader user. */
-const MAX_CANDIDATES = 8;
-
 /**
  * Runs inside the target page via executeScript. Self-contained by the same
  * rule as `extractPage` — exported so it can be unit-tested directly (jsdom
@@ -65,6 +62,12 @@ export async function pickerPageScript(command: PickerCommand): Promise<PickerPa
   const EXCERPT_MAX = 120;
   const HIGHLIGHT_ATTR = "data-jpa-picker-highlight";
   const CURSOR_BADGE_ID = "jpa-picker-cursor-badge";
+  // Cap on the ranked list shown in the panel (FR-024b) — enough to cover
+  // every corpus fixture's real candidates without overwhelming a
+  // screen-reader user. Must live INSIDE this function: it is serialized by
+  // `func.toString()` for executeScript, and a module-scope const referenced
+  // from here is a ReferenceError at runtime, not a closure capture.
+  const MAX_CANDIDATES = 8;
 
   function textOf(element: Element): string {
     const clone = element.cloneNode(true) as HTMLElement;
