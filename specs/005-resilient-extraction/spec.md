@@ -75,7 +75,7 @@ A user is looking at a posting the extension cannot read at all — a login-wall
 
 **Why this priority**: It is the unconditional escape hatch: it depends on nothing, cannot be defeated by any site, and bounds the worst case for every extraction failure the automatic work does not cover. It is also the smallest of the four stories.
 
-**Independent Test**: Paste a job description into the panel with no readable page open at all, confirm the analysis returns with the same fields and fit scoring as a page analysis, and confirm it can be saved to the library and found again.
+**Independent Test**: Open the paste composer from the header button with no readable page open at all, paste a job description, confirm the analysis returns with the same fields and fit scoring as a page analysis, and confirm it can be saved to the library and found again. Separately, confirm a draft survives closing and reopening the composer, switching tabs, and navigating the underlying page.
 
 **Acceptance Scenarios**:
 
@@ -87,23 +87,28 @@ A user is looking at a posting the extension cannot read at all — a login-wall
 
 ---
 
-### User Story 4 - Point at the Posting, and the Host Is Learned (Priority: P4)
+### User Story 4 - Scope the Page by Hand, and the Host Is Learned (Priority: P4)
 
-Automatic extraction picks the wrong region on a host the user visits often. The user clicks "Pick region", the page highlights blocks as they hover, they click the posting body, and the analysis re-runs against it. The next posting they open on that host extracts correctly with no action at all.
+Automatic extraction picks the wrong region on a host the user visits often. The user narrows it by hand in whichever way suits them — clicking "Pick region" and clicking the posting body, or simply highlighting the posting and right-clicking "Analyze selection" — and the analysis re-runs against that region. The next posting they open on that host extracts correctly with no action at all.
 
-**Why this priority**: It is the only path that turns a single user correction into durable coverage, but it is the largest build and it depends on the paste escape hatch already existing for the cases where picking is impossible. It is the last of the four for effort reasons, not value reasons.
+**Both mechanisms scope the *current page*.** Their results are that page's analysis, identified by its canonical URL, replacing whatever automatic extraction produced. This is what separates them from paste (Story 3), which produces a posting with no URL at all — and why they live on the "This Page" surface and the page's own context menu, not behind the paste button. It is also why they are unavailable in exactly the case paste exists for: a page the extension cannot read cannot be picked from or selected in.
 
-**Independent Test**: On a host where automatic extraction picks the wrong region, pick the posting body, confirm the analysis re-runs against the picked region; then open a different posting on the same host and confirm it extracts from the equivalent region with no user action.
+**Why this priority**: It is the only path that turns a single user correction into durable coverage, but it is the largest build and it depends on the paste escape hatch already existing for the cases where neither picking nor selecting is possible. Last of the four for effort reasons, not value reasons.
+
+**Independent Test**: On a host where automatic extraction picks the wrong region, scope it by hand (either mechanism), confirm the analysis re-runs against that region; then open a different posting on the same host and confirm it extracts from the equivalent region with no user action.
 
 **Acceptance Scenarios**:
 
-1. **Given** an analysis that picked the wrong region, **When** the user starts the picker, **Then** hovering the page highlights the block under the cursor and shows what will be captured.
+1. **Given** an analysis that picked the wrong region, **When** the user starts the picker from the "This Page" surface, **Then** hovering the page highlights the block under the cursor and shows what will be captured.
 2. **Given** the picker is active, **When** the user clicks a block, **Then** the picker closes and the analysis re-runs against that block's text.
 3. **Given** the picker is active, **When** the user presses Escape or clicks the panel, **Then** the picker closes with no change to the current result.
-4. **Given** a region was picked on a host, **When** the user later analyzes a different posting on the same host, **Then** the learned region is used automatically and the panel indicates the host was learned.
-5. **Given** a learned region that no longer matches the page — the site redesigned, or the selector matches nothing — **When** extraction runs, **Then** it falls back to automatic extraction without an error, and the stale learning is retired after repeated misses.
-6. **Given** a learned region, **When** the user wants it gone, **Then** they can clear it for the current host, and clear all learned hosts, from the options page.
-7. **Given** a picked region yielding less than the usable minimum, **When** the user clicks it, **Then** they are told the selection is too small and the picker stays open for another try.
+4. **Given** text highlighted on a job posting, **When** the user right-clicks and chooses "Analyze selection", **Then** the analysis runs against the full highlighted text — not a truncated copy — whether or not the panel was already open.
+5. **Given** a region scoped by either mechanism, **When** the analysis runs, **Then** it is a fresh analysis of the current page: any previously stored or cached analysis of that URL is bypassed and then replaced, never returned in its place.
+6. **Given** a region scoped by either mechanism, **When** the analysis succeeds, **Then** the user is offered the choice to reuse that region on this host in future, and declining leaves nothing learned.
+7. **Given** a region was learned on a host, **When** the user later analyzes a different posting on the same host, **Then** the learned region is used automatically and the panel indicates the host was learned.
+8. **Given** a learned region that no longer matches the page — the site redesigned, or the selector matches nothing — **When** extraction runs, **Then** it falls back to automatic extraction without an error, and the stale learning is retired after repeated misses.
+9. **Given** a learned region, **When** the user wants it gone, **Then** they can clear it for the current host, and clear all learned hosts, from the options page.
+10. **Given** a picked or selected region yielding less than the usable minimum, **When** the user commits it, **Then** they are told it is too small and are left able to try again.
 
 ---
 
@@ -134,32 +139,53 @@ Automatic extraction picks the wrong region on a host the user visits often. The
 
 ### Functional Requirements — Paste (Story 3)
 
-- **FR-017**: The panel MUST offer a path to analyze pasted posting text with no readable page required.
+- **FR-017**: The panel MUST offer a path to analyze pasted posting text with no readable page required, triggered by a **persistent action button in the panel header row, beside the "This Page" and "Saved" tabs** — a button, not a third tab.
+- **FR-017a**: The button MUST NOT be a child of the tab bar's `role="tablist"` element. Every child of a tablist is announced as a tab; a non-tab button inside it misrepresents the panel's structure to assistive technology. The header row is a flex container holding the tablist and the button as siblings.
+- **FR-017b**: Activating the button MUST open a paste composer occupying the panel body, with the tab panels hidden while it is open. The button MUST expose its open state (`aria-pressed`), and the composer MUST be dismissible by Escape and by an explicit close control, returning the user to the previously selected tab.
+- **FR-017c**: Opening, closing, and reopening the composer MUST preserve the draft within a session, as MUST switching between "This Page" and "Saved" while it is closed.
+- **FR-017d**: Page navigation and tab switches MUST NOT close the composer or clear its draft. Those events invalidate a page analysis, but pasted text is independent of any page — evicting the user mid-paste would be a defect introduced purely by the entry-point wiring.
+- **FR-017e**: The extraction-failure and no-access states SHOULD offer a contextual shortcut that opens the composer directly. This is a convenience rather than the only door, but it is the sole remedy for `no-access` pages (Chrome's own pages, the Web Store), which today dead-end with no path forward.
 - **FR-018**: Pasted text MUST be validated against the same usable minimum and content cap as page text, with the outcome reported before any analysis allowance is consumed.
 - **FR-019**: A paste-sourced analysis MUST produce the same analysis shape and fit scoring as a page-sourced one.
 - **FR-020**: A paste-sourced analysis MUST be identified as paste-sourced wherever a posting's source is shown or stored, rather than being attributed to a URL.
 - **FR-021**: A paste-sourced analysis MUST be storable in the library under a stable synthetic identity derived from its content, so repeat pastes of the same text resolve consistently.
 - **FR-022**: A paste-sourced analysis MUST count against the same monthly allowance and library cap as any other analysis, with identical at-cap behavior.
 
-### Functional Requirements — Picker and Learned Hosts (Story 4)
+### Functional Requirements — Page Scoping and Learned Hosts (Story 4)
 
-- **FR-023**: The user MUST be able to start an element picker on the current page from the panel, reachable both from a failed extraction and from a successful-but-wrong one.
+Two mechanisms, one outcome. Requirements below say "scoping" where they bind both.
+
+**Picker**
+
+- **FR-023**: The user MUST be able to start an element picker on the current page from the **"This Page" surface**, reachable both from a failed extraction and from a successful-but-wrong one. The picker MUST NOT be placed behind the paste button (FR-017), whose purpose is off-page input.
 - **FR-024**: The picker MUST highlight the block under the cursor and indicate what will be captured before the user commits.
 - **FR-025**: The picker MUST be dismissible without side effects via Escape and via leaving the page.
-- **FR-026**: Committing a pick MUST re-run the analysis against the picked region's text.
-- **FR-027**: A pick MUST be reduced to a selector that is stable across postings on the same host; machine-generated class names MUST NOT be relied on.
+
+**Analyze selection**
+
+- **FR-023a**: The user MUST be able to highlight text on a page and analyze it from the browser's context menu, without the panel being open beforehand.
+- **FR-023b**: The analyzed text MUST be the full selection read from the page. The context-menu payload's own selection text MUST NOT be used as the source, as it is subject to truncation and job postings routinely exceed it.
+- **FR-023c**: A selection MUST be reducible to a region for learning purposes via its range's common ancestor, so that selecting and picking feed the same learning path rather than existing as two unrelated mechanisms.
+
+**Common to both**
+
+- **FR-026**: Committing a scoped region MUST re-run the analysis against that region's text, as an analysis **of the current page** — identified by the page's canonical URL, not by a synthetic identity.
+- **FR-026a**: A scoped analysis MUST bypass the saved-library and session-cache lookup and then replace the stored result. Without this, scoping a page that already has a stored analysis silently returns the previous, wrong analysis and the user's correction appears to do nothing.
+- **FR-026b**: Learning MUST be offered after a successful scoped analysis, not imposed by the act of scoping. A one-off correction on an unusual posting MUST NOT silently teach a selector that then misapplies to every posting on that host.
+- **FR-027**: A scoped region MUST be reduced to a selector that is stable across postings on the same host; machine-generated class names MUST NOT be relied on.
 - **FR-028**: A learned selector MUST be stored per host, locally, and MUST be applied ahead of automatic extraction on subsequent analyses of that host.
 - **FR-029**: A learned selector that fails to match, or that yields less than the usable minimum, MUST fall through to automatic extraction silently, and MUST be retired after repeated consecutive misses.
 - **FR-030**: The number of learned hosts MUST be capped, with least-recently-used eviction.
 - **FR-031**: The user MUST be able to clear the learned selector for the current host and clear all learned selectors, from the options page.
 - **FR-032**: The panel MUST indicate when a result came from a learned region rather than automatic extraction.
-- **FR-033**: Learned selectors MUST NOT leave the browser; no selector, host, or picked content may be transmitted to the backend under this feature.
-- **FR-034**: A pick yielding less than the usable minimum MUST be refused with an explanation, leaving the picker open.
+- **FR-033**: Learned selectors MUST NOT leave the browser; no selector, host, or scoped content may be transmitted to the backend under this feature.
+- **FR-034**: A scoped region yielding less than the usable minimum MUST be refused with an explanation, leaving the user able to try again without restarting the flow.
 
 ### Cross-Cutting Requirements
 
-- **FR-035**: Every extraction result MUST record which strategy produced it — learned selector, structured data, semantic container, scored container, body fallback, or paste — and this provenance MUST be available to the eval harness.
-- **FR-036**: The feature MUST NOT request any new host permissions in store or release builds; it MUST operate within the existing `activeTab` grant model.
+- **FR-035**: Every extraction result MUST record which strategy produced it — learned selector, picked region, selection, structured data, semantic container, scored container, body fallback, or paste — and this provenance MUST be available to the eval harness.
+- **FR-036**: The feature MUST NOT request any new **host** permissions in store or release builds, and MUST operate within the existing `activeTab` grant model. It MAY add the `contextMenus` API permission, which FR-023a requires; that is a manifest addition subject to Web Store review but grants no site access and does not weaken the extension's permission posture.
+- **FR-036a**: Both scoping mechanisms depend on page access and MUST degrade honestly where it does not exist. On a page the extension cannot read, they MUST be unavailable with a stated reason rather than present-and-broken, and the user MUST be pointed at paste (FR-017), which is the only path that works there.
 - **FR-037**: All new error and empty states MUST be plain language with a stated next action, per constitution III.
 - **FR-038**: No new runtime dependency may be added to the extension bundle for container scoring; the scoring heuristic MUST be self-contained.
 
@@ -167,8 +193,9 @@ Automatic extraction picks the wrong region on a host the user visits often. The
 
 - **Structured source**: One harvested block of posting data, carrying its kind (JSON-LD, microdata, or the specific state-blob convention), its pruned payload, and its size after pruning.
 - **Extraction provenance**: The record of how a given extraction resolved — strategy used, readiness attempts, elapsed time, whether the readiness budget expired, and whether a learned selector was tried and missed.
-- **Learned host selector**: A per-host record of a user-picked selector, when it was learned, and its consecutive-miss count, subject to a capped, least-recently-used store.
-- **Paste-sourced posting**: A posting whose content came from user-pasted text, identified by a stable content-derived synthetic key rather than a URL.
+- **Learned host selector**: A per-host record of a user-taught selector — from a pick or from a selection's common ancestor — when it was learned, and its consecutive-miss count, subject to a capped, least-recently-used store.
+- **Scoped region**: A user-designated part of the current page, produced by the picker or by a text selection. It carries the page's own identity, not a synthetic one, and its analysis supersedes any stored analysis of that URL.
+- **Paste-sourced posting**: A posting whose content came from user-pasted text, identified by a stable content-derived synthetic key rather than a URL. Distinct from a scoped region in exactly this respect.
 
 ## Success Criteria *(mandatory)*
 
@@ -182,7 +209,9 @@ Baseline captured 2026-07-25 over 6 fixtures; the table and aggregates live in `
 - **SC-005**: Worst-case extraction time — a page that never becomes ready — stays within the readiness budget, and total analysis time stays within the constitution IV ceiling.
 - **SC-006**: On corpus pages with no semantic container, the selected text excludes navigation, related-jobs lists, and footers, verified against per-fixture expectations.
 - **SC-007**: A user can go from "this page cannot be analyzed" to a completed analysis via paste without leaving the panel.
-- **SC-008**: After one pick on a host, a second, previously unseen posting on that host extracts from the equivalent region with no user action.
+- **SC-008**: After one scoped correction on a host — by either mechanism — a second, previously unseen posting on that host extracts from the equivalent region with no user action.
+- **SC-008a**: Scoping a page that already has a stored analysis returns the newly scoped result, never the previously stored one.
+- **SC-008b**: A selection longer than the context-menu payload's truncation limit is analyzed in full.
 - **SC-009**: A learned selector that stops matching produces a normal automatic-extraction result, never a user-visible error.
 - **SC-010**: Arrangement accuracy on the existing posting eval does not regress, and arrangement downgrades caused by evidence falling outside the transmitted input drop to zero on fixtures with harvested structured data.
 
@@ -203,7 +232,11 @@ One structural limitation matters for planning: **the snapshots cannot regressio
 - A state blob large enough to matter for memory or transmission before pruning.
 - Microdata and JSON-LD both present and disagreeing.
 - The picker on a page that re-renders under the cursor, invalidating the highlighted node between hover and click.
-- A picked region inside a shadow root or a cross-origin iframe, where no selector from the top document can address it. Out of scope to support; must fail with an explanation rather than storing a selector that can never match.
+- A scoped region inside a shadow root or a cross-origin iframe, where no selector from the top document can address it. Out of scope to support; must fail with an explanation rather than storing a selector that can never match.
+- A selection spanning partial text nodes, or crossing several siblings, so its common ancestor is far broader than what the user highlighted — the analysis must use the highlighted text, while any *learning* offer must describe the broader region it would actually store.
+- A selection made, then the user right-clicks somewhere that clears it before choosing the menu item.
+- "Analyze selection" invoked on a page whose analysis is already open in the panel for a *different* tab.
+- A selection of a few words — far below the usable minimum — where the right response is refusal, not an analysis of a fragment.
 - A host whose postings live on two structurally different templates, so one learned selector is right for half of them.
 - Pasted text that is not a job posting at all: the existing `isJobPosting: false` and "Analyze anyway" path applies unchanged.
 - The Google SERP overlay special case in the current extractor must keep working; readiness and scoring must not bypass it.
@@ -220,7 +253,11 @@ One structural limitation matters for planning: **the snapshots cannot regressio
 ## Open Questions
 
 - ~~**Readiness budget**~~ **[resolved by measurement]**: slowest settle is 4883 ms (`phenom-intuit`), stable across 5 runs at 3408–3600 ms time-to-text. Budget floor ≈ 5 s; planning to fix the exact value and the stability-window length, whose cost lands on every fast page (the other five fixtures settle in 973–1589 ms).
-- **Paste entry point**: a fourth panel tab versus an action surfaced from the extraction-failure state. The tab is more discoverable; the failure-state affordance is better targeted and adds no chrome. Worth deciding against how often paste is expected to be the *first* thing a user reaches for.
+- ~~**Paste entry point**~~ **[decided 2026-07-25 — persistent action button]**: a button in the panel header row beside the two tabs, opening a paste composer over the panel body. (An earlier draft of this question said "fourth tab"; the panel has two today, so the alternative would have been a third.)
+
+  Chosen over a failure-state-only affordance because paste is an *origination* path, not only a recovery one — job descriptions arrive as PDFs, emails, and messages with no page ever involved, the same need feature 004 built document upload to serve. A failure-only entry point would force those users to open an arbitrary page and wait for it to fail.
+
+  Chosen over a third tab because "This Page" and "Saved" name places while paste names an action, and a tab bar that mixes the two reads wrong; a button also avoids a tablist whose selected tab does not correspond to what the body is showing. See FR-017a–FR-017e.
 - **Consecutive-miss threshold** before retiring a learned selector: too low retires on a transient render, too high leaves the user with a silently dead learning.
 - **Learned selector storage**: `chrome.storage.local` versus `sync`. `sync` follows the user across machines but has tighter quotas and makes FR-033's "never leaves the browser" phrasing arguable.
 

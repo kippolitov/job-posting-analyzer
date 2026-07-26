@@ -110,7 +110,25 @@ cd extension && npm test -- pasteIdentity
 - A saved paste posting round-trips with `source: "paste"` and empty
   `sourceUrl`/`filename`.
 
-### Story 4 — picker and learned hosts (SC-008, SC-009)
+Header-button and composer behavior (`npm test -- JobPanel TabBar`), which the
+persistent-entry-point choice makes load-bearing — a failure-state-only
+affordance would not have owed any of it:
+
+- The header row still exposes exactly **two** tabs. The paste button is a
+  sibling of `role="tablist"`, not a child, so `getAllByRole("tab")` returns 2
+  and the button is found via `getByRole("button", { name: /paste/i })`
+  (FR-017a). This is the assertion that catches the tempting shortcut of
+  dropping the button inside the existing tablist div.
+- The button exposes `aria-pressed` reflecting composer state, and Escape and
+  the close control both return to the previously selected tab (FR-017b).
+- Closing and reopening preserves the draft; so does switching to "Saved" and
+  back while closed (FR-017c).
+- A navigation or tab-switch broadcast does **not** close the composer and does
+  **not** clear the draft (FR-017d). The existing reset-to-idle logic in
+  `JobPanel.tsx` fires on those events and must be scoped to the page view only.
+- The existing `TabBar.test.tsx` still passes after the row/tablist split.
+
+### Story 4 — page scoping and learned hosts (SC-008, SC-008a/b, SC-009)
 
 ```bash
 cd extension && npm test -- selectorPath learnedSelectors
@@ -118,17 +136,33 @@ cd extension && npm test -- selectorPath learnedSelectors
 
 Pure-logic tests (jsdom is fine here): machine-generated classes rejected
 (`css-1x2y3z`, `jsx-123`), LRU eviction at 200, retirement at 3 misses,
-`recordMiss` NOT firing per readiness attempt.
+`recordMiss` NOT firing per readiness attempt, and `put()` NOT called by the act
+of scoping — only by accepting the reuse offer (FR-026b).
 
-The criterion that actually matters is cross-posting generalization (SC-008) and
-needs two postings from one board:
+Three behaviors need a real browser (Playwright), because each has a failure mode
+that unit tests cannot see:
+
+- **Cache bypass (SC-008a)** — analyze a page normally, save it, then scope a
+  different region on the same URL. The scoped result must come back, not the
+  stored one. Without `bypassCache` this silently returns the old analysis and
+  the correction looks like a no-op. **Write this one first**; it is the trap.
+- **Full selection text (SC-008b)** — select a posting body longer than the
+  context-menu payload's truncation limit and confirm the analyzed text matches
+  the live `window.getSelection()`, not the truncated copy.
+- **Unavailability (FR-036a)** — on a page the extension cannot read, both
+  scoping affordances are disabled with a reason and point at paste.
+
+The criterion that actually matters is cross-posting generalization (SC-008), and
+it needs two postings from one board:
 
 ```bash
 npx tsx scripts/captureCorpus.ts --only=lever   # resolves up to 4 candidates
 ```
 
-Learn a selector on posting A, then verify posting B on the same host extracts
-from the equivalent region with no user action.
+Learn a region on posting A — via the picker in one run, via a selection in
+another, since FR-023c requires both to produce an equivalent selector — then
+verify posting B on the same host extracts from the equivalent region with no
+user action.
 
 ## 4. Full gates before merge
 
