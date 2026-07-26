@@ -26,37 +26,37 @@ describe("pageExtractor — Google job-detail overlay", () => {
     document.body.innerHTML = "";
   });
 
-  it("prefers the visible job dialog over the results list", () => {
+  it("prefers the visible job dialog over the results list", async () => {
     document.body.innerHTML = `
       <main>${LIST_TEXT}</main>
       <div role="dialog" id="detail">${JOB_TEXT}</div>`;
     makeVisible(document.getElementById("detail")!);
 
-    const { mainText } = extractPage();
+    const { mainText } = await extractPage();
     expect(mainText).toContain("Inspira Financial");
     expect(mainText).not.toContain("Another job teaser");
   });
 
-  it("ignores zero-size (hidden) dialogs", () => {
+  it("ignores zero-size (hidden) dialogs", async () => {
     document.body.innerHTML = `
       <main>${LIST_TEXT}</main>
       <div role="dialog">${JOB_TEXT}</div>`;
 
-    const { mainText } = extractPage();
+    const { mainText } = await extractPage();
     expect(mainText).toContain("Another job teaser");
   });
 
-  it("falls back to the page when the visible dialog text is thin", () => {
+  it("falls back to the page when the visible dialog text is thin", async () => {
     document.body.innerHTML = `
       <main>${LIST_TEXT}</main>
       <div role="dialog" id="detail">Date posted</div>`;
     makeVisible(document.getElementById("detail")!);
 
-    const { mainText } = extractPage();
+    const { mainText } = await extractPage();
     expect(mainText).toContain("Another job teaser");
   });
 
-  it("picks the largest of several visible dialogs", () => {
+  it("picks the largest of several visible dialogs", async () => {
     document.body.innerHTML = `
       <main>${LIST_TEXT}</main>
       <div role="dialog" id="chip">${"Filter chips dialog text. ".repeat(12)}</div>
@@ -64,7 +64,7 @@ describe("pageExtractor — Google job-detail overlay", () => {
     makeVisible(document.getElementById("chip")!);
     makeVisible(document.getElementById("detail")!);
 
-    const { mainText } = extractPage();
+    const { mainText } = await extractPage();
     expect(mainText).toContain("Inspira Financial");
     expect(mainText).not.toContain("Filter chips");
   });

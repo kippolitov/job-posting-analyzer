@@ -67,6 +67,56 @@ export interface Fit {
   weaknesses?: string[];
 }
 
+export type StructuredSourceKind = "json-ld" | "microdata";
+
+/** One harvested block of posting data, carrying where it came from. */
+export interface StructuredSource {
+  kind: StructuredSourceKind;
+  /** Pruned posting-shaped subtree. */
+  data: Record<string, unknown>;
+}
+
+/** How an extraction resolved. Client-side only — see ExtractionProvenance. */
+export type ExtractionStrategy =
+  | "learned-selector" // user-taught region for this host, applied automatically
+  | "picked" // one-off region the user just picked with the overlay
+  | "selection" // one-off region the user just highlighted on the page
+  | "semantic" // main / [role=main] / article won the scoring
+  | "scored" // density scorer picked a non-semantic container
+  | "google-overlay" // the SERP dialog branch
+  | "body" // last-resort full-body fallback
+  | "paste"; // user-supplied text, no page involved
+
+/**
+ * Diagnosis record for one extraction. Never persisted and never transmitted
+ * (contracts/extraction-payload.md §1) — it carries no analysis value. Consumed
+ * by the panel's badges, the error copy, and the eval harness.
+ */
+export interface ExtractionProvenance {
+  strategy: ExtractionStrategy;
+  /** Readiness attempts made before returning. */
+  attempts: number;
+  /** ms from injection to return. */
+  elapsedMs: number;
+  /** True when the readiness budget expired without stable usable text. */
+  budgetExpired: boolean;
+  /** A learned selector existed for this host but matched nothing / too little. */
+  learnedSelectorMissed: boolean;
+}
+
+/**
+ * The single argument extractPage receives via executeScript({ args }).
+ *
+ * extractPage is serialized into the page, so it can neither import
+ * learnedSelectors.ts nor reach for chrome.storage. The caller resolves the
+ * selector and passes it in; touch/recordMiss stay on the caller's side, where
+ * they are testable in jsdom (plan.md Constraints).
+ */
+export interface ExtractArgs {
+  /** Resolved by the caller from `learned:<host>`; absent when nothing is learned. */
+  learnedSelector?: string;
+}
+
 /** Client-side page extraction payload; never persisted as-is. */
 export interface PageExtractPayload {
   url: string;
@@ -75,6 +125,14 @@ export interface PageExtractPayload {
   jsonLd: Record<string, unknown>[];
   mainText: string;
   extractedAt: string;
+  /**
+   * Optional on the wire in both directions: older extensions omit it, and the
+   * backend treats absence as [] (contracts/extraction-payload.md §1). The
+   * extension's own RawPageExtract requires it.
+   */
+  structuredSources?: StructuredSource[];
+  /** Client-side only. Present on the in-page extract, stripped before transmission. */
+  provenance?: ExtractionProvenance;
 }
 
 export interface AnalyzeJobRequest {

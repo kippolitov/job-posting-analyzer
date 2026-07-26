@@ -15,7 +15,11 @@
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --project=e2e",
+    "test:extractor": "playwright test --project=extractor",
+    "corpus:baseline": "npx tsx scripts/baselineReport.ts",
+    "corpus:capture": "npx tsx scripts/captureCorpus.ts",
+    "corpus:rescore": "npx tsx scripts/rescoreCorpus.ts",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {

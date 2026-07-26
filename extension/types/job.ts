@@ -8,6 +8,11 @@ export type {
   JobStatus,
   PageExtractPayload as PageExtract,
   JobAnalysisResponse as JobAnalysis,
+  StructuredSource,
+  StructuredSourceKind,
+  ExtractionStrategy,
+  ExtractionProvenance,
+  ExtractArgs,
 } from "../../shared/types/job";
 export { JOB_STATUSES, ARRANGEMENTS } from "../../shared/types/job";
 

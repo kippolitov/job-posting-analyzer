@@ -12,6 +12,7 @@ import { getProfile, profileToPromptText } from "./profileStorage";
 import { MessageType } from "../types/messages";
 import type {
   AnalyzeJobPageMessage,
+  CancelAnalysisMessage,
   ExtensionMessage,
 } from "../types/messages";
 import type {
@@ -221,22 +222,52 @@ async function needsFitRefresh(analysis: JobAnalysis): Promise<boolean> {
   }
 }
 
+/**
+ * Per-tab cancellation generation (spec FR-006, FR-006b).
+ *
+ * Extraction now spends up to 6 s waiting for the page inside the injected
+ * function, and that wait cannot be interrupted from here — the loop lives in
+ * the page's isolated world. What we can guarantee is the part the user cares
+ * about: a cancelled attempt sends no analysis request, spends no allowance,
+ * and broadcasts nothing. The abandoned injection resolves into a generation
+ * check that discards it; its observer is disconnected as it returns, so it
+ * holds nothing open.
+ *
+ * A counter rather than a boolean because of FR-006b: cancel, then immediately
+ * re-analyze. A flag would have to be cleared by the next request and would
+ * race with the abandoned one; a generation makes the stale result identifiable
+ * no matter when it lands.
+ */
+const cancelGenerations = new Map<number, number>();
+
+/** Panel → background: abandon whatever is in flight for this tab. */
+export function cancelAnalysis(message: CancelAnalysisMessage): void {
+  cancelGenerations.set(message.tabId, (cancelGenerations.get(message.tabId) ?? 0) + 1);
+}
+
 export async function analyzeJobPage(
   message: AnalyzeJobPageMessage,
   broadcast: (m: ExtensionMessage) => void
 ): Promise<void> {
+  const generation = cancelGenerations.get(message.tabId) ?? 0;
+  const cancelled = (): boolean => (cancelGenerations.get(message.tabId) ?? 0) !== generation;
+
   let raw: RawPageExtract | undefined;
   if (!message.cachedOnly) {
     try {
       const [injection] = await chrome.scripting.executeScript({
         target: { tabId: message.tabId },
         func: extractPage,
+        args: [{}],
       });
       raw = injection?.result as RawPageExtract | undefined;
     } catch {
       raw = undefined;
     }
   }
+
+  // The readiness wait is the window a cancel most plausibly lands in.
+  if (cancelled()) return;
 
   if (!raw) {
     // No page access: either this is a cachedOnly probe, or executeScript
@@ -290,13 +321,28 @@ export async function analyzeJobPage(
   const extract: PageExtract = { ...raw, canonicalUrl };
   void rememberTabUrl(message.tabId, raw.url);
 
-  if (extract.jsonLd.length === 0 && extract.mainText.length < MIN_TEXT_CHARS) {
+  // Thin content now keys on body text alone. Structured data no longer
+  // rescues a page from this check: JSON-LD with an empty body was the silent
+  // degradation 3/6 corpus fixtures took — the model received structured
+  // fields and no posting, and the user was never told (spec FR-004a).
+  //
+  // Since extraction only returns early once text clears the minimum, text
+  // below it means the readiness budget expired. The two messages describe two
+  // genuinely different situations and suggest different next actions
+  // (contracts/extraction-payload.md §3); the code and retryability are
+  // unchanged, so JobErrorCode does not grow.
+  if (extract.mainText.length < MIN_TEXT_CHARS) {
+    const stillLoading = extract.provenance?.budgetExpired === true;
     broadcast({
       type: MessageType.JOB_ANALYSIS_ERROR,
       error: {
         code: "thin-content",
-        message: "Not enough page content to analyze.",
-        action: "Open the full job posting page, then re-analyze.",
+        message: stillLoading
+          ? "The page was still loading when we tried to read it."
+          : "Not enough page content to analyze.",
+        action: stillLoading
+          ? "Wait for the page to finish loading, then re-analyze."
+          : "Open the full job posting page, then re-analyze.",
         retryable: true,
       },
       fallback: null,
@@ -338,6 +384,10 @@ export async function analyzeJobPage(
     } catch {
       profile = null;
     }
+    // Last check before the request: this is the line FR-006 is about — a
+    // cancelled analysis must not spend the user's monthly allowance.
+    if (cancelled()) return;
+
     const analysis = await postJobAnalysis({
       extract,
       profile: profile ? profileToPromptText(profile) : undefined,

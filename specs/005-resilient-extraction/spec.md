@@ -123,8 +123,15 @@ Automatic extraction picks the wrong region on a host the user visits often. The
 - **FR-004**: Re-attempts MUST be driven by observed page change, not by fixed polling alone, so a page that settles early is not made to wait.
 - **FR-004a** **[measured]**: Extraction MUST NOT return structured data with an empty or below-minimum body text while the readiness budget remains, since that is the silent-degradation path 3/6 fixtures take today.
 - **FR-005**: When the budget expires without usable content, the resulting error MUST distinguish "the page was still loading" from "this page has no content", and MUST remain retryable.
+- **FR-005a**: The retry offered after a budget expiry MUST re-run extraction from the beginning, including a fresh readiness cycle. Re-presenting the same expired result would make the action dishonest, and a page that was mid-hydration is exactly the case where trying again works.
 - **FR-006**: A user cancel during the readiness wait MUST stop it immediately and send no analysis request.
+- **FR-006a**: A labeled cancel control MUST be present for the whole readiness wait, not only once the model call starts. The wait is now the longer of the two phases on a slow page, and it is the phase a user is most likely to want out of.
+- **FR-006b**: Cancelling MUST leave the page immediately re-analyzable. A cancelled attempt's in-flight extraction MUST NOT suppress or corrupt the result of the next one — the abandoned injection resolves after the new request has started, and must be inert rather than merely ignored once.
 - **FR-007**: Extraction MUST report readiness provenance — attempts made and time spent — for diagnosis and for the eval harness.
+
+**Progress indication.** A single indicator covers readiness and analysis together, using the existing "Analyzing page…" copy, and MUST appear when analysis is triggered rather than when the model call begins — otherwise a 6 s readiness wait is a silent frozen UI, which constitution III forbids outright. The two phases are deliberately *not* distinguished in copy: the split is an implementation detail, and naming it would trade stable vocabulary for a distinction the user cannot act on.
+
+**Error-card actions.** Through Story 1 the thin-content card carries one action (retry). Stories 3 and 4 add a paste shortcut and region selection to the same card; the requirement governing their relative prominence is due then, and is recorded as the QG-3 watch item rather than pre-decided here.
 
 ### Functional Requirements — Signals and Containers (Story 2)
 
