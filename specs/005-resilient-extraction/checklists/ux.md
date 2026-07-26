@@ -29,7 +29,8 @@
 
 ## Requirement Consistency
 
-- [ ] CHK016 Is the user-facing vocabulary for the learned-region concept pinned to a single term? The artifacts use "learned selector" (FR-028–FR-031), "learned region" (FR-032, T080), "scoped region" (Key Entities), and "Pick region" (FR-023) — constitution III requires stable terminology in user-facing copy. [Conflict, Spec §FR-028–§FR-032, Constitution III]
+- [x] CHK016 Is the user-facing vocabulary for the learned-region concept pinned to a single term? The artifacts use "learned selector" (FR-028–FR-031), "learned region" (FR-032, T080), "scoped region" (Key Entities), and "Pick region" (FR-023) — constitution III requires stable terminology in user-facing copy. [Conflict, Spec §FR-028–§FR-032, Constitution III]
+      **Resolved 2026-07-26** — spec §User-Facing Vocabulary fixes region / site / analyze / always, and bars learn, remember, save, selector, host, pick, scope from user copy. Code vocabulary unchanged. T084 greps for violations.
 - [ ] CHK017 Are the two below-minimum refusal messages (pasted text, FR-018; scoped region, FR-034) required to be consistent with each other in wording and in the next action they offer? [Consistency, Spec §FR-018, §FR-034]
 - [ ] CHK018 Is the cancel affordance required to be the same control, in the same place, during the readiness wait as during the model call? The user cannot distinguish the two phases. [Consistency, Spec §FR-006]
 - [ ] CHK019 Do the paste entry points stay consistent — the persistent header button (FR-017) and the contextual shortcuts in the failure/no-access states (FR-017e) — in label and in the state they open the composer into? [Consistency, Spec §FR-017, §FR-017e]
@@ -38,7 +39,8 @@
 
 ## Accessibility Requirements (WCAG 2.1 AA, Constitution III)
 
-- [ ] CHK022 Are keyboard-operability requirements defined for the picker itself? FR-024/FR-025 specify hover, click, and Escape only — a mouse-only path to a core function is a WCAG 2.1.1 failure, and no requirement anywhere provides a keyboard alternative. [Gap, Spec §FR-024, Constitution III]
+- [x] CHK022 Are keyboard-operability requirements defined for the picker itself? FR-024/FR-025 specify hover, click, and Escape only — a mouse-only path to a core function is a WCAG 2.1.1 failure, and no requirement anywhere provides a keyboard alternative. [Gap, Spec §FR-024, Constitution III]
+      **Resolved 2026-07-26** — FR-024a puts the keyboard path in the *panel* (an in-page overlay cannot take focus from a panel control, so key handlers on the overlay would not have fixed this); FR-024b specifies the candidate list; FR-025 adds focus restoration; SC-011 and T064a gate it with a pointer-event-free test.
 - [ ] CHK023 Is the accessible announcement of the picker's current highlight a *requirement*, or only a plan-level intention? It appears in plan.md's Constitution Check and in T069 but in no FR. [Gap, Spec §FR-024, Plan §Constitution Check III]
 - [ ] CHK024 Are contrast requirements specified for the picker's highlight treatment, which is non-text UI drawn over arbitrary third-party pages (WCAG 1.4.11)? [Gap, Constitution III]
 - [ ] CHK025 Is the picker's highlight required to be perceivable without relying on color alone (WCAG 1.4.1)? [Gap, Constitution III]

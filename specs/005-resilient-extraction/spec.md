@@ -89,7 +89,7 @@ A user is looking at a posting the extension cannot read at all — a login-wall
 
 ### User Story 4 - Scope the Page by Hand, and the Host Is Learned (Priority: P4)
 
-Automatic extraction picks the wrong region on a host the user visits often. The user narrows it by hand in whichever way suits them — clicking "Pick region" and clicking the posting body, or simply highlighting the posting and right-clicking "Analyze selection" — and the analysis re-runs against that region. The next posting they open on that host extracts correctly with no action at all.
+Automatic extraction picks the wrong region on a host the user visits often. The user narrows it by hand in whichever way suits them — choosing "Analyze a region" and either pointing at the posting body on the page or choosing it from the ranked list in the panel, or simply highlighting the posting and right-clicking "Analyze selection" — and the analysis re-runs against that region. The next posting they open on that host extracts correctly with no action at all.
 
 **Both mechanisms scope the *current page*.** Their results are that page's analysis, identified by its canonical URL, replacing whatever automatic extraction produced. This is what separates them from paste (Story 3), which produces a posting with no URL at all — and why they live on the "This Page" surface and the page's own context menu, not behind the paste button. It is also why they are unavailable in exactly the case paste exists for: a page the extension cannot read cannot be picked from or selected in.
 
@@ -99,15 +99,16 @@ Automatic extraction picks the wrong region on a host the user visits often. The
 
 **Acceptance Scenarios**:
 
-1. **Given** an analysis that picked the wrong region, **When** the user starts the picker from the "This Page" surface, **Then** hovering the page highlights the block under the cursor and shows what will be captured.
-2. **Given** the picker is active, **When** the user clicks a block, **Then** the picker closes and the analysis re-runs against that block's text.
-3. **Given** the picker is active, **When** the user presses Escape or clicks the panel, **Then** the picker closes with no change to the current result.
+1. **Given** an analysis that picked the wrong region, **When** the user starts region selection from the "This Page" surface, **Then** hovering the page highlights the block under the cursor and shows what will be captured.
+2. **Given** region selection is active, **When** the user clicks a block, **Then** it closes and the analysis re-runs against that block's text.
+3. **Given** region selection is active, **When** the user presses Escape or clicks the panel, **Then** it closes with no change to the current result.
+3a. **Given** a user who cannot use a pointing device, **When** they start region selection, **Then** the panel lists the candidate regions, arrow keys move between them, the page highlights the current one, and Enter commits it — the whole flow completing without a pointer.
 4. **Given** text highlighted on a job posting, **When** the user right-clicks and chooses "Analyze selection", **Then** the analysis runs against the full highlighted text — not a truncated copy — whether or not the panel was already open.
 5. **Given** a region scoped by either mechanism, **When** the analysis runs, **Then** it is a fresh analysis of the current page: any previously stored or cached analysis of that URL is bypassed and then replaced, never returned in its place.
 6. **Given** a region scoped by either mechanism, **When** the analysis succeeds, **Then** the user is offered the choice to reuse that region on this host in future, and declining leaves nothing learned.
-7. **Given** a region was learned on a host, **When** the user later analyzes a different posting on the same host, **Then** the learned region is used automatically and the panel indicates the host was learned.
-8. **Given** a learned region that no longer matches the page — the site redesigned, or the selector matches nothing — **When** extraction runs, **Then** it falls back to automatic extraction without an error, and the stale learning is retired after repeated misses.
-9. **Given** a learned region, **When** the user wants it gone, **Then** they can clear it for the current host, and clear all learned hosts, from the options page.
+7. **Given** a region stored for a site, **When** the user later analyzes a different posting on that site, **Then** the stored region is used automatically and the panel says so.
+8. **Given** a stored region that no longer matches the page — the site redesigned, or nothing matches — **When** extraction runs, **Then** it falls back to automatic extraction without an error, and the stale region is discarded after repeated misses.
+9. **Given** a stored region, **When** the user wants it gone, **Then** they can clear it for the current site, and clear every site's region, from the options page.
 10. **Given** a picked or selected region yielding less than the usable minimum, **When** the user commits it, **Then** they are told it is too small and are left able to try again.
 
 ---
@@ -157,9 +158,11 @@ Two mechanisms, one outcome. Requirements below say "scoping" where they bind bo
 
 **Picker**
 
-- **FR-023**: The user MUST be able to start an element picker on the current page from the **"This Page" surface**, reachable both from a failed extraction and from a successful-but-wrong one. The picker MUST NOT be placed behind the paste button (FR-017), whose purpose is off-page input.
-- **FR-024**: The picker MUST highlight the block under the cursor and indicate what will be captured before the user commits.
-- **FR-025**: The picker MUST be dismissible without side effects via Escape and via leaving the page.
+- **FR-023**: The user MUST be able to start region selection on the current page from the **"This Page" surface**, reachable both from a failed extraction and from a successful-but-wrong one. It MUST NOT be placed behind the paste button (FR-017), whose purpose is off-page input.
+- **FR-024**: The pointer path MUST highlight the block under the cursor and indicate what will be captured before the user commits.
+- **FR-024a** **[WCAG 2.1.1]**: Region selection MUST be completable with the keyboard alone. Because the panel and the page are separate browsing contexts, an in-page overlay cannot receive keyboard focus from a control in the panel — so the keyboard path MUST live **in the panel**: the candidate regions are listed there, arrow keys move between them, the page highlights the current candidate as a supplement, and Enter commits. A pointer-only picker does not conform and MUST NOT be the sole path.
+- **FR-024b**: Each candidate in the list MUST be identifiable without seeing the page — at minimum a label, its text length, and a leading excerpt — because a screen-reader user cannot rely on the in-page highlight. The list MUST be ordered by the FR-012 score and MUST include every candidate the scorer considered, not only the winner; restricting the list to the automatic choice would offer the user only the region that already failed them.
+- **FR-025**: Region selection MUST be dismissible without side effects via Escape and via leaving the page, and dismissal MUST return keyboard focus to the control that started it.
 
 **Analyze selection**
 
@@ -176,8 +179,8 @@ Two mechanisms, one outcome. Requirements below say "scoping" where they bind bo
 - **FR-028**: A learned selector MUST be stored per host, locally, and MUST be applied ahead of automatic extraction on subsequent analyses of that host.
 - **FR-029**: A learned selector that fails to match, or that yields less than the usable minimum, MUST fall through to automatic extraction silently, and MUST be retired after repeated consecutive misses.
 - **FR-030**: The number of learned hosts MUST be capped, with least-recently-used eviction.
-- **FR-031**: The user MUST be able to clear the learned selector for the current host and clear all learned selectors, from the options page.
-- **FR-032**: The panel MUST indicate when a result came from a learned region rather than automatic extraction.
+- **FR-031**: The user MUST be able to clear the stored region for the current site and clear all stored regions, from the options page.
+- **FR-032**: The panel MUST indicate when a result came from a stored region rather than automatic extraction, in the vocabulary fixed below.
 - **FR-033**: Learned selectors MUST NOT leave the browser; no selector, host, or scoped content may be transmitted to the backend under this feature.
 - **FR-034**: A scoped region yielding less than the usable minimum MUST be refused with an explanation, leaving the user able to try again without restarting the flow.
 
@@ -188,6 +191,30 @@ Two mechanisms, one outcome. Requirements below say "scoping" where they bind bo
 - **FR-036a**: Both scoping mechanisms depend on page access and MUST degrade honestly where it does not exist. On a page the extension cannot read, they MUST be unavailable with a stated reason rather than present-and-broken, and the user MUST be pointed at paste (FR-017), which is the only path that works there.
 - **FR-037**: All new error and empty states MUST be plain language with a stated next action, per constitution III.
 - **FR-038**: No new runtime dependency may be added to the extension bundle for container scoring; the scoring heuristic MUST be self-contained.
+
+### User-Facing Vocabulary
+
+Constitution III requires stable terminology. Four terms were competing for one
+concept across FR-023, FR-028–FR-032 and the options page; this fixes them.
+**These bind user-visible copy only** — code, storage keys, contracts, and
+provenance values keep `learnedSelectors` / `learned:<host>` /
+`strategy: "learned-selector"` unchanged, so nothing downstream churns.
+
+| Concept | User-facing | Never shown to the user |
+|---|---|---|
+| The part of the page being analyzed | **region** | selector, container, node, subtree |
+| The site it belongs to | **site** | host, origin, domain |
+| Doing the thing | **analyze** ("Analyze a region", "Analyze selection") | pick, scope, extract |
+| Making it stick | **always** ("Always analyze this region on jobs.intuit.com") | learn, remember, save, teach |
+
+"Analyze" is the verb this product already uses everywhere — the context menu,
+the spinner, the action itself — so region correction reads as the same action
+narrowed, not a new feature with its own jargon. Persistence is carried by
+**"always"** rather than a fourth noun: there is no "learned region" or
+"remembered region" in the UI, only a region this site always analyzes.
+
+**"Saved" is reserved.** The panel already has a Saved tab for saved postings;
+a "saved region" would collide with it.
 
 ### Key Entities
 
@@ -214,6 +241,7 @@ Baseline captured 2026-07-25 over 6 fixtures; the table and aggregates live in `
 - **SC-008b**: A selection longer than the context-menu payload's truncation limit is analyzed in full.
 - **SC-009**: A learned selector that stops matching produces a normal automatic-extraction result, never a user-visible error.
 - **SC-010**: Arrangement accuracy on the existing posting eval does not regress, and arrangement downgrades caused by evidence falling outside the transmitted input drop to zero on fixtures with harvested structured data.
+- **SC-011**: Every step of region selection — starting it, choosing among candidates, committing, and accepting or declining the always-analyze offer — completes with the keyboard alone, verified by a test that never dispatches a pointer event.
 
 ### Measurement Corpus — built
 
@@ -231,7 +259,7 @@ One structural limitation matters for planning: **the snapshots cannot regressio
 - A state blob containing many postings (a list page that also carries detail payloads): pruning must not silently pick an arbitrary one; the existing multiple-postings notice is the model for surfacing this.
 - A state blob large enough to matter for memory or transmission before pruning.
 - Microdata and JSON-LD both present and disagreeing.
-- The picker on a page that re-renders under the cursor, invalidating the highlighted node between hover and click.
+- The picker on a page that re-renders under the cursor, invalidating the highlighted node between hover and click. The same re-render invalidates the panel's candidate list (FR-024a); a stale list must not commit a node that no longer exists.
 - A scoped region inside a shadow root or a cross-origin iframe, where no selector from the top document can address it. Out of scope to support; must fail with an explanation rather than storing a selector that can never match.
 - A selection spanning partial text nodes, or crossing several siblings, so its common ancestor is far broader than what the user highlighted — the analysis must use the highlighted text, while any *learning* offer must describe the broader region it would actually store.
 - A selection made, then the user right-clicks somewhere that clears it before choosing the menu item.
