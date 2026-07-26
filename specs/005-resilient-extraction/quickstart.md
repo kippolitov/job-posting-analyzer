@@ -37,8 +37,13 @@ Corpus: 6 fixtures
   posting-shaped state blobs .... phenom-intuit: window.wa (372B)
 ```
 
-Those five numbers are the feature's scoreboard. `body-fallback 3/6 → ≤1/6` is
-SC-002; `predicate before text 3/6 → 0/6` is SC-003.
+Those numbers are the **frozen pre-change** scoreboard — `baselineReport.ts` reads
+`manifest.json` and runs no browser, and `corpusProbe.ts` embeds the old extractor
+verbatim. It cannot observe your changes; that is deliberate. After Phase 4, run
+`npm run corpus:rescore` for the post-change column. `body-fallback 3/6 → ≤1/6` is
+SC-002. SC-003 is verified on the `jsonld-early` fixture (§3, Story 1), not here —
+"predicate before text" is derived from capture-time page timings and no code change
+can move it.
 
 ## 2. Re-capture from live boards
 

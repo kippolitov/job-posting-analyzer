@@ -57,12 +57,14 @@ weekly outlives one learned yesterday and never revisited.
 
 Inside `extractPage`, before the automatic ladder:
 
-1. Look up `learned:${location.host}`.
-2. If found, `document.querySelector(selector)`.
+1. The caller resolves `learned:${host}` and passes the selector into `extractPage`
+   as an argument — the extractor never touches storage (plan.md Constraints).
+2. If present, `document.querySelector(selector)`.
 3. If it matches **and** yields ≥ `MIN_TEXT_CHARS` (300):
-   → use it, `strategy: "learned-selector"`, and `touch(host)`.
-4. Otherwise → `recordMiss(host)`, set `provenance.learnedSelectorMissed = true`,
-   and **fall through silently** to the automatic ladder. No error, no banner.
+   → use it, `strategy: "learned-selector"`. The caller calls `touch(host)` on return.
+4. Otherwise → set `provenance.learnedSelectorMissed = true` and **fall through
+   silently** to the automatic ladder. The caller calls `recordMiss(host)` once, on
+   return. No error, no banner.
 
 Step 4 is what makes spec SC-009 true: a site redesign degrades to today's
 behavior rather than to a broken state the user must diagnose.

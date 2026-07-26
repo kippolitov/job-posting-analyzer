@@ -116,6 +116,20 @@ export interface ExtractionProvenance {
 still loading" from "this page has no content" (spec FR-005) — today those are
 the same message on very different situations.
 
+```ts
+/** The single argument `extractPage` receives via executeScript({ args }). */
+export interface ExtractArgs {
+  /** Resolved by the caller from `learned:<host>`; absent when nothing is learned. */
+  learnedSelector?: string;
+}
+```
+
+`extractPage` is serialized into the page, so it cannot import
+`learnedSelectors.ts` and MUST NOT reach for `chrome.storage` itself. The caller
+reads the store and passes the selector in; `touch` and `recordMiss` stay on the
+caller's side, where they are testable in jsdom (plan.md Constraints,
+contracts/learned-selectors.md §"Read path ordering").
+
 ### Scoped analyses are page analyses
 
 A `"picked"` or `"selection"` result keeps the page's **canonical URL** as its

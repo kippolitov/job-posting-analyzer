@@ -203,7 +203,7 @@ Baseline captured 2026-07-25 over 6 fixtures; the table and aggregates live in `
 
 - **SC-001**: The `phenom-intuit` fixture analyzes successfully when analysis is triggered during hydration, with no user action, on the first try — with the full posting (~11,900 chars), not the ~300-char prefix available at 3440 ms.
 - **SC-002**: Body-fallback container selection drops from **3/6** to at most 1/6, and no fixture's selected text shrinks below its baseline. Specifically: `lever-palantir` no longer opens with the cookie-consent banner, and `workday-nvidia` no longer opens with "Skip to main content".
-- **SC-003**: Extractions returning structured data with below-minimum body text drop from **3/6** to 0/6.
+- **SC-003**: The corrected readiness predicate never returns structured data with below-minimum body text — demonstrated on the `jsonld-early` hydration fixture, where JSON-LD is present at 0 ms and body text arrives at 1500 ms. (The corpus's **3/6** "predicate passed before text" figure is a capture-time timeline measurement and has no post-change counterpart; it establishes the problem's prevalence, not the fix.)
 - **SC-003a**: `thin-posting-control` still produces the thin-content error. Any change that makes it "succeed" is fabricating content and fails this criterion.
 - **SC-004**: On pages that are already settled when analysis is triggered, added latency from readiness checking is negligible relative to the analysis call.
 - **SC-005**: Worst-case extraction time — a page that never becomes ready — stays within the readiness budget, and total analysis time stays within the constitution IV ceiling.
