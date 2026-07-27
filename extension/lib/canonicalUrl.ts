@@ -85,6 +85,15 @@ export function canonicalize(rawUrl: string): string {
     return rawUrl;
   }
 
+  // Opaque, non-navigable identities (paste:<sha256>, doc:<sha256>) are
+  // already canonical — they carry no tracking params or trailing slash to
+  // normalize. Treating them as an http(s) URL would corrupt them: an opaque
+  // URL's `host` is "", so reconstructing `${protocol}//${host}${pathname}`
+  // below turns "paste:<hex>" into "paste://<hex>", which no longer matches
+  // PASTE_CANONICAL_URL_RE and breaks the PUT-key/body agreement the backend
+  // checks (KeyMismatchError).
+  if (url.protocol !== "http:" && url.protocol !== "https:") return rawUrl;
+
   // Normalizers run before the hash is dropped — Google's job id lives there.
   for (const board of BOARD_NORMALIZERS) {
     if (board.matchesHost(url.host)) {

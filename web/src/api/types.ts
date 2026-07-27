@@ -1,6 +1,6 @@
 import type { JobAnalysisResponse, JobStatus } from "shared/types/job";
 
-export type PostingSource = "url" | "document";
+export type PostingSource = "url" | "document" | "paste";
 
 /** Wire shape of a saved job — mirrors functions/src/models/user.ts SavedJobPayload (data-model.md §2). */
 export interface SavedJobPayload {

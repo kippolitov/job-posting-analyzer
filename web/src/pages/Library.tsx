@@ -75,6 +75,8 @@ export function Library() {
                 )}
                 {job.source === "document" ? (
                   <div className="text-xs text-gray-400 dark:text-gray-500">{job.filename}</div>
+                ) : job.source === "paste" ? (
+                  <div className="text-xs text-gray-400 dark:text-gray-500">Pasted</div>
                 ) : (
                   job.sourceUrl && (
                     <a

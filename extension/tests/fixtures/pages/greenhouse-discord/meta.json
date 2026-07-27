@@ -1,0 +1,102 @@
+{
+  "slug": "greenhouse-discord",
+  "platform": "Greenhouse",
+  "note": "Largely server-rendered — the control case for 'already ready, no added latency'.",
+  "url": "https://job-boards.greenhouse.io/discord/jobs/8571766002",
+  "capturedAt": "2026-07-25T05:54:14.849Z",
+  "timeToReadyMs": 116,
+  "timeToTextMs": 116,
+  "timeToSettleMs": 973,
+  "readyOnFirstPoll": false,
+  "trace": [
+    {
+      "t": 13,
+      "ready": false,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 116,
+      "ready": true,
+      "textReady": true,
+      "textLen": 7768,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 230,
+      "ready": true,
+      "textReady": true,
+      "textLen": 7768,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 336,
+      "ready": true,
+      "textReady": true,
+      "textLen": 10960,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 445,
+      "ready": true,
+      "textReady": true,
+      "textLen": 10960,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 551,
+      "ready": true,
+      "textReady": true,
+      "textLen": 10960,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 656,
+      "ready": true,
+      "textReady": true,
+      "textLen": 10960,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 762,
+      "ready": true,
+      "textReady": true,
+      "textLen": 10960,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 868,
+      "ready": true,
+      "textReady": true,
+      "textLen": 10960,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 973,
+      "ready": true,
+      "textReady": true,
+      "textLen": 10960,
+      "jsonLdCount": 0
+    }
+  ],
+  "baseline": {
+    "jsonLdCount": 0,
+    "textLen": 10960,
+    "strategy": "semantic",
+    "ready": true,
+    "textReady": true,
+    "discovered": [],
+    "signals": {
+      "microdata": 0,
+      "nextData": false,
+      "nuxtData": false,
+      "remixContext": true,
+      "phenomDdo": false,
+      "initialState": false
+    },
+    "head": "Back to jobsDirector of Engineering, SafetySan Francisco Bay AreaApplyDiscord has a highly engaged community of millions of daily active users who use the platform for many different reasons, but ther"
+  },
+  "servedBytes": 83372,
+  "settledBytes": 149248
+}

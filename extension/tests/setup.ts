@@ -60,6 +60,12 @@ const chromeMock = {
   scripting: {
     executeScript: vi.fn(),
   },
+  contextMenus: {
+    create: vi.fn(),
+    remove: vi.fn(),
+    removeAll: vi.fn(),
+    onClicked: { addListener: vi.fn(), removeListener: vi.fn() },
+  },
   identity: {
     getRedirectURL: vi.fn(() => "https://extension-id.chromiumapp.org/"),
     launchWebAuthFlow: vi.fn(),

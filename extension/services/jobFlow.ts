@@ -2,16 +2,23 @@ import { canonicalize } from "../lib/canonicalUrl";
 import {
   extractPage,
   deriveJsonLdFields,
+  MAIN_TEXT_CAP,
   MIN_TEXT_CHARS,
 } from "../lib/pageExtractor";
 import type { RawPageExtract } from "../lib/pageExtractor";
+import { pasteIdentity } from "../lib/pasteIdentity";
+import { boundViolation } from "../lib/textBounds";
 import { postJobAnalysis } from "./jobAnalysisClient";
 import { jobStorage } from "./jobStorage";
+import { learnedSelectors } from "./learnedSelectors";
 import { getCached, setCached } from "./jobAnalysisCache";
 import { getProfile, profileToPromptText } from "./profileStorage";
 import { MessageType } from "../types/messages";
 import type {
   AnalyzeJobPageMessage,
+  AnalyzePastedTextMessage,
+  AnalyzeScopedRegionMessage,
+  CancelAnalysisMessage,
   ExtensionMessage,
 } from "../types/messages";
 import type {
@@ -221,22 +228,69 @@ async function needsFitRefresh(analysis: JobAnalysis): Promise<boolean> {
   }
 }
 
+/**
+ * Per-tab cancellation generation (spec FR-006, FR-006b).
+ *
+ * Extraction now spends up to 6 s waiting for the page inside the injected
+ * function, and that wait cannot be interrupted from here — the loop lives in
+ * the page's isolated world. What we can guarantee is the part the user cares
+ * about: a cancelled attempt sends no analysis request, spends no allowance,
+ * and broadcasts nothing. The abandoned injection resolves into a generation
+ * check that discards it; its observer is disconnected as it returns, so it
+ * holds nothing open.
+ *
+ * A counter rather than a boolean because of FR-006b: cancel, then immediately
+ * re-analyze. A flag would have to be cleared by the next request and would
+ * race with the abandoned one; a generation makes the stale result identifiable
+ * no matter when it lands.
+ */
+const cancelGenerations = new Map<number, number>();
+
+/** Panel → background: abandon whatever is in flight for this tab. */
+export function cancelAnalysis(message: CancelAnalysisMessage): void {
+  cancelGenerations.set(message.tabId, (cancelGenerations.get(message.tabId) ?? 0) + 1);
+}
+
 export async function analyzeJobPage(
   message: AnalyzeJobPageMessage,
   broadcast: (m: ExtensionMessage) => void
 ): Promise<void> {
+  const generation = cancelGenerations.get(message.tabId) ?? 0;
+  const cancelled = (): boolean => (cancelGenerations.get(message.tabId) ?? 0) !== generation;
+
   let raw: RawPageExtract | undefined;
   if (!message.cachedOnly) {
+    // The learned selector must be resolved from storage and handed to
+    // extractPage as an argument — the injected function is serialized and
+    // can neither read chrome.storage itself nor import learnedSelectors.ts
+    // (plan.md Constraints). A host we can't resolve ahead of extraction
+    // (permission not yet granted, tab already gone) just means no learned
+    // selector is tried — never a hard failure.
+    let learnedSelector: string | undefined;
+    try {
+      const tab = await chrome.tabs.get(message.tabId);
+      if (tab.url) {
+        const learned = await learnedSelectors.get(new URL(tab.url).hostname);
+        learnedSelector = learned?.selector;
+      }
+    } catch {
+      learnedSelector = undefined;
+    }
+
     try {
       const [injection] = await chrome.scripting.executeScript({
         target: { tabId: message.tabId },
         func: extractPage,
+        args: [{ learnedSelector }],
       });
       raw = injection?.result as RawPageExtract | undefined;
     } catch {
       raw = undefined;
     }
   }
+
+  // The readiness wait is the window a cancel most plausibly lands in.
+  if (cancelled()) return;
 
   if (!raw) {
     // No page access: either this is a cachedOnly probe, or executeScript
@@ -290,13 +344,44 @@ export async function analyzeJobPage(
   const extract: PageExtract = { ...raw, canonicalUrl };
   void rememberTabUrl(message.tabId, raw.url);
 
-  if (extract.jsonLd.length === 0 && extract.mainText.length < MIN_TEXT_CHARS) {
+  // Both storage writes live here, never inside the injected function
+  // (plan.md Constraints); recordMiss fires once per extraction, never per
+  // readiness attempt — calling it per attempt would retire a learned
+  // selector on a slow SPA within two page loads (FR-029, contracts
+  // "Interaction with readiness").
+  try {
+    const host = new URL(raw.url).hostname;
+    if (raw.provenance?.strategy === "learned-selector") {
+      void learnedSelectors.touch(host);
+    } else if (raw.provenance?.learnedSelectorMissed) {
+      void learnedSelectors.recordMiss(host);
+    }
+  } catch {
+    // Malformed URL — nothing to record against.
+  }
+
+  // Thin content now keys on body text alone. Structured data no longer
+  // rescues a page from this check: JSON-LD with an empty body was the silent
+  // degradation 3/6 corpus fixtures took — the model received structured
+  // fields and no posting, and the user was never told (spec FR-004a).
+  //
+  // Since extraction only returns early once text clears the minimum, text
+  // below it means the readiness budget expired. The two messages describe two
+  // genuinely different situations and suggest different next actions
+  // (contracts/extraction-payload.md §3); the code and retryability are
+  // unchanged, so JobErrorCode does not grow.
+  if (extract.mainText.length < MIN_TEXT_CHARS) {
+    const stillLoading = extract.provenance?.budgetExpired === true;
     broadcast({
       type: MessageType.JOB_ANALYSIS_ERROR,
       error: {
         code: "thin-content",
-        message: "Not enough page content to analyze.",
-        action: "Open the full job posting page, then re-analyze.",
+        message: stillLoading
+          ? "The page was still loading when we tried to read it."
+          : "Not enough page content to analyze.",
+        action: stillLoading
+          ? "Wait for the page to finish loading, then re-analyze."
+          : "Open the full job posting page, then re-analyze.",
         retryable: true,
       },
       fallback: null,
@@ -319,6 +404,7 @@ export async function analyzeJobPage(
           multiplePostings: extract.jsonLd.length > 1,
           cached: true,
           saved: stored.saved,
+          strategy: raw.provenance?.strategy,
         });
         return;
       }
@@ -338,6 +424,10 @@ export async function analyzeJobPage(
     } catch {
       profile = null;
     }
+    // Last check before the request: this is the line FR-006 is about — a
+    // cancelled analysis must not spend the user's monthly allowance.
+    if (cancelled()) return;
+
     const analysis = await postJobAnalysis({
       extract,
       profile: profile ? profileToPromptText(profile) : undefined,
@@ -367,6 +457,7 @@ export async function analyzeJobPage(
       multiplePostings: extract.jsonLd.length > 1,
       cached: false,
       saved,
+      strategy: raw.provenance?.strategy,
     });
   } catch (err) {
     broadcast({
@@ -376,6 +467,235 @@ export async function analyzeJobPage(
         extract.jsonLd.length > 0 ? deriveJsonLdFields(extract.jsonLd) : null,
       canonicalUrl,
       sourceUrl: raw.url,
+    });
+  }
+}
+
+/**
+ * Story 3 — the unconditional escape hatch. Skips extraction entirely: the
+ * text came from the user, not a page. Validated against the same bounds as
+ * page text (FR-018) and reported before any request is sent, so a below-
+ * minimum or above-cap paste never touches the allowance. Identified by a
+ * content-derived `paste:<sha256>` (FR-021), not a page URL — repeat pastes
+ * of the same text resolve to the same identity, so this goes through the
+ * same saved-library/session-cache lookup as a page analysis (FR-019).
+ */
+export async function analyzePastedText(
+  message: AnalyzePastedTextMessage,
+  broadcast: (m: ExtensionMessage) => void
+): Promise<void> {
+  const violation = boundViolation(
+    message.text.length,
+    MIN_TEXT_CHARS,
+    MAIN_TEXT_CAP,
+    "Paste more of the posting before analyzing.",
+    "Trim it to the posting itself before analyzing."
+  );
+  if (violation) {
+    broadcast({
+      type: MessageType.PASTE_ANALYSIS_ERROR,
+      error: {
+        code: "thin-content",
+        message: violation.message,
+        action: violation.action,
+        retryable: false,
+      },
+    });
+    return;
+  }
+
+  const canonicalUrl = await pasteIdentity(message.text);
+
+  try {
+    const stored = await lookupStored(canonicalUrl);
+    if (stored && !(await needsFitRefresh(stored.analysis))) {
+      broadcast({
+        type: MessageType.PASTE_ANALYSIS_RESULT,
+        analysis: stored.analysis,
+        canonicalUrl,
+        saved: stored.saved,
+        strategy: "paste",
+      });
+      return;
+    }
+  } catch {
+    // Storage unreachable — fall through to a fresh analysis.
+  }
+
+  const extract: PageExtract = {
+    url: canonicalUrl,
+    canonicalUrl,
+    title: "",
+    jsonLd: [],
+    mainText: message.text.slice(0, MAIN_TEXT_CAP),
+    extractedAt: new Date().toISOString(),
+  };
+
+  try {
+    let profile: CandidateProfile | null = null;
+    try {
+      profile = await getProfile();
+    } catch {
+      profile = null;
+    }
+
+    const analysis = await postJobAnalysis({
+      extract,
+      profile: profile ? profileToPromptText(profile) : undefined,
+      assumeJobPosting: message.assumeJobPosting,
+    });
+    await setCached(canonicalUrl, analysis);
+
+    let saved: SavedJob | null = null;
+    try {
+      const existing = await jobStorage.get(canonicalUrl);
+      if (existing) {
+        await jobStorage.update(canonicalUrl, { analysis });
+        saved = await jobStorage.get(canonicalUrl);
+      }
+    } catch {
+      // Library unreachable — still deliver the analysis itself.
+    }
+
+    broadcast({
+      type: MessageType.PASTE_ANALYSIS_RESULT,
+      analysis,
+      canonicalUrl,
+      saved,
+      strategy: "paste",
+    });
+  } catch (err) {
+    broadcast({
+      type: MessageType.PASTE_ANALYSIS_ERROR,
+      error: toJobPanelError(err),
+    });
+  }
+}
+
+/**
+ * Story 4 — a hand-scoped region (picker or selection, FR-023c) re-runs the
+ * analysis of the CURRENT page, identified by its canonical URL, never a
+ * synthetic identity (FR-026). This is a separate path from
+ * `analyzeJobPage`'s lookup order specifically so it can never call
+ * `lookupStored`: FR-026a requires bypassing the saved-library/session-cache
+ * lookup entirely, or a scoped correction on a page that already has a
+ * stored analysis would silently return that stale result and the user's
+ * correction would appear to do nothing (plan.md Risks — the cache-bypass
+ * trap).
+ */
+export async function analyzeScopedRegion(
+  message: AnalyzeScopedRegionMessage,
+  broadcast: (m: ExtensionMessage) => void
+): Promise<void> {
+  let tabUrl: string;
+  try {
+    const tab = await chrome.tabs.get(message.tabId);
+    if (!tab.url) throw new Error("no readable url");
+    tabUrl = tab.url;
+  } catch {
+    broadcast({
+      type: MessageType.JOB_ANALYSIS_ERROR,
+      error: {
+        code: "no-access",
+        message: "The extension doesn't have permission to read this page.",
+        action:
+          "Click the extension icon in the Chrome toolbar to grant access and re-run the analysis.",
+        retryable: false,
+      },
+      fallback: null,
+      canonicalUrl: null,
+      sourceUrl: null,
+    });
+    return;
+  }
+
+  const canonicalUrl = canonicalize(tabUrl);
+
+  // FR-034: refused with the same wording/number as the paste-side refusal
+  // (FR-018a) — a bound violation is one rule, not two.
+  const violation = boundViolation(
+    message.text.length,
+    MIN_TEXT_CHARS,
+    MAIN_TEXT_CAP,
+    "Pick or select a larger part of the page.",
+    "Pick or select a smaller part of the page."
+  );
+  if (violation) {
+    broadcast({
+      type: MessageType.JOB_ANALYSIS_ERROR,
+      error: {
+        code: "thin-content",
+        message: violation.message,
+        action: violation.action,
+        retryable: true,
+      },
+      fallback: null,
+      canonicalUrl,
+      sourceUrl: tabUrl,
+    });
+    return;
+  }
+
+  const extract: PageExtract = {
+    url: tabUrl,
+    canonicalUrl,
+    title: "",
+    jsonLd: [],
+    mainText: message.text.slice(0, MAIN_TEXT_CAP),
+    extractedAt: new Date().toISOString(),
+  };
+
+  try {
+    let profile: CandidateProfile | null = null;
+    try {
+      profile = await getProfile();
+    } catch {
+      profile = null;
+    }
+
+    const analysis = await postJobAnalysis({
+      extract,
+      profile: profile ? profileToPromptText(profile) : undefined,
+      assumeJobPosting: message.assumeJobPosting,
+    });
+    await setCached(canonicalUrl, analysis);
+
+    let saved: SavedJob | null = null;
+    try {
+      const existing = await jobStorage.get(canonicalUrl);
+      if (existing) {
+        await jobStorage.update(canonicalUrl, { analysis });
+        saved = await jobStorage.get(canonicalUrl);
+      }
+    } catch {
+      // Library unreachable — still deliver the analysis itself.
+    }
+
+    let host: string | undefined;
+    try {
+      host = new URL(tabUrl).hostname;
+    } catch {
+      host = undefined;
+    }
+
+    broadcast({
+      type: MessageType.JOB_ANALYSIS_RESULT,
+      analysis,
+      canonicalUrl,
+      sourceUrl: tabUrl,
+      multiplePostings: false,
+      cached: false,
+      saved,
+      strategy: message.mechanism,
+      scopedRegion: host ? { selector: message.selector, host } : undefined,
+    });
+  } catch (err) {
+    broadcast({
+      type: MessageType.JOB_ANALYSIS_ERROR,
+      error: toJobPanelError(err),
+      fallback: null,
+      canonicalUrl,
+      sourceUrl: tabUrl,
     });
   }
 }

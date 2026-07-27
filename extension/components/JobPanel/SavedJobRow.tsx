@@ -27,15 +27,26 @@ export function SavedJobRow({
     <li className="rounded-xl border border-gray-200/70 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <a
-            href={job.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block truncate text-sm font-semibold text-blue-700 hover:underline dark:text-blue-400"
-            aria-label={`Open posting: ${title}`}
-          >
-            {title}
-          </a>
+          {/* Paste-sourced postings have no URL (FR-020) — a link to "" would
+              be a broken affordance, not just a missing one. */}
+          {job.source === "paste" ? (
+            <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-gray-800 dark:text-gray-100">
+              {title}
+              <span className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                Pasted
+              </span>
+            </p>
+          ) : (
+            <a
+              href={job.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block truncate text-sm font-semibold text-blue-700 hover:underline dark:text-blue-400"
+              aria-label={`Open posting: ${title}`}
+            >
+              {title}
+            </a>
+          )}
           <p className="truncate text-xs text-gray-500 dark:text-gray-400">
             {[job.analysis.company, job.analysis.location].filter(Boolean).join(" — ")}
           </p>
