@@ -25,6 +25,16 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.35] - 2026-07-27
+
+**Extraction waits for the page to be ready.** Instead of reading an empty shell the instant the toolbar icon is clicked, extraction now waits for the posting body to actually render — up to a 6s budget, with a 400ms stability window so it doesn't return a partial prefix mid-hydration, and a ~150ms fast path so already-settled pages pay no penalty. Fixes the reported jobs.intuit.com-style failures on client-hydrated job boards, where a real posting was read as "not enough content."
+
+**Better container selection, and more signal per page.** A text-density/link-density scorer replaces the old "grab `main`, `[role=main]`, or `article`, else the whole `<body>`" fallback — the single broadest quality problem in the measured corpus (cookie banners and skip-links were routinely making it into the model input). `JobPosting` microdata is now harvested alongside JSON-LD, and evidence quoted from that structured data is no longer incorrectly downgraded to "unspecified."
+
+**Paste posting text directly.** A persistent header button opens a composer that analyzes pasted text with no page involved at all — the unconditional escape hatch for postings behind a login wall, a PDF, a bot check, or any page the extension simply can't read.
+
+**Scope a region by hand, and the site is learned.** When automatic extraction still picks the wrong part of a page, users can narrow it themselves — a pointer-based picker, a keyboard-operable ranked region list, or "Analyze selection" from the right-click menu — and opt in to reusing that region automatically on the next posting from the same site, with no further action. Learned regions live entirely in local browser storage and can be cleared per-site or all at once from the options page.
+
 ## [0.0.34] - 2026-07-22
 
 - Fixes the release pipeline retry problem hit on v0.0.33: the run built, tested, packaged, and created the GitHub release successfully, then failed at the last step ("Publish to Chrome Web Store") with `ITEM_NOT_UPDATABLE` (the listing was mid-review for v0.0.32 at the time). A "Re-run failed jobs" then failed differently, at the duplicate-release guard, because that guard and the CWS publish were steps in the *same* job — any re-run always restarts from the top. The workflow's own comment already flagged this as a known limitation.
