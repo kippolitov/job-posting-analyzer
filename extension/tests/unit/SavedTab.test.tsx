@@ -65,6 +65,23 @@ describe("SavedTab", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
+  it("shows a paste-sourced posting labeled 'Pasted', with no broken link to an empty sourceUrl (FR-020)", async () => {
+    await jobStorage.save(
+      makeJob({
+        canonicalUrl: "paste:" + "a".repeat(64),
+        sourceUrl: "",
+        source: "paste",
+      })
+    );
+    render(<SavedTab />);
+
+    expect(await screen.findByText("Senior Backend Engineer")).toBeInTheDocument();
+    expect(screen.getByText("Pasted")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open posting: Senior Backend Engineer" })
+    ).not.toBeInTheDocument();
+  });
+
   it("shows fit score, salary range, and tech stack for a saved posting", async () => {
     await jobStorage.save(
       makeJob({

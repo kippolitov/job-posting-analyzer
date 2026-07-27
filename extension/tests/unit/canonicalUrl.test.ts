@@ -136,4 +136,18 @@ describe("canonicalUrl — canonicalKey", () => {
     const b = await canonicalKey("https://www.linkedin.com/jobs/view/2");
     expect(a).not.toBe(b);
   });
+
+  it("passes an opaque paste:<sha256> identity through unchanged (FR-021, R6)", () => {
+    // new URL("paste:<hex>") parses successfully (any "scheme:opaque" string
+    // does) with host="" — reconstructing it as an http(s)-shaped URL would
+    // turn "paste:abc" into "paste://abc", breaking PASTE_CANONICAL_URL_RE and
+    // the PUT-key/body agreement the backend checks.
+    const id = "paste:" + "a".repeat(64);
+    expect(canonicalize(id)).toBe(id);
+  });
+
+  it("passes an opaque doc:<sha256> identity through unchanged (004 precedent)", () => {
+    const id = "doc:" + "b".repeat(64);
+    expect(canonicalize(id)).toBe(id);
+  });
 });

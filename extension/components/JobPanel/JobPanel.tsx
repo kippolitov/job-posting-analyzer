@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { TabBar } from "../shared/TabBar";
 import { ThisPageTab } from "./ThisPageTab";
 import { SavedTab } from "./SavedTab";
+import { PasteComposer } from "./PasteComposer";
 import type { JobView } from "./ThisPageTab";
+import type { PasteView } from "./PasteComposer";
 import { jobStorage } from "../../services/jobStorage";
+import { excerptOf } from "../../lib/textExcerpt";
 import { startCheckout } from "../../services/accountService";
 import { MessageType } from "../../types/messages";
 import type { ExtensionMessage } from "../../types/messages";
@@ -23,6 +26,14 @@ const INITIAL_VIEW: JobView = {
   sourceUrl: null,
   multiplePostings: false,
   cached: false,
+  saved: null,
+};
+
+const INITIAL_PASTE_VIEW: PasteView = {
+  status: "idle",
+  analysis: null,
+  error: null,
+  canonicalUrl: null,
   saved: null,
 };
 
@@ -58,6 +69,73 @@ export function JobPanel({
   const cancelledRef = useRef(false);
   const viewStatusRef = useRef(view.status);
   viewStatusRef.current = view.status;
+
+  // T105: if a scoped (picked) analysis fails after the region was
+  // committed, Retry must re-run against that SAME region rather than
+  // silently falling back to automatic extraction — the user already
+  // corrected the extractor once. Cleared on navigation (a new page has no
+  // committed region) and overwritten by the next scoped commit. A
+  // selection-mechanism scoped analysis (the context-menu path) is never
+  // tracked here: it is issued directly by the background script, and by
+  // the time an error could show, the live page selection it depended on
+  // may no longer exist — there is nothing stable left to retry against.
+  const pendingScopedRegionRef = useRef<{ text: string; selector: string } | null>(null);
+
+  // Paste (spec FR-017): draft and result state live here, at the panel
+  // level, so they survive the composer unmounting/remounting on close/
+  // reopen (FR-017c) and are untouched by the navigation-reset effect below
+  // (FR-017d) — that effect only ever writes to `view`, never to these.
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteDraft, setPasteDraft] = useState("");
+  const [pasteView, setPasteView] = useState<PasteView>(INITIAL_PASTE_VIEW);
+  const pasteButtonRef = useRef<HTMLButtonElement>(null);
+
+  const handleOpenPaste = () => setPasteOpen(true);
+  // FR-017b: closing (Escape or the close control) returns focus to the
+  // header button that opened it.
+  const handleClosePaste = () => {
+    setPasteOpen(false);
+    pasteButtonRef.current?.focus();
+  };
+
+  const submitPaste = (assumeJobPosting: boolean) => {
+    setPasteView((prev) => ({ ...prev, status: "analyzing", error: null }));
+    void chrome.runtime.sendMessage({
+      type: MessageType.ANALYZE_PASTED_TEXT,
+      text: pasteDraft,
+      assumeJobPosting,
+    });
+  };
+
+  const handleSavePaste = async () => {
+    if (!pasteView.analysis || !pasteView.canonicalUrl) return;
+    const now = new Date().toISOString();
+    // FR-020a: list surfaces must never show a blank title, a URL-shaped
+    // placeholder, or the raw paste:<sha256> key for a paste-sourced
+    // posting that extraction didn't title — an excerpt of what was
+    // actually pasted is always available and always meaningful.
+    const analysis = pasteView.analysis.title
+      ? pasteView.analysis
+      : { ...pasteView.analysis, title: excerptOf(pasteDraft) };
+    const job: SavedJob = {
+      schemaVersion: 1,
+      canonicalUrl: pasteView.canonicalUrl,
+      sourceUrl: "",
+      source: "paste",
+      analysis,
+      status: "interested",
+      notes: "",
+      savedAt: now,
+      updatedAt: now,
+    };
+    try {
+      await jobStorage.save(job);
+      setPasteView((prev) => ({ ...prev, saved: job }));
+    } catch {
+      // The library-full/error surface already lives on the This Page tab;
+      // paste keeps this best-effort rather than duplicating that UI.
+    }
+  };
 
   const requestAnalysis = useCallback(
     (
@@ -106,8 +184,43 @@ export function JobPanel({
     if (navigationId === navigationRef.current) return;
     navigationRef.current = navigationId;
     cancelledRef.current = true;
+    pendingScopedRegionRef.current = null;
     setView(INITIAL_VIEW);
   }, [navigationId]);
+
+  // FR-026/FR-026a: re-runs analysis against a hand-picked region, bypassing
+  // the cache (jobFlow.ts's analyzeScopedRegion always does). FR-007a/T095:
+  // the analyzing indicator must appear within 300ms of ANY analysis
+  // trigger, not just a page load, so this sets it synchronously exactly
+  // like requestAnalysis does, before the message is even sent.
+  const analyzeRegion = useCallback(
+    (result: { text: string; selector: string }) => {
+      if (tabId === null) return;
+      cancelledRef.current = false;
+      pendingScopedRegionRef.current = result;
+      setView((prev) => ({ ...prev, status: "analyzing", error: null }));
+      void chrome.runtime.sendMessage({
+        type: MessageType.ANALYZE_SCOPED_REGION,
+        tabId,
+        text: result.text,
+        selector: result.selector,
+        mechanism: "picked",
+      });
+    },
+    [tabId]
+  );
+
+  // Used for both idle's "Analyze this page" and the error card's Retry.
+  // Idle is only ever reached right after a navigation reset, which just
+  // cleared pendingScopedRegionRef above, so the branch below is only live
+  // for an error that followed a scoped commit (T105).
+  const retryAnalysis = useCallback(() => {
+    if (pendingScopedRegionRef.current) {
+      analyzeRegion(pendingScopedRegionRef.current);
+      return;
+    }
+    requestAnalysis();
+  }, [analyzeRegion, requestAnalysis]);
 
   // Toolbar-icon click while the panel is open: analyze under the fresh
   // activeTab grant. Skipped mid-analysis — when the same click both opened
@@ -134,6 +247,27 @@ export function JobPanel({
 
   useEffect(() => {
     const listener = (message: ExtensionMessage) => {
+      // Paste has no page-cancellation concept of its own — it is unaffected
+      // by cancelledRef, which only ever guards the This Page pipeline.
+      if (message.type === MessageType.PASTE_ANALYSIS_RESULT) {
+        setPasteView({
+          status: "ready",
+          analysis: message.analysis,
+          error: null,
+          canonicalUrl: message.canonicalUrl,
+          saved: message.saved,
+        });
+        return;
+      }
+      if (message.type === MessageType.PASTE_ANALYSIS_ERROR) {
+        setPasteView((prev) => ({
+          ...prev,
+          status: "error",
+          analysis: null,
+          error: message.error,
+        }));
+        return;
+      }
       if (cancelledRef.current) return;
       if (message.type === MessageType.JOB_ANALYSIS_RESULT) {
         setView({
@@ -146,6 +280,8 @@ export function JobPanel({
           multiplePostings: message.multiplePostings,
           cached: message.cached,
           saved: message.saved,
+          strategy: message.strategy,
+          scopedRegion: message.scopedRegion,
         });
       } else if (message.type === MessageType.JOB_ANALYSIS_ERROR) {
         setView((prev) => ({
@@ -165,6 +301,19 @@ export function JobPanel({
 
   const handleCancel = () => {
     cancelledRef.current = true;
+    // Tell the background to actually stop. Until readiness, cancelling only
+    // made the panel ignore the late result — the request was still sent and
+    // the user's allowance still spent. There is now a real window to cancel
+    // inside, so the request must not be sent at all (spec FR-006).
+    if (tabId !== null) {
+      // Promise.resolve so a sendMessage that returns void (older typings, and
+      // the test double) cannot throw on .catch.
+      void Promise.resolve(
+        chrome.runtime.sendMessage({ type: MessageType.CANCEL_ANALYSIS, tabId })
+      ).catch(() => {
+        // Background asleep or already finished — the panel is idle either way.
+      });
+    }
     setView((prev) => ({ ...prev, status: "idle" }));
   };
 
@@ -221,45 +370,77 @@ export function JobPanel({
 
   return (
     <>
-      <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabBar
+        tabs={TABS}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        tabsDisabled={pasteOpen}
+      >
+        <button
+          ref={pasteButtonRef}
+          onClick={handleOpenPaste}
+          aria-pressed={pasteOpen}
+          className="rounded-md px-3 py-1 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+        >
+          Paste text
+        </button>
+      </TabBar>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {activeTab === "this-page" && (
-          <div
-            id="panel-this-page"
-            role="tabpanel"
-            aria-labelledby="tab-this-page"
-            className="h-full overflow-y-auto"
-          >
-            <ThisPageTab
-              view={view}
-              saveError={saveError}
-              onAnalyze={() => requestAnalysis()}
-              onCancel={handleCancel}
-              onForceAnalyze={() =>
-                // bypassCache is load-bearing: the "not a job posting" verdict
-                // was just cached, and without it the lookup replays that
-                // verdict before assumeJobPosting ever reaches the backend.
-                requestAnalysis({ assumeJobPosting: true, bypassCache: true })
-              }
-              onReanalyze={() => requestAnalysis({ bypassCache: true })}
-              onSave={() => void handleSave()}
-              onExport={() => void handleExport()}
-              onPruneArchived={() => void handlePruneArchived()}
-              onUpgrade={() => void handleUpgrade()}
-            />
-          </div>
-        )}
+        {pasteOpen ? (
+          <PasteComposer
+            draft={pasteDraft}
+            onDraftChange={setPasteDraft}
+            view={pasteView}
+            onClose={handleClosePaste}
+            onSubmit={() => submitPaste(false)}
+            onForceSubmit={() => submitPaste(true)}
+            onSave={() => void handleSavePaste()}
+            onUpgrade={() => void handleUpgrade()}
+          />
+        ) : (
+          <>
+            {activeTab === "this-page" && (
+              <div
+                id="panel-this-page"
+                role="tabpanel"
+                aria-labelledby="tab-this-page"
+                className="h-full overflow-y-auto"
+              >
+                <ThisPageTab
+                  tabId={tabId}
+                  view={view}
+                  saveError={saveError}
+                  onAnalyze={retryAnalysis}
+                  onCancel={handleCancel}
+                  onForceAnalyze={() =>
+                    // bypassCache is load-bearing: the "not a job posting" verdict
+                    // was just cached, and without it the lookup replays that
+                    // verdict before assumeJobPosting ever reaches the backend.
+                    requestAnalysis({ assumeJobPosting: true, bypassCache: true })
+                  }
+                  onReanalyze={() => requestAnalysis({ bypassCache: true })}
+                  onSave={() => void handleSave()}
+                  onExport={() => void handleExport()}
+                  onPruneArchived={() => void handlePruneArchived()}
+                  onUpgrade={() => void handleUpgrade()}
+                  onOpenPaste={handleOpenPaste}
+                  onRegionCommitted={analyzeRegion}
+                />
+              </div>
+            )}
 
-        {activeTab === "saved" && (
-          <div
-            id="panel-saved"
-            role="tabpanel"
-            aria-labelledby="tab-saved"
-            className="h-full overflow-y-auto"
-          >
-            <SavedTab />
-          </div>
+            {activeTab === "saved" && (
+              <div
+                id="panel-saved"
+                role="tabpanel"
+                aria-labelledby="tab-saved"
+                className="h-full overflow-y-auto"
+              >
+                <SavedTab />
+              </div>
+            )}
+          </>
         )}
       </div>
     </>

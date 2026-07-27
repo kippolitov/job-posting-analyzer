@@ -1,0 +1,102 @@
+{
+  "slug": "lever-palantir",
+  "platform": "Lever",
+  "note": "Lever's standard posting template.",
+  "url": "https://jobs.lever.co/palantir/ac978161-6f46-4f6b-ad9e-a258e642751c",
+  "capturedAt": "2026-07-25T05:54:16.873Z",
+  "timeToReadyMs": 33,
+  "timeToTextMs": 33,
+  "timeToSettleMs": 983,
+  "readyOnFirstPoll": true,
+  "trace": [
+    {
+      "t": 33,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4694,
+      "jsonLdCount": 0
+    },
+    {
+      "t": 135,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4694,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 239,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4694,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 344,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4867,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 449,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4867,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 557,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4867,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 664,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4867,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 769,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4867,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 876,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4867,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 983,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4867,
+      "jsonLdCount": 1
+    }
+  ],
+  "baseline": {
+    "jsonLdCount": 1,
+    "textLen": 4867,
+    "strategy": "body",
+    "ready": true,
+    "textReady": true,
+    "discovered": [],
+    "signals": {
+      "microdata": 0,
+      "nextData": false,
+      "nuxtData": false,
+      "remixContext": false,
+      "phenomDdo": false,
+      "initialState": false
+    },
+    "head": "Cookie Policy🍪DenyAcceptPrivacy NoticeThis website uses cookies to improve your web experience. By clicking Accept, you agree to the use of cookies. Cookie PolicyDenyAcceptAdministrative Business Par"
+  },
+  "servedBytes": 726835,
+  "settledBytes": 728026
+}

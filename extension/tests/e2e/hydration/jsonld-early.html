@@ -1,0 +1,61 @@
+<!doctype html>
+<!--
+  THE fixture (tasks.md T012). Write the assertion against this one first.
+
+  JobPosting JSON-LD is present at 0 ms; body text does not arrive until
+  1,500 ms. This is the shape 3 of 6 corpus fixtures take today — Workday
+  (JSON-LD at 8 ms, text at 736 ms), Ashby (10 ms / 369 ms), Phenom
+  (3,314 ms / 3,440 ms).
+
+  It is the fixture a naive implementation fails. Today's predicate is
+  `jsonLd.length > 0 || text >= 300`, which is satisfied here at 0 ms with an
+  empty body. A retry loop built on that predicate returns instantly with no
+  posting text and is no better than shipping nothing — and worse, the page
+  does not even error today, because JSON-LD alone clears the thin-content
+  check, so the model silently receives structured fields and no posting body.
+
+  FR-001: readiness keys on body text only.
+  FR-004a: no returning structured data with below-minimum text while budget remains.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Data Engineer - Fixture Systems</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org/",
+        "@type": "JobPosting",
+        "title": "Data Engineer",
+        "hiringOrganization": { "@type": "Organization", "name": "Fixture Systems" },
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Seattle",
+            "addressRegion": "WA"
+          }
+        },
+        "jobLocationType": "TELECOMMUTE"
+      }
+    </script>
+  </head>
+  <body>
+    <nav>Fixture Systems Careers</nav>
+    <main id="posting"></main>
+
+    <script>
+      const PARAGRAPH =
+        "The Data Engineer role owns our ingestion pipelines end to end. You " +
+        "will build streaming jobs, model warehouse tables, and keep data " +
+        "freshness within agreed service levels. We look for strong SQL, " +
+        "experience with columnar stores, and a habit of writing tests for " +
+        "transformations. This position is fully remote within the United " +
+        "States. ";
+
+      setTimeout(() => {
+        const body = PARAGRAPH.repeat(Math.ceil(3000 / PARAGRAPH.length));
+        document.getElementById("posting").textContent = body.slice(0, 3000);
+      }, 1500);
+    </script>
+  </body>
+</html>

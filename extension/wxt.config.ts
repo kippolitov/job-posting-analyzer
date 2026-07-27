@@ -19,7 +19,17 @@ export default defineConfig({
     // states free vs. paid plainly per CWS Deceptive Installation Tactics policy.
     description:
       "AI job posting analyzer: arrangement, salary, fit score. Free: 50 analyses/mo. Premium ($5/mo): 300/mo + better model.",
-    permissions: ["sidePanel", "storage", "scripting", "activeTab", "identity"],
+    // "contextMenus" is an API permission (FR-023a's "Analyze selection" item)
+    // that grants no site access — it does not weaken the extension's
+    // permission posture, and no host permissions are added (spec FR-036).
+    permissions: [
+      "sidePanel",
+      "storage",
+      "scripting",
+      "activeTab",
+      "identity",
+      "contextMenus",
+    ],
     // Localhost host permissions let the Playwright e2e suite exercise page
     // extraction (it cannot perform the action click that grants activeTab).
     // They are e2e-only (`npm run build:e2e`): store/release builds must not

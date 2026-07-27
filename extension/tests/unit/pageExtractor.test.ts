@@ -11,6 +11,14 @@ function setPage(html: string, title = "Test Page"): void {
   document.body.innerHTML = html;
 }
 
+/**
+ * Realistic posting body for fixtures whose subject is JSON-LD parsing rather
+ * than text selection. Readiness waits out the full budget on a page with less
+ * than MIN_TEXT_CHARS of text — it cannot tell "thin" from "still hydrating" —
+ * so a 4-character <main> would cost these tests 6 seconds each.
+ */
+const BODY = `We are hiring a senior engineer. ${"Role details. ".repeat(30)}`;
+
 function jsonLdScript(payload: unknown): string {
   return `<script type="application/ld+json">${JSON.stringify(payload)}</script>`;
 }
@@ -38,81 +46,81 @@ describe("pageExtractor — extractPage", () => {
     document.body.innerHTML = "";
   });
 
-  it("collects a single JSON-LD JobPosting object", () => {
-    setPage(`${jsonLdScript(posting)}<main>About the role</main>`);
-    const extract = extractPage();
+  it("collects a single JSON-LD JobPosting object", async () => {
+    setPage(`${jsonLdScript(posting)}<main>${BODY}</main>`);
+    const extract = await extractPage();
     expect(extract.jsonLd).toHaveLength(1);
     expect(extract.jsonLd[0]).toMatchObject({ "@type": "JobPosting" });
   });
 
-  it("flattens a top-level array and keeps only JobPosting entries", () => {
+  it("flattens a top-level array and keeps only JobPosting entries", async () => {
     setPage(
-      `${jsonLdScript([posting, { "@type": "Organization", name: "Acme" }])}<main>Body</main>`
+      `${jsonLdScript([posting, { "@type": "Organization", name: "Acme" }])}<main>${BODY}</main>`
     );
-    const extract = extractPage();
+    const extract = await extractPage();
     expect(extract.jsonLd).toHaveLength(1);
   });
 
-  it("unwraps @graph containers", () => {
+  it("unwraps @graph containers", async () => {
     setPage(
-      `${jsonLdScript({ "@context": "https://schema.org", "@graph": [posting, { "@type": "WebSite" }] })}<main>Body</main>`
+      `${jsonLdScript({ "@context": "https://schema.org", "@graph": [posting, { "@type": "WebSite" }] })}<main>${BODY}</main>`
     );
-    const extract = extractPage();
+    const extract = await extractPage();
     expect(extract.jsonLd).toHaveLength(1);
     expect(extract.jsonLd[0]).toMatchObject({ title: "Senior Backend Engineer" });
   });
 
-  it("supports @type arrays", () => {
+  it("supports @type arrays", async () => {
     setPage(
-      `${jsonLdScript({ ...posting, "@type": ["JobPosting", "Thing"] })}<main>Body</main>`
+      `${jsonLdScript({ ...posting, "@type": ["JobPosting", "Thing"] })}<main>${BODY}</main>`
     );
-    expect(extractPage().jsonLd).toHaveLength(1);
+    expect((await extractPage()).jsonLd).toHaveLength(1);
   });
 
-  it("skips malformed JSON-LD without throwing", () => {
+  it("skips malformed JSON-LD without throwing", async () => {
     setPage(
-      `<script type="application/ld+json">{not valid json,,}</script>${jsonLdScript(posting)}<main>Body</main>`
+      `<script type="application/ld+json">{not valid json,,}</script>${jsonLdScript(posting)}<main>${BODY}</main>`
     );
-    const extract = extractPage();
+    const extract = await extractPage();
     expect(extract.jsonLd).toHaveLength(1);
   });
 
-  it("collects multiple JobPosting blocks from separate scripts", () => {
-    setPage(`${jsonLdScript(posting)}${jsonLdScript({ ...posting, title: "Other" })}<main>Body</main>`);
-    expect(extractPage().jsonLd).toHaveLength(2);
+  it("collects multiple JobPosting blocks from separate scripts", async () => {
+    setPage(`${jsonLdScript(posting)}${jsonLdScript({ ...posting, title: "Other" })}<main>${BODY}</main>`);
+    expect((await extractPage()).jsonLd).toHaveLength(2);
   });
 
-  it("filters out non-JobPosting types entirely", () => {
-    setPage(`${jsonLdScript({ "@type": "NewsArticle", headline: "x" })}<main>Body</main>`);
-    expect(extractPage().jsonLd).toHaveLength(0);
+  it("filters out non-JobPosting types entirely", async () => {
+    setPage(`${jsonLdScript({ "@type": "NewsArticle", headline: "x" })}<main>${BODY}</main>`);
+    expect((await extractPage()).jsonLd).toHaveLength(0);
   });
 
-  it("prefers <main> content and excludes nav/footer text", () => {
+  it("prefers <main> content and excludes nav/footer text", async () => {
     setPage(
       `<nav>NAVIGATION LINKS</nav>
        <main>We are hiring a senior engineer. ${"Role details. ".repeat(30)}</main>
        <footer>FOOTER BOILERPLATE</footer>`
     );
-    const { mainText } = extractPage();
+    const { mainText } = await extractPage();
     expect(mainText).toContain("We are hiring a senior engineer.");
     expect(mainText).not.toContain("NAVIGATION LINKS");
     expect(mainText).not.toContain("FOOTER BOILERPLATE");
   });
 
-  it("falls back to body text with nav/header/footer/aside/script/style stripped", () => {
+  it("falls back to body text with nav/header/footer/aside/script/style stripped", async () => {
     setPage(
       `<header>HEADER</header><nav>NAV</nav><aside>ASIDE</aside>
        <div>The actual job description. ${"More content. ".repeat(30)}</div>
        <style>.x{color:red}</style><footer>FOOTER</footer>`
     );
-    const { mainText } = extractPage();
+    const { mainText } = await extractPage();
     expect(mainText).toContain("The actual job description.");
     for (const noise of ["HEADER", "NAV", "ASIDE", "FOOTER", "color:red"]) {
       expect(mainText).not.toContain(noise);
     }
   });
 
-  it("does not prefer visible dialogs off Google (e.g. cookie banners)", () => {
+  it("does not prefer visible dialogs off Google (e.g. cookie banners)", async () => {
     setPage(
       `<main>The actual job description. ${"Role details. ".repeat(30)}</main>
        <div role="dialog" id="consent">We value your privacy. ${"Cookie policy details. ".repeat(20)}</div>`
@@ -121,19 +129,19 @@ describe("pageExtractor — extractPage", () => {
     consent.getBoundingClientRect = () =>
       ({ width: 500, height: 400, top: 0, left: 0, right: 500, bottom: 400, x: 0, y: 0 }) as DOMRect;
 
-    const { mainText } = extractPage();
+    const { mainText } = await extractPage();
     expect(mainText).toContain("The actual job description.");
     expect(mainText).not.toContain("Cookie policy details");
   });
 
-  it(`caps mainText at ${MAIN_TEXT_CAP} characters`, () => {
+  it(`caps mainText at ${MAIN_TEXT_CAP} characters`, async () => {
     setPage(`<main>${"word ".repeat(20_000)}</main>`);
-    expect(extractPage().mainText.length).toBeLessThanOrEqual(MAIN_TEXT_CAP);
+    expect((await extractPage()).mainText.length).toBeLessThanOrEqual(MAIN_TEXT_CAP);
   });
 
-  it("returns url, title, and an ISO extractedAt timestamp", () => {
-    setPage("<main>Body content here</main>", "Acme — Senior Engineer");
-    const extract = extractPage();
+  it("returns url, title, and an ISO extractedAt timestamp", async () => {
+    setPage(`<main>${BODY}</main>`, "Acme — Senior Engineer");
+    const extract = await extractPage();
     expect(extract.url).toContain("http");
     expect(extract.title).toBe("Acme — Senior Engineer");
     expect(new Date(extract.extractedAt).toString()).not.toBe("Invalid Date");

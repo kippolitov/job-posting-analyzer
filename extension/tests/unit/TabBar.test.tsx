@@ -36,4 +36,36 @@ describe("TabBar", () => {
     await user.click(screen.getByRole("tab", { name: "Chat" }));
     expect(onTabChange).toHaveBeenCalledWith("chat");
   });
+
+  it("still renders exactly 2 tabs when a sibling action is passed as children (FR-017a)", () => {
+    render(
+      <TabBar tabs={tabs} activeTab="summary" onTabChange={vi.fn()}>
+        <button>Paste text</button>
+      </TabBar>
+    );
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+  });
+
+  it("disables the tabs — unreachable by pointer or keyboard — when tabsDisabled is set (FR-017b)", async () => {
+    const onTabChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TabBar tabs={tabs} activeTab="summary" onTabChange={onTabChange} tabsDisabled />
+    );
+    const chatTab = screen.getByRole("tab", { name: "Chat" });
+    expect(chatTab).toBeDisabled();
+    await user.click(chatTab);
+    expect(onTabChange).not.toHaveBeenCalled();
+  });
+
+  it("renders children as a sibling of the tablist, not a child of it (FR-017a)", () => {
+    render(
+      <TabBar tabs={tabs} activeTab="summary" onTabChange={vi.fn()}>
+        <button>Paste text</button>
+      </TabBar>
+    );
+    const tablist = screen.getByRole("tablist");
+    const pasteButton = screen.getByRole("button", { name: "Paste text" });
+    expect(tablist).not.toContainElement(pasteButton);
+  });
 });

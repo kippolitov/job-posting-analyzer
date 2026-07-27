@@ -1,0 +1,172 @@
+{
+  "updatedAt": "2026-07-25T05:54:31.767Z",
+  "entries": {
+    "phenom-intuit": {
+      "platform": "Phenom People",
+      "note": "The reported failure. Client-hydrated main; extraction succeeds once settled.",
+      "url": "https://jobs.intuit.com/job/new-york/staff-software-engineer/27595/97097980048?cid=seo_google",
+      "capturedAt": "2026-07-25T05:54:13.197Z",
+      "timeToReadyMs": 3314,
+      "timeToTextMs": 3440,
+      "timeToSettleMs": 4883,
+      "readyOnFirstPoll": false,
+      "baseline": {
+        "jsonLdCount": 1,
+        "textLen": 11970,
+        "strategy": "semantic",
+        "ready": true,
+        "textReady": true,
+        "discovered": [
+          {
+            "where": "window.wa",
+            "bytes": 372
+          }
+        ],
+        "signals": {
+          "microdata": 0,
+          "nextData": false,
+          "nuxtData": false,
+          "remixContext": false,
+          "phenomDdo": false,
+          "initialState": false
+        },
+        "head": "Job Search\nSearch Jobs by Keyword\nLocation\nWhen autocomplete results are available use up and down arrows to review and enter to select. Touch device users, explore by touch or with swipe gestures.\nSe"
+      }
+    },
+    "greenhouse-discord": {
+      "platform": "Greenhouse",
+      "note": "Largely server-rendered — the control case for 'already ready, no added latency'.",
+      "url": "https://job-boards.greenhouse.io/discord/jobs/8571766002",
+      "capturedAt": "2026-07-25T05:54:14.849Z",
+      "timeToReadyMs": 116,
+      "timeToTextMs": 116,
+      "timeToSettleMs": 973,
+      "readyOnFirstPoll": false,
+      "baseline": {
+        "jsonLdCount": 0,
+        "textLen": 10960,
+        "strategy": "semantic",
+        "ready": true,
+        "textReady": true,
+        "discovered": [],
+        "signals": {
+          "microdata": 0,
+          "nextData": false,
+          "nuxtData": false,
+          "remixContext": true,
+          "phenomDdo": false,
+          "initialState": false
+        },
+        "head": "Back to jobsDirector of Engineering, SafetySan Francisco Bay AreaApplyDiscord has a highly engaged community of millions of daily active users who use the platform for many different reasons, but ther"
+      }
+    },
+    "lever-palantir": {
+      "platform": "Lever",
+      "note": "Lever's standard posting template.",
+      "url": "https://jobs.lever.co/palantir/ac978161-6f46-4f6b-ad9e-a258e642751c",
+      "capturedAt": "2026-07-25T05:54:16.873Z",
+      "timeToReadyMs": 33,
+      "timeToTextMs": 33,
+      "timeToSettleMs": 983,
+      "readyOnFirstPoll": true,
+      "baseline": {
+        "jsonLdCount": 1,
+        "textLen": 4867,
+        "strategy": "body",
+        "ready": true,
+        "textReady": true,
+        "discovered": [],
+        "signals": {
+          "microdata": 0,
+          "nextData": false,
+          "nuxtData": false,
+          "remixContext": false,
+          "phenomDdo": false,
+          "initialState": false
+        },
+        "head": "Cookie Policy🍪DenyAcceptPrivacy NoticeThis website uses cookies to improve your web experience. By clicking Accept, you agree to the use of cookies. Cookie PolicyDenyAcceptAdministrative Business Par"
+      }
+    },
+    "ashby-linear": {
+      "platform": "Ashby",
+      "note": "Client-rendered React board; posting body arrives after hydration.",
+      "url": "https://jobs.ashbyhq.com/linear/1bfdcabe-aa5f-4999-9a6d-b8a824dd779b",
+      "capturedAt": "2026-07-25T05:54:19.112Z",
+      "timeToReadyMs": 10,
+      "timeToTextMs": 369,
+      "timeToSettleMs": 1005,
+      "readyOnFirstPoll": true,
+      "baseline": {
+        "jsonLdCount": 1,
+        "textLen": 4249,
+        "strategy": "body",
+        "ready": true,
+        "textReady": true,
+        "discovered": [],
+        "signals": {
+          "microdata": 0,
+          "nextData": false,
+          "nuxtData": false,
+          "remixContext": false,
+          "phenomDdo": false,
+          "initialState": false
+        },
+        "head": "Account Executive, Enterprise LocationNorth AmericaEmployment TypeFull timeLocation TypeRemoteDepartmentGTMAt Linear, we're building the product development system for teams and agents. AI is fundamen"
+      }
+    },
+    "thin-posting-control": {
+      "platform": "SmartRecruiters",
+      "note": "TRUE NEGATIVE, not a failure. A stub posting: 2,061 chars in the whole document, 414 in main, stable to 15s. No extraction strategy can rescue it. Guards against 'improvements' that fabricate content on thin pages, and is the correct target for the thin-content error.",
+      "url": "https://jobs.smartrecruiters.com/Visa/744000133907678-sr-manager",
+      "capturedAt": "2026-07-25T05:54:26.293Z",
+      "timeToReadyMs": 327,
+      "timeToTextMs": 327,
+      "timeToSettleMs": 1063,
+      "readyOnFirstPoll": false,
+      "baseline": {
+        "jsonLdCount": 0,
+        "textLen": 414,
+        "strategy": "semantic",
+        "ready": true,
+        "textReady": true,
+        "discovered": [],
+        "signals": {
+          "microdata": 1,
+          "nextData": false,
+          "nuxtData": false,
+          "remixContext": false,
+          "phenomDdo": false,
+          "initialState": false
+        },
+        "head": "Sr. ManagerFull-timeJob Family Group: Engineering and TechnologyAdditional InformationAll your information will be kept confidential according to EEO guidelines.By clicking the link above or any third"
+      }
+    },
+    "workday-nvidia": {
+      "platform": "Workday",
+      "note": "Fully client-rendered; the hardest readiness case and a likely no-semantic-container case.",
+      "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Developer-Technology-Engineer--AI---New-College-Grad-2026_JR2014130-1",
+      "capturedAt": "2026-07-25T05:54:31.733Z",
+      "timeToReadyMs": 8,
+      "timeToTextMs": 736,
+      "timeToSettleMs": 1589,
+      "readyOnFirstPoll": true,
+      "baseline": {
+        "jsonLdCount": 1,
+        "textLen": 4369,
+        "strategy": "body",
+        "ready": true,
+        "textReady": true,
+        "discovered": [],
+        "signals": {
+          "microdata": 0,
+          "nextData": false,
+          "nuxtData": false,
+          "remixContext": false,
+          "phenomDdo": false,
+          "initialState": false
+        },
+        "head": "Skip to main contentDeveloper Technology Engineer, AI - New College Grad 2026 page is loadedDeveloper Technology Engineer, AI - New College Grad 2026ApplylocationsUS, CA, Santa ClaraUS, TX, AustinUS, "
+      }
+    }
+  }
+}

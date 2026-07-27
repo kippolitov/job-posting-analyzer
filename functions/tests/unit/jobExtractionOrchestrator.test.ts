@@ -135,6 +135,37 @@ describe("jobExtractionOrchestrator", () => {
     expect(result.daysRemote).toBeNull();
   });
 
+  it("accepts evidence found only in structuredSources, not in jsonLd/title/mainText (T032, FR-015)", async () => {
+    // The evidence phrase below appears nowhere in baseRequest's jsonLd, title,
+    // or mainText — only inside a harvested structuredSources entry. Without
+    // FR-015's haystack fix this downgrades to unspecified, which is exactly
+    // the silent regression Story 2 must not ship (plan.md Risks).
+    const structuredOnlyRequest = {
+      ...baseRequest,
+      extract: {
+        ...baseRequest.extract,
+        mainText: "Join our team building great products. Benefits included.",
+        structuredSources: [
+          {
+            kind: "microdata" as const,
+            data: {
+              description:
+                "This is a hybrid, 3 days per week in our Austin office arrangement.",
+            },
+          },
+        ],
+      },
+    };
+    await mockCreateWith(fixture("explicit-hybrid"));
+    const result = await orchestrateJobAnalysis(structuredOnlyRequest);
+
+    expect(result.arrangement).toBe("hybrid");
+    expect(result.arrangementConfidence).toBe("explicit");
+    expect(result.arrangementEvidence).toBe(
+      "hybrid, 3 days per week in our Austin office"
+    );
+  });
+
   it("evidence check is whitespace-normalized, not exact-match", async () => {
     // Fixture evidence: "hybrid, 3 days per week in our Austin office";
     // input contains the same words with a line break and double spaces.

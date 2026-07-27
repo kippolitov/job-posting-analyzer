@@ -1,0 +1,137 @@
+{
+  "slug": "workday-nvidia",
+  "platform": "Workday",
+  "note": "Fully client-rendered; the hardest readiness case and a likely no-semantic-container case.",
+  "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Developer-Technology-Engineer--AI---New-College-Grad-2026_JR2014130-1",
+  "capturedAt": "2026-07-25T05:54:31.733Z",
+  "timeToReadyMs": 8,
+  "timeToTextMs": 736,
+  "timeToSettleMs": 1589,
+  "readyOnFirstPoll": true,
+  "trace": [
+    {
+      "t": 8,
+      "ready": true,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 112,
+      "ready": true,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 309,
+      "ready": true,
+      "textReady": false,
+      "textLen": 0,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 427,
+      "ready": true,
+      "textReady": false,
+      "textLen": 101,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 529,
+      "ready": true,
+      "textReady": false,
+      "textLen": 101,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 633,
+      "ready": true,
+      "textReady": false,
+      "textLen": 101,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 736,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4226,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 840,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4226,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 944,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4369,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 1052,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4369,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 1159,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4369,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 1267,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4369,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 1373,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4369,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 1481,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4369,
+      "jsonLdCount": 1
+    },
+    {
+      "t": 1589,
+      "ready": true,
+      "textReady": true,
+      "textLen": 4369,
+      "jsonLdCount": 1
+    }
+  ],
+  "baseline": {
+    "jsonLdCount": 1,
+    "textLen": 4369,
+    "strategy": "body",
+    "ready": true,
+    "textReady": true,
+    "discovered": [],
+    "signals": {
+      "microdata": 0,
+      "nextData": false,
+      "nuxtData": false,
+      "remixContext": false,
+      "phenomDdo": false,
+      "initialState": false
+    },
+    "head": "Skip to main contentDeveloper Technology Engineer, AI - New College Grad 2026 page is loadedDeveloper Technology Engineer, AI - New College Grad 2026ApplylocationsUS, CA, Santa ClaraUS, TX, AustinUS, "
+  },
+  "servedBytes": 15566,
+  "settledBytes": 140649
+}

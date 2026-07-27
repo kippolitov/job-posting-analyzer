@@ -37,6 +37,7 @@ coverage/
 playwright-report/
 test-results/
 .playwright-mcp/
+.vite/
 
 # Logs
 *.log
