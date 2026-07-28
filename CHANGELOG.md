@@ -25,6 +25,12 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.36] - 2026-07-28
+
+- The free-tier deployment (gpt-4o-mini) was producing noticeably thinner analyses than premium (gpt-5.4-nano) when listing techStack and summarizing fit -- confirmed it's a model-capability gap, not truncated input: both tiers get identical prompts and the full posting text.
+- Adds an explicit instruction to read the entire posting before answering any field, and rewrites the techStack rule to define what counts as a technology (languages, frameworks, databases, cloud platforms, dev tools) while explicitly excluding generic business/process terms (on-call, vendor management, Agile, QA, etc.) and duplicate entries.
+- An earlier version of this rule over-corrected -- telling the model to just "keep scanning" caused it to pad the list with non-technology terms and duplicates on a real posting with no genuine tech stack. Verified fixed with a tighter definition before landing this version.
+
 ## [0.0.35] - 2026-07-27
 
 **Extraction waits for the page to be ready.** Instead of reading an empty shell the instant the toolbar icon is clicked, extraction now waits for the posting body to actually render — up to a 6s budget, with a 400ms stability window so it doesn't return a partial prefix mid-hydration, and a ~150ms fast path so already-settled pages pay no penalty. Fixes the reported jobs.intuit.com-style failures on client-hydrated job boards, where a real posting was read as "not enough content."
