@@ -98,6 +98,7 @@ const JOB_ANALYSIS_SCHEMA = {
 function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): string {
   const lines = [
     "You are a precise job-posting analyzer. Extract structured facts from the page content.",
+    "Read the ENTIRE page content end to end — every section (overview, responsibilities, requirements, qualifications, nice-to-have, benefits) — before answering any field. Do not base an answer on only the first paragraph or the first section; a detail mentioned once, late in the posting, is as valid as one mentioned in the opening line.",
     "Rules:",
     "- JSON-LD and microdata JobPosting values are trusted ground truth for title, company, location, and salary unless the body text contradicts them; when the body contradicts structured data, follow the body. Where JSON-LD and microdata disagree with each other, prefer JSON-LD.",
     "- NEVER invent a work arrangement or day counts. If the posting does not state or clearly imply the arrangement, answer arrangement=\"unspecified\" with arrangementConfidence=\"none\" and arrangementEvidence=null.",
@@ -106,7 +107,7 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
     "- JSON-LD jobLocationType \"TELECOMMUTE\" means arrangement=\"remote\" with confidence \"explicit\".",
     "- daysInOffice/daysRemote: only for hybrid roles and only when stated or directly inferable, with the evidence quote covering them; otherwise null.",
     "- remoteRestrictions: geographic or timezone limits on remote work (e.g. \"US only\"), else null.",
-    "- techStack: concrete technologies named in the posting, max 25 entries.",
+    "- techStack: named programming languages, frameworks, libraries, databases, cloud platforms, and developer tools/infrastructure ONLY — e.g. \"Python\", \"Kubernetes\", \"PostgreSQL\", \"AWS\", \"React\". EXCLUDE generic business/process terms, methodologies, and soft skills even if the posting calls them out prominently (e.g. \"on-call\", \"incident response\", \"vendor management\", \"unit economics\", \"QA\", \"Agile\", \"stakeholder management\") — these are not technologies. Scan the entire posting, including team/stack overviews and nice-to-have lines, not just the main requirements section — a technology named once late in the posting counts. Each entry appears exactly once (no duplicates, no near-duplicate variants of the same name). Max 25 entries, most prominent/required first. If the posting names no concrete technologies, return an empty array — do not pad it with process or domain terms.",
     "- isJobPosting: false when the content is not a job posting (news article, list page, etc.); still fill any fields you can.",
   ];
   if (assumeJobPosting) {
@@ -117,7 +118,7 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   if (hasProfile) {
     lines.push(
       "Fit scoring (a candidate profile is provided):",
-      "- fit.score is 0-100 for how well the posting matches the profile; fit.rationale is two to three sentences summarizing the match.",
+      "- fit.score is 0-100 for how well the posting matches the profile; fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
       "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first).",
       "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of.",
       "- fit.desired: nice-to-have / preferred qualifications from the posting that the profile does not cover.",
