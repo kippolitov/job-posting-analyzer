@@ -3,6 +3,7 @@ import { AnalysisView } from "@/components/AnalysisView";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { UploadErrors } from "@/components/UploadErrors";
 import { analyzeDocument, fetchProfile, saveJob } from "@/api/endpoints";
+import { profileToPromptText } from "shared/types/profile";
 import type { DocumentAnalysisResult, SavedJobPayload } from "@/api/types";
 import { ApiError } from "@/api/apiClient";
 import { upsertLibraryJob } from "@/lib/libraryStore";
@@ -19,7 +20,11 @@ export function Upload() {
 
   useEffect(() => {
     fetchProfile()
-      .then((profile) => setProfileText(profile?.text))
+      .then((profile) =>
+        // Same serialization as the extension: without the dealbreakers the
+        // fit-score cap never applies and web scores diverge from extension ones.
+        setProfileText(profile && profile.text ? profileToPromptText(profile) : undefined)
+      )
       .catch(() => {
         // A profile fetch failure shouldn't block document analysis — it
         // just runs without fit scoring (fit: null), as analyze-job does.
