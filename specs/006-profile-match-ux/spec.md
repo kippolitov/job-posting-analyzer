@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-28
 
-**Status**: Draft — formalized 2026-10-28 from the first draft on `claude/profile-match-ux-o1w484`. Implementation identifiers moved out of the requirements into Technical Shape; the draft's four open questions are resolved as documented defaults (see Assumptions). Clarified the same day (5 questions), and a prerequisite scoring-model switch (FR-M01 to FR-M05) was added after the free model's retirement was confirmed.
+**Status**: Draft — formalized 2026-10-28 from the first draft on `claude/profile-match-ux-o1w484`. Implementation identifiers moved out of the requirements into Technical Shape; the draft's four open questions are resolved as documented defaults (see Assumptions). Clarified the same day (5 questions), and a prerequisite scoring-model switch (FR-M01 to FR-M05) was added after the free model's retirement was confirmed. Revised the same day: dealbreaker violations no longer lower the fit score (see Clarifications).
 
 **Input**: User description: "Analyze the current state of the profile match process and suggest important improvements in the UX; fix what is broken and draft a spec for the rest."
 
@@ -41,6 +41,7 @@ Commit `f1d229d` on this branch fixed a cross-surface parity bug. The web upload
 - Q: Should any of feature 006 be limited to Premium? → A: No. Every capability is available on both tiers, and the tiers keep differing only as they do today (model, monthly allowance, saved-postings cap).
 - Q: What should a score saved before this feature (made without the rubric) show? → A: The number with a neutral "Unrated — rescore for a verdict" label, no verdict. It is left out of verdict filters but still sorts by number.
 - Q: Saved postings keep only the analysis, not the posting text. How does rescoring work for a saved posting, including one that has been taken down? → A: Rescore runs only where the posting text is available again: the extension panel on the posting's page, or the web upload and paste screens. Library rows offer "Open posting to rescore" (URL source) or "Upload again to rescore" (document or paste source) instead. If the page no longer has a posting, the old score stays with a "Posting no longer available — score can't be updated" note, and no free rescore or analysis is used. No posting text is stored.
+- Q: Should a violated dealbreaker lower the fit score? → A: No. The fit score reflects only how well the posting matches the candidate's skills, experience and seniority. Each violated dealbreaker (free-text or structured preference) is listed next to the score, and the score itself is never lowered or capped because of it. This replaces the earlier "cap at 20" behaviour.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -56,7 +57,7 @@ A user tightens their profile (adds a dealbreaker, rewrites their summary) and r
 
 1. **Given** a saved posting scored against profile version A, **When** the user saves profile version B and opens that posting (extension panel, Saved tab row, web library, web detail), **Then** the score is marked as scored against an older profile, and a way to rescore is offered: "Rescore" in the extension panel on the posting's page, "Open posting to rescore" on library rows and web detail for postings from a URL, and "Upload again to rescore" for postings from an uploaded document or pasted text.
 2. **Given** an out-of-date score, **When** the user clicks Rescore, **Then** the user is told beforehand what it costs ("free — 7 of 10 free rescores left this month", or "uses 1 analysis" once the free rescores are used up), and after it succeeds the score, breakdown and profile version all update in place, including in the saved library entry.
-3. **Given** a profile with the dealbreaker "no fully on-site roles", **When** an on-site posting is analyzed, **Then** a banner above the score reads "Violates your dealbreaker: no fully on-site roles", and the score is at most 20.
+3. **Given** a profile with the dealbreaker "no fully on-site roles", **When** an on-site posting is analyzed, **Then** a banner above the score reads "Violates your dealbreaker: no fully on-site roles", and the score is not lowered by the violation: it is the same match score the posting would get without that dealbreaker.
 4. **Given** an out-of-date saved posting whose page has since been taken down, **When** the user opens the page and clicks Rescore, **Then** the old score stays, the panel notes "Posting no longer available — score can't be updated", the saved entry keeps that note, and no free rescore or analysis is used.
 5. **Given** the web library sorted by fit, **When** some scores are out of date, **Then** they are visibly distinguished in the list, and the user can filter to "current profile only".
 6. **Given** the user changes only whitespace in the profile, **When** they save, **Then** no score is marked out of date.
@@ -108,10 +109,10 @@ A new user uploads their résumé (`.pdf`/`.docx`) instead of pasting it, then f
 
 1. **Given** the profile editor (extension options page or web Profile page), **When** the user uploads a `.pdf` or `.docx` résumé, **Then** the extracted text appears in the editor for review and is not saved until the user saves.
 2. **Given** a résumé with no extractable text, **When** uploaded, **Then** the user sees the same plain-language message used for job-posting uploads.
-3. **Given** a structured preference "remote only", **When** a posting is analyzed whose arrangement is confidently identified as on-site, **Then** the result is marked as a dealbreaker violation naming that preference, and the score is capped at 20.
+3. **Given** a structured preference "remote only", **When** a posting is analyzed whose arrangement is confidently identified as on-site, **Then** the result is marked as a dealbreaker violation naming that preference, and the score is unchanged.
 4. **Given** a posting whose arrangement is not stated, or which has no salary, **When** checked against a matching preference, **Then** it is not a violation. It appears as an "Unverified: arrangement not stated" (or equivalent) note in weaknesses instead.
 5. **Given** a minimum salary in one currency and a posting in another, or with a different pay period, **When** checked, **Then** no violation is declared. The mismatch is noted as unverified.
-6. **Given** a location preference "EU timezones only" and a posting restricted to "US residents only", **When** analyzed, **Then** the model reports the preference as violated, the dealbreaker banner names it, and the score is capped at 20, exactly as for a free-text dealbreaker.
+6. **Given** a location preference "EU timezones only" and a posting restricted to "US residents only", **When** analyzed, **Then** the model reports the preference as violated, the dealbreaker banner names it, and the score is unchanged, exactly as for a free-text dealbreaker.
 
 ---
 
@@ -181,7 +182,7 @@ The extension's Saved tab sorts and filters by fit and verdict, matching the web
 - **FR-003a**: Because saved postings do not keep the posting text, a rescore MUST run only where the posting text is available again: the extension panel on the posting's page, or the web upload and paste screens. Elsewhere the surface MUST offer "Open posting to rescore" (opens the source page, where the panel offers Rescore) for postings from a URL, or "Upload again to rescore" for postings from an uploaded document or pasted text. A rescore that finds no posting on the page MUST keep the previous score, record and show "Posting no longer available — score can't be updated" on the saved entry, and consume neither a free rescore nor an analysis.
 - **FR-004**: Rescore MUST state its cost before running, and MUST update both the cached and the saved analysis in place. Each account gets 10 free rescores per month, resetting when the analysis allowance resets. A rescore is free while any remain. After that it costs 1 analysis. A rescore is a re-analysis of a posting whose fit is out of date or version-unknown, started from Rescore or from one of the FR-003a actions ("Open posting to rescore", "Upload again to rescore"). Any other analysis is metered as today.
 - **FR-004a**: The system MUST track free-rescore usage per account on the server, show the remaining count wherever Rescore is offered, and consume a free rescore (or an analysis) only when the rescore succeeds.
-- **FR-005**: Every fit result MUST list the dealbreakers and structured preferences it violates, each worded as the user wrote it. When any are listed, the system MUST cap the score at 20 itself, without relying on the model to apply the cap.
+- **FR-005**: Every fit result MUST list the dealbreakers and structured preferences it violates, each worded as the user wrote it. Violations MUST NOT change the score: the score reflects only how well the posting matches the candidate's skills, experience and seniority. The model MUST be instructed not to lower the score for dealbreakers, and the system MUST NOT adjust the score after the model responds.
 - **FR-006**: When a fit lists violations, the UI MUST show a dealbreaker banner above the score that names each one.
 - **FR-007**: After a profile save, an open panel showing a result for the current page MUST offer to rescore it. It MUST NOT rescore automatically.
 
@@ -201,7 +202,7 @@ The extension's Saved tab sorts and filters by fit and verdict, matching the web
 
 - **FR-014**: Both profile editors MUST accept a `.pdf`/`.docx` résumé upload, using the same text extraction as job-posting uploads. The extracted text fills the editor for review, nothing is saved until the user saves, and importing MUST NOT use an analysis from the allowance.
 - **FR-015**: The profile MUST gain optional structured preferences: acceptable work arrangements, minimum salary (amount, currency, pay period), seniority range, and acceptable locations or timezones.
-- **FR-016**: The arrangement, minimum-salary and seniority preferences MUST be checked deterministically after the model responds, against the posting's extracted arrangement, salary and seniority. The location/timezone preference MUST NOT be checked in code. The model judges it like a free-text dealbreaker, and any violation it reports enters the violation list (FR-005), with the score cap enforced in code. For the code-checked preferences, a preference counts as violated only when the posting's value is known and contradicts it. When the posting's value is unknown, or not comparable (different currency or pay period), the system MUST add an "Unverified: …" weakness instead of declaring a violation.
+- **FR-016**: The arrangement, minimum-salary and seniority preferences MUST be checked deterministically after the model responds, against the posting's extracted arrangement, salary and seniority. The location/timezone preference MUST NOT be checked in code. The model judges it like a free-text dealbreaker, and any violation it reports enters the violation list (FR-005). No violation changes the score. For the code-checked preferences, a preference counts as violated only when the posting's value is known and contradicts it. When the posting's value is unknown, or not comparable (different currency or pay period), the system MUST add an "Unverified: …" weakness instead of declaring a violation.
 - **FR-017**: Structured preferences MUST also be sent to the model (FR-001), so its rationale and lists take them into account.
 
 ### Functional Requirements — Correction Loop (Story 5)
@@ -245,7 +246,7 @@ The extension's Saved tab sorts and filters by fit and verdict, matching the web
 ### Measurable Outcomes
 
 - **SC-001**: 100% of fits shown on any surface either match the current profile version or carry an out-of-date or version-unknown marker.
-- **SC-002**: On the posting evaluation corpus, every posting that violates a fixture dealbreaker or structured preference is reported as a dealbreaker with a score of 20 or less.
+- **SC-002**: On the posting evaluation corpus, every posting that violates a fixture dealbreaker or structured preference is reported as a dealbreaker, and in at least 90% of those pairs the fit score falls in the same verdict band as when the same profile is scored with its dealbreakers and preferences removed (the score does not depend on dealbreakers).
 - **SC-003**: On the evaluation corpus, at least 95% of evidence quotes returned by the model pass the verbatim check, and 100% of quotes shown to users are verbatim.
 - **SC-004**: Re-running the same posting and profile 5 times yields the same verdict in at least 90% of corpus postings.
 - **SC-005**: A first-time user with a résumé file reaches their first fit score in under 2 minutes from opening the profile editor.
@@ -258,7 +259,7 @@ The extension's Saved tab sorts and filters by fit and verdict, matching the web
 
 - Rescoring re-runs the full analysis. The first 10 rescores each month are free (FR-004), and later ones count against the allowance like any other analysis. The 10-per-month limit is the same for free and Premium accounts.
 - Saved postings keep storing the analysis only, not the posting text. Rescoring therefore needs the source page, file or text again (FR-003a), and bulk rescoring is out of scope (see Out of Scope).
-- Structured-preference violations cap the score at 20, the same as free-text dealbreakers, so "Dealbreaker" means the same thing whichever way it was stated.
+- Dealbreaker violations, free-text or structured, never change the fit score. They are listed next to it, so "Dealbreaker" means the same thing whichever way it was stated.
 - "I have this" stays one click. It does not ask for an evidence note.
 - No currency or pay-period conversion. Mismatches are "unverified", never violations.
 - The profile version reflects only the profile's meaningful content, not when it was saved.
@@ -281,7 +282,7 @@ None blocking. The first draft's four open questions were resolved as defaults i
 
 1. Store a bounded posting excerpt to enable library-wide rescoring → **resolved in Clarifications**: no posting text is stored. Rescore needs the page (or the original file or text) again.
 2. Rescore cost → **resolved in Clarifications**: 10 free rescores per month, then 1 analysis each.
-3. Structured-preference violations hard-cap the score → **yes**, at 20.
+3. Structured-preference violations hard-cap the score → **superseded in Clarifications**: no violation changes the score.
 4. "I have this" asks for an evidence note → **no**; one click.
 
 ## Technical Shape *(non-binding — inputs to planning)*
@@ -306,7 +307,7 @@ None blocking. The first draft's four open questions were resolved as defaults i
 - **Shared serialization (FR-001)**: every flow already goes through `profileToPromptText` in [`shared/types/profile.ts`](../../shared/types/profile.ts). Extend it with preferences and confirmed skills, and keep a contract test per surface.
 - **Profile version (FR-002)**: SHA-256 of the whitespace-normalized `profileToPromptText` output, computed server-side in [`profileRepository.ts`](../../functions/src/services/profileRepository.ts) (on read and write, returned from `GET /profile` and `PUT /profile`) and in `orchestrateJobAnalysis` (from `req.profile`, stored as `fit.profileFingerprint`), so the client never hashes anything.
 - **Schema (FR-005, FR-011)**: extend `JOB_ANALYSIS_SCHEMA.fit` with `dealbreakersViolated: string[]` and turn `matching / missing / desired` into `{ label, postingQuote, profileQuote? }` objects. Keep `isJobAnalysisPayload` and the shared `Fit` type tolerant of the legacy string arrays.
-- **Deterministic checks (FR-005, FR-016)**: a pure `applyPreferences(payload, preferences)` step after `validateEvidence` and `enforceConsistency`, which also applies the score cap; unit-tested on its own. Arrangement violations require `arrangementConfidence ≠ none`. `remoteRestrictions` is free text (`string | null`), so `applyPreferences` ignores the location preference; it reaches the model through `profileToPromptText`, and the model's `dealbreakersViolated` entries for it are kept as-is.
+- **Deterministic checks (FR-005, FR-016)**: a pure `applyPreferences(payload, preferences)` step after `validateEvidence` and `enforceConsistency`, which never changes the score; unit-tested on its own. Arrangement violations require `arrangementConfidence ≠ none`. `remoteRestrictions` is free text (`string | null`), so `applyPreferences` ignores the location preference; it reaches the model through `profileToPromptText`, and the model's `dealbreakersViolated` entries for it are kept as-is.
 - **Quote validation (FR-012)**: generalize `validateEvidence` to the new item quotes.
 - **Shared UI logic (FR-009, FR-023)**: `shared/` already holds types and design tokens. Add a framework-free `fitView.ts` (verdict, out-of-date detection, legacy normalization) that both the extension and the web import; replace the hard-coded thresholds in `FitScore.tsx`.
 - **Freshness in the extension (FR-003)**: `needsFitRefresh` in [`jobFlow.ts`](../../extension/services/jobFlow.ts#L218) must not auto-rescore on a version mismatch (that would spend allowance silently); it marks instead.
