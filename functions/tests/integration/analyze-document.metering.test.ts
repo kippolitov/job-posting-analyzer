@@ -216,14 +216,13 @@ describe("analyze-document metering (contracts/analyze-document.md, research R7)
     });
     const form = new FormData();
     form.set("file", fixtureFile("valid.pdf", "application/pdf"));
-    const context = makeContext();
+    const log = vi.fn<unknown[], void>();
+    const context = { log, error: vi.fn(), warn: vi.fn() } as unknown as InvocationContext;
 
     const res = await analyzeDocument(makeRequest(`Bearer ${token}`, form), context);
 
     expect(res.status).toBe(200);
-    const usageLines = vi
-      .mocked(context.log)
-      .mock.calls.filter(([first]) => first === "model.usage");
+    const usageLines = log.mock.calls.filter(([first]) => first === "model.usage");
     expect(usageLines).toHaveLength(1);
     expect(JSON.parse(usageLines[0][1] as string)).toEqual(usage);
   });

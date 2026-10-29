@@ -37,9 +37,9 @@ These are silent failures, not crashes. They were found in existing code during 
 
 **Purpose**: Lock the baselines that later PRs are measured against.
 
-- [ ] T001 Record the QG-4 p95 baseline on `main` by running `npm run test:integration -- perf.test.ts` from `functions/`. Write the p95 and the commit SHA into a new "Baselines" section at the bottom of `specs/006-profile-match-ux/quickstart.md`, so later PRs compare against a fixed number for the 20% regression gate.
-- [ ] T002 [P] Record the current six-posting arrangement eval for both tiers in the same "Baselines" section of `specs/006-profile-match-ux/quickstart.md` **(live model calls, about $0.01)**. Run `npm run eval:postings` and `npm run eval:postings -- --tier=premium` from `functions/`, and note the deployment names, accuracy and p95. This is the "current 100%" that SC-008 must keep.
-- [ ] T003 [P] Create `specs/006-profile-match-ux/eval-runs/` containing a `.gitkeep`, plus a `README.md` that says raw `--out` JSON files land here and are committed with PR1.
+- [X] T001 Record the QG-4 p95 baseline on `main` by running `npm run test:integration -- perf.test.ts` from `functions/`. Write the p95 and the commit SHA into a new "Baselines" section at the bottom of `specs/006-profile-match-ux/quickstart.md`, so later PRs compare against a fixed number for the 20% regression gate.
+- [X] T002 [P] Record the current six-posting arrangement eval for both tiers in the same "Baselines" section of `specs/006-profile-match-ux/quickstart.md` **(live model calls, about $0.01)**. Run `npm run eval:postings` and `npm run eval:postings -- --tier=premium` from `functions/`, and note the deployment names, accuracy and p95. This is the "current 100%" that SC-008 must keep.
+- [X] T003 [P] Create `specs/006-profile-match-ux/eval-runs/` containing a `.gitkeep`, plus a `README.md` that says raw `--out` JSON files land here and are committed with PR1.
 
 ---
 
@@ -51,7 +51,7 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for PR1 (write first, must fail) ⚠️
 
-- [ ] T004 [P] Write `functions/tests/unit/modelConfig.test.ts`, which tests `resolveModelConfig(tier, env)` against [contracts/model-config.md](./contracts/model-config.md). It covers:
+- [X] T004 [P] Write `functions/tests/unit/modelConfig.test.ts`, which tests `resolveModelConfig(tier, env)` against [contracts/model-config.md](./contracts/model-config.md). It covers:
   - the free deployment fallback chain (`AZURE_OPENAI_JOB_DEPLOYMENT` → `AZURE_OPENAI_DEPLOYMENT` → `"gpt-4o-mini"`);
   - Premium using its own deployment **and** its own `_PREMIUM` settings when `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM` is non-empty;
   - Premium using the free deployment **and the free settings** when it is unset or `""`;
@@ -60,23 +60,23 @@ These are silent failures, not crashes. They were found in existing code during 
   - `reasoningEffort` accepting `none|low|medium|high|xhigh` and rejecting `minimal` and `max`;
   - `apiVersion` defaulting when unset and being overridden by `AZURE_OPENAI_API_VERSION`;
   - an invalid value throwing `ModelConfigError` whose message names the variable.
-- [ ] T005 [P] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` with request-shape tests on the mocked `create`:
+- [X] T005 [P] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` with request-shape tests on the mocked `create`:
   - with no temperature set, the request has **no** `temperature` key;
   - with temperature 0 set, it has `temperature: 0`;
   - with reasoning effort `none` set, it has `reasoning_effort: "none"` and no `temperature`;
   - the repair retry (second call) uses identical settings;
   - `max_completion_tokens` is still 3000;
   - `new AzureOpenAI` receives the resolved `apiVersion`.
-- [ ] T006 Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` with `observe`-callback tests:
+- [X] T006 Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` with `observe`-callback tests:
   - one call per completion attempt, with `attempt: 1` and then `2` on repair;
   - token fields read from the mocked `completion.usage`, including `completion_tokens_details.reasoning_tokens` and `prompt_tokens_details.cached_tokens`, defaulting to 0 when absent;
   - `finishReason` and `deployment` included;
   - `latencyMs` is a non-negative number;
   - omitting `observe` changes nothing.
-- [ ] T007 [P] Extend `functions/tests/unit/analyze-job.handler.test.ts` to assert two things:
+- [X] T007 [P] Extend `functions/tests/unit/analyze-job.handler.test.ts` to assert two things:
   - the handler logs exactly one `model.usage` line per completion attempt through `context.log`, with token counts only (assert that no argument contains `mainText` or profile text);
   - a `ModelConfigError` maps to `500 SERVICE_ERROR`, so the existing 5xx refund path runs.
-- [ ] T008 [P] Write `functions/tests/unit/evalMetrics.test.ts` for the pure metric helpers that `functions/scripts/evalMetrics.ts` will export. It covers:
+- [X] T008 [P] Write `functions/tests/unit/evalMetrics.test.ts` for the pure metric helpers that `functions/scripts/evalMetrics.ts` will export. It covers:
   - `bandFor(score, violations)` returning one of the five FR-009 bands;
   - `verdictStability(runsByPair)`, as the share of pairs whose band is identical across runs;
   - `falseDealbreakers(results, pairs)` and `missedDealbreakers(results, pairs)`, using `fit.dealbreakersViolated` when present and otherwise the PR1 proxy of `score ≤ 20` plus a case-insensitive rationale mention (valid only while the PR1 prompt still asks for the cap), and reporting which `detectionMethod` was used;
@@ -87,44 +87,44 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Implementation for PR1
 
-- [ ] T009 Implement `functions/src/services/modelConfig.ts`, exporting `resolveModelConfig`, `ModelConfig` and `ModelConfigError`, to make T004 pass. Keep it pure: it reads only the `env` argument.
-- [ ] T010 Refactor `orchestrateJobAnalysis` in `functions/src/services/jobExtractionOrchestrator.ts` to make T005 and T006 pass:
+- [X] T009 Implement `functions/src/services/modelConfig.ts`, exporting `resolveModelConfig`, `ModelConfig` and `ModelConfigError`, to make T004 pass. Keep it pure: it reads only the `env` argument.
+- [X] T010 Refactor `orchestrateJobAnalysis` in `functions/src/services/jobExtractionOrchestrator.ts` to make T005 and T006 pass:
   - replace the inline deployment selection with `resolveModelConfig(tier, process.env)`;
   - pass `apiVersion` from the config;
   - spread `temperature` and `reasoning_effort` only when defined;
   - add the optional 4th parameter `observe?: (u: ModelUsage) => void`, called after each `create` returns;
   - export the `ModelUsage` type.
-- [ ] T011 Wire `observe` in `functions/src/analyze-job/index.ts` and `functions/src/analyze-document/index.ts` so each logs `context.log("model.usage", JSON.stringify(u))`. Map `ModelConfigError` to `500 SERVICE_ERROR` in both. This makes T007 pass.
-- [ ] T012 [P] Document the five new variables in `functions/local.settings.json.example`, using the `//NAME` comment-key convention already in that file. The variables are `AZURE_OPENAI_JOB_TEMPERATURE[_PREMIUM]`, `AZURE_OPENAI_JOB_REASONING_EFFORT[_PREMIUM]` and `AZURE_OPENAI_API_VERSION`. Each comment states that the setting is omitted from the request when empty, and that the Premium settings apply only when the Premium deployment is set.
+- [X] T011 Wire `observe` in `functions/src/analyze-job/index.ts` and `functions/src/analyze-document/index.ts` so each logs `context.log("model.usage", JSON.stringify(u))`. Map `ModelConfigError` to `500 SERVICE_ERROR` in both. This makes T007 pass.
+- [X] T012 [P] Document the five new variables in `functions/local.settings.json.example`, using the `//NAME` comment-key convention already in that file. The variables are `AZURE_OPENAI_JOB_TEMPERATURE[_PREMIUM]`, `AZURE_OPENAI_JOB_REASONING_EFFORT[_PREMIUM]` and `AZURE_OPENAI_API_VERSION`. Each comment states that the setting is omitted from the request when empty, and that the Premium settings apply only when the Premium deployment is set.
 - [x] T013 **⚠ APPROVAL**: ask the user to approve creating a `gpt-5.4-mini` deployment (model version 2026-03-17) named `gpt-5.4-mini` in Azure OpenAI resource `job-posting-analyzer-openai` (resource group `job-posting-analyzer-rg`) for Premium (research R2). Present the SKU choice, GlobalStandard like the other deployments or DataZoneStandard to keep processing in the US data zone, and the capacity, 50K TPM to match `gpt-5.4-nano` if quota allows. After approval, create it with `az cognitiveservices account deployment create`, confirm it with `az cognitiveservices account deployment list`, and record the date, SKU and TPM in `eval-models.md`. It has no fixed charge, and deleting it reverses it. **Done 2026-10-29**: approved with DataZoneStandard; created at 50K TPM; a two-posting probe through the production code path passed (research R2); Premium switched in production the same day. Record this in `eval-models.md` when T024 creates it.
-- [ ] T014 Run the live probe from quickstart step P1-2 **(live, a few cents)**:
+- [X] T014 Run the live probe from quickstart step P1-2 **(live, a few cents)**:
   1. Write a throwaway script under the session scratchpad (not committed) that calls `orchestrateJobAnalysis` once per deployment with an `env` override: `gpt-4o-mini` at temperature 0, `gpt-5.4-nano` at temperature 0, `gpt-5.4-mini` at temperature 0 (needs T013), and `gpt-6-luna` at reasoning effort `none`.
   2. Run it under a candidate `AZURE_OPENAI_API_VERSION`, starting with `2024-12-01-preview` and moving to a newer GA or preview version if that one 400s.
   3. Set the version that passes all four as the default in `functions/src/services/modelConfig.ts`, and update T004's expected default.
   4. Record the version and the four outcomes in a new file, `specs/006-profile-match-ux/eval-models.md`, under "API version probe".
   If no single version passes all three, stop and report to the user.
-- [ ] T015 [P] Write `extension/scripts/exportCorpusExtracts.ts`. For each slug in `extension/tests/fixtures/pages/manifest.json`, it serves the fixtures with `serveFixtures()`, opens the corpus page in Chromium, calls `runExtractor(page)`, and writes `functions/tests/fixtures/postings/full/<slug>.json`. Each file contains `{ url, canonicalUrl, title, jsonLd, structuredSources, mainText (sliced to 40,000), extractedAt }`, without `provenance`, plus `expectNotScorable: true` for `thin-posting-control`. Follow `extension/scripts/rescoreCorpus.ts` for the setup and teardown pattern.
-- [ ] T016 Run `npx tsx scripts/exportCorpusExtracts.ts` from `extension/` and commit the 6 JSON files under `functions/tests/fixtures/postings/full/`. Add a `README.md` there that says:
+- [X] T015 [P] Write `extension/scripts/exportCorpusExtracts.ts`. For each slug in `extension/tests/fixtures/pages/manifest.json`, it serves the fixtures with `serveFixtures()`, opens the corpus page in Chromium, calls `runExtractor(page)`, and writes `functions/tests/fixtures/postings/full/<slug>.json`. Each file contains `{ url, canonicalUrl, title, jsonLd, structuredSources, mainText (sliced to 40,000), extractedAt }`, without `provenance`, plus `expectNotScorable: true` for `thin-posting-control`. Follow `extension/scripts/rescoreCorpus.ts` for the setup and teardown pattern.
+- [X] T016 Run `npx tsx scripts/exportCorpusExtracts.ts` from `extension/` and commit the 6 JSON files under `functions/tests/fixtures/postings/full/`. Add a `README.md` there that says:
   - the files are derived from `extension/tests/fixtures/pages/`, not hand-edited;
   - they are regenerated only when the pages corpus or `pageExtractor.ts` changes;
   - `thin-posting-control` is never scored for fit.
-- [ ] T017 [P] Create the four fixture profiles under `functions/tests/fixtures/profiles/`, shaped `{ id, text, dealbreakers, preferences?, confirmedSkills? }`. Each résumé text is realistic, at about 1,500–3,000 characters.
+- [X] T017 [P] Create the four fixture profiles under `functions/tests/fixtures/profiles/`, shaped `{ id, text, dealbreakers, preferences?, confirmedSkills? }`. Each résumé text is realistic, at about 1,500–3,000 characters.
   - `senior-backend.json`: dealbreaker "No fully on-site roles".
   - `mid-frontend.json`: preferences `arrangements: ["remote"]` and `minSalary: { amount: 120000, currency: "USD", period: "year" }`, **also** repeated as the dealbreaker lines "Remote only" and "Minimum salary 120000 USD per year", so PR1 can measure them before PR4.
   - `data-ml.json`: preference `locations: ["EU timezones only"]`, also as the dealbreaker line "EU timezones only".
   - `control.json`: no dealbreakers.
-- [ ] T018 Create `functions/tests/fixtures/profiles/pairs.json` with one entry per (posting × profile) pair, using the six `postings/*.txt` ids (file stem) and the five scorable `postings/full/*.json` slugs. Each entry is `{ posting, profile, violations, unstatedFacts, verdictRange? }`.
+- [X] T018 Create `functions/tests/fixtures/profiles/pairs.json` with one entry per (posting × profile) pair, using the six `postings/*.txt` ids (file stem) and the five scorable `postings/full/*.json` slugs. Each entry is `{ posting, profile, violations, unstatedFacts, verdictRange? }`.
   - Label `violations` by reading each posting: a dealbreaker counts as violated **only** if the posting states the contradicting fact.
   - `unstatedFacts` lists `"arrangement"`, `"salary"` and/or `"location"` when the posting is silent on them. These pairs are SC-008's false-dealbreaker traps.
   - Exclude `thin-posting-control`.
   - Add a top-level `"_labelling"` note describing the rule above.
-- [ ] T019 [P] Create `functions/scripts/modelPrices.json`, keyed by deployment name. Each entry is `{ inputPer1M, cachedInputPer1M, cacheWritePer1M?, outputPer1M, source: "Azure Retail Prices API", asOf: "2026-10-28" }`. Seed it from spec.md's Technical Shape:
+- [X] T019 [P] Create `functions/scripts/modelPrices.json`, keyed by deployment name. Each entry is `{ inputPer1M, cachedInputPer1M, cacheWritePer1M?, outputPer1M, source: "Azure Retail Prices API", asOf: "2026-10-28" }`. Seed it from spec.md's Technical Shape:
   - `gpt-4o-mini` 0.15 / 0.60;
   - `gpt-5.4-nano` 0.20 / 1.25;
   - `gpt-6-luna` 0.10 / 0.50, with a cache write of 0.125;
   - `gpt-5.4-mini` 0.825 / 4.95, the DataZoneStandard price of the live deployment (global is 0.75 / 4.50).
   Look up any cached-input price the spec does not give using the Azure Retail Prices API. If it can't be confirmed, set it equal to the uncached price and say so in a `"note"` field.
-- [ ] T020 [P] Create `functions/scripts/evalConfigs.json` with the R2 candidates as `{ label, tier, deployment, temperature?, reasoningEffort?, gate }`:
+- [X] T020 [P] Create `functions/scripts/evalConfigs.json` with the R2 candidates as `{ label, tier, deployment, temperature?, reasoningEffort?, gate }`:
   - `free-4o-mini-t0` (baseline);
   - `premium-5.4-nano-t0` (baseline);
   - `luna-none`;
@@ -133,7 +133,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - `premium-5.4-mini-t0`, the chosen Premium configuration, with `gate: true`.
   The others have `gate: false` and serve as the comparison and the R2 fallback.
 - [ ] T021 **⚠ APPROVAL**: ask the user to approve setting `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on Function App `job-posting-analyzer-func` (resource group `job-posting-analyzer-rg`) **before** PR1 merges (research R1, trap 4). After approval, set them with `az functionapp config appsettings set` and confirm by listing the setting **names**. Never print values. Record the date in `eval-models.md`.
-- [ ] T022 Implement `functions/scripts/evalMetrics.ts` to make T008 pass. Then extend `functions/scripts/evalPostings.ts` per [contracts/eval-harness.md](./contracts/eval-harness.md):
+- [X] T022 Implement `functions/scripts/evalMetrics.ts` to make T008 pass. Then extend `functions/scripts/evalPostings.ts` per [contracts/eval-harness.md](./contracts/eval-harness.md):
   - with no `--configs`, keep today's behaviour exactly;
   - add `--configs`, `--runs` (default 5), `--concurrency` (default 2, with exponential backoff on 429 up to 5 retries), `--only` and `--out`;
   - load the full-length postings and profiles;

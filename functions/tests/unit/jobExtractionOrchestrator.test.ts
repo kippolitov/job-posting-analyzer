@@ -468,11 +468,11 @@ describe("jobExtractionOrchestrator", () => {
         usage: fullUsage,
         finishReason: "stop",
       });
-      const observe = vi.fn();
+      const observe = vi.fn<[ModelUsage], void>();
       await orchestrateJobAnalysis(baseRequest, "free", () => {}, observe);
 
       expect(observe).toHaveBeenCalledTimes(1);
-      const [usage] = observe.mock.calls[0] as [ModelUsage];
+      const [usage] = observe.mock.calls[0];
       expect(usage).toMatchObject({
         deployment: "gpt-4o-mini",
         promptTokens: 1800,
@@ -491,13 +491,13 @@ describe("jobExtractionOrchestrator", () => {
         { content: "{{{ not json", usage: fullUsage, finishReason: "length" },
         { content: fixture("explicit-hybrid"), usage: fullUsage, finishReason: "stop" }
       );
-      const observe = vi.fn();
+      const observe = vi.fn<[ModelUsage], void>();
       await orchestrateJobAnalysis(baseRequest, "free", () => {}, observe);
 
       expect(observe).toHaveBeenCalledTimes(2);
-      const attempts = observe.mock.calls.map(([u]) => (u as ModelUsage).attempt);
+      const attempts = observe.mock.calls.map(([u]) => u.attempt);
       expect(attempts).toEqual([1, 2]);
-      expect((observe.mock.calls[0][0] as ModelUsage).finishReason).toBe("length");
+      expect(observe.mock.calls[0][0].finishReason).toBe("length");
     });
 
     it("defaults token fields to 0 when usage or its details are absent", async () => {
@@ -509,7 +509,7 @@ describe("jobExtractionOrchestrator", () => {
           finishReason: "stop",
         }
       );
-      const observe = vi.fn();
+      const observe = vi.fn<[ModelUsage], void>();
       await orchestrateJobAnalysis(baseRequest, "free", () => {}, observe);
 
       expect(observe.mock.calls[0][0]).toMatchObject({
@@ -532,7 +532,7 @@ describe("jobExtractionOrchestrator", () => {
         { content: "{{{ not json", usage: fullUsage },
         { content: "also {{{ not json", usage: fullUsage }
       );
-      const observe = vi.fn();
+      const observe = vi.fn<[ModelUsage], void>();
       await expect(
         orchestrateJobAnalysis(baseRequest, "free", () => {}, observe)
       ).rejects.toBeInstanceOf(JobSchemaError);

@@ -188,7 +188,10 @@ describe("analyze-job handler", () => {
       } as never);
     });
     const profile = "Distinctive profile text that must never reach the logs";
-    const context = makeContext();
+    const log = vi.fn<unknown[], void>();
+    const warn = vi.fn<unknown[], void>();
+    const error = vi.fn<unknown[], void>();
+    const context = { log, warn, error } as unknown as InvocationContext;
 
     const res = await analyzeJobHandler(
       makeRequest({ ...validBody, profile }),
@@ -197,7 +200,7 @@ describe("analyze-job handler", () => {
     );
     expect(res.status).toBe(200);
 
-    const logCalls = vi.mocked(context.log).mock.calls;
+    const logCalls = log.mock.calls;
     const usageLines = logCalls.filter(([first]) => first === "model.usage");
     expect(usageLines).toHaveLength(2);
     expect(JSON.parse(usageLines[0][1] as string)).toEqual(usage(1));
@@ -205,8 +208,8 @@ describe("analyze-job handler", () => {
 
     const everything = [
       ...logCalls,
-      ...vi.mocked(context.warn).mock.calls,
-      ...vi.mocked(context.error).mock.calls,
+      ...warn.mock.calls,
+      ...error.mock.calls,
     ]
       .flat()
       .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
@@ -219,11 +222,12 @@ describe("analyze-job handler", () => {
     vi.mocked(orchestrateJobAnalysis).mockRejectedValue(
       new ModelConfigError("AZURE_OPENAI_JOB_REASONING_EFFORT must be one of none|low|medium|high|xhigh")
     );
-    const context = makeContext();
+    const error = vi.fn();
+    const context = { log: vi.fn(), warn: vi.fn(), error } as unknown as InvocationContext;
     const res = await analyzeJobHandler(makeRequest(validBody), context, testUser);
     expect(res.status).toBe(500);
     expect(res.jsonBody).toMatchObject({ error: { code: "SERVICE_ERROR" } });
-    expect(context.error).toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
   });
 
   it("refunds through the 5xx path when the model config is invalid", async () => {
