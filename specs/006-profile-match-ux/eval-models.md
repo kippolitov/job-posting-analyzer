@@ -1,6 +1,6 @@
 # Eval: scoring-model choice (PR1, FR-M01–M05)
 
-**Status**: settings signed off 2026-10-29; capacity step pending (T024). Raw results:
+**Status**: signed off 2026-10-29, capacity in place; settings switch waits for the PR1 deploy (T026). Raw results:
 [`eval-runs/pr1.json`](./eval-runs/pr1.json).
 
 ## Summary for sign-off
@@ -43,6 +43,8 @@
 | 2026-10-29 | Created deployment `gpt-5.4-mini` (T013, approved) | Model version 2026-03-17, **DataZoneStandard** (processing stays in the US data zone), 50K TPM, in `job-posting-analyzer-openai` / `job-posting-analyzer-rg`. No fixed charge. | Delete the deployment |
 | 2026-10-29 | Prod `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM`: `gpt-5.4-nano` → `gpt-5.4-mini` (approved) | After a two-posting probe through the unchanged production code path (research R2) | Set it back to `gpt-5.4-nano` |
 | 2026-10-29 | Prod `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on `job-posting-analyzer-func` (T021, approved) | Inert on the deployed code; keeps temperature 0 on both tiers once PR1 deploys (research R1, trap 4). Free still resolves its deployment from `AZURE_OPENAI_DEPLOYMENT`. | Delete both settings |
+| 2026-10-29 | Raised deployment `gpt-6-luna` 20K → 100K TPM (approved) | GlobalStandard, model version 2026-09-22, for the free tier. Quota is free; only tokens are billed. | Set capacity back to 20 |
+| 2026-10-29 | Created deployment `gpt-6-luna-premium` (approved) | Model version 2026-09-22, **DataZoneStandard** (US data zone, as `gpt-5.4-mini` today), 50K TPM, for Premium only so free spikes can't throttle it. Probe with `reasoning_effort: low` returned 200. | Delete the deployment |
 
 ## API version probe (T014, quickstart P1-2)
 
@@ -170,7 +172,7 @@ sit on 50K TPM deployments.
 | Tier | Settings | Rollback |
 |---|---|---|
 | Free | `AZURE_OPENAI_JOB_DEPLOYMENT=gpt-6-luna`, `AZURE_OPENAI_JOB_REASONING_EFFORT=none`, delete `AZURE_OPENAI_JOB_TEMPERATURE` | Delete those two, set `AZURE_OPENAI_JOB_TEMPERATURE=0` (free falls back to `AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini`) |
-| Premium | `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-6-luna` (or a second luna deployment), `AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM=low`, delete `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM` | Set the deployment back to `gpt-5.4-mini` (or `gpt-5.4-nano`) and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0`, delete the effort |
+| Premium | `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-6-luna-premium` (DataZoneStandard), `AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM=low`, delete `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM` | Set the deployment back to `gpt-5.4-mini` (or `gpt-5.4-nano`) and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0`, delete the effort |
 
 - Applied by T026 after PR1 deploys. The deployed code before PR1 sends
   `temperature: 0`, which luna rejects.
@@ -193,7 +195,7 @@ Alternatively, create the Premium luna deployment as DataZoneStandard:
 `6-luna … Std DZ` meters exist at about 10% above global.
 
 **Decision (2026-10-29)**: any-region (GlobalStandard) processing is accepted
-for the free tier. Premium's data zone is decided with the capacity step.
+for the free tier. Premium stays in the US data zone on `gpt-6-luna-premium`.
 
 Quota in `eastus2` on 2026-10-29 (1 unit = 1K TPM; quota itself is free,
 only tokens are billed): GlobalStandard `gpt-6-luna` 20 of 250 used,
@@ -218,4 +220,6 @@ DataZoneStandard `gpt-6-luna` 0 of 100 used.
 
 - [X] Product owner: chosen settings approved (2026-10-29): free `gpt-6-luna`
   at `none`, Premium `gpt-6-luna` at `low`; any-region processing for free.
-- [ ] Product owner: capacity step approved (date):
+- [X] Product owner: capacity step approved (2026-10-29): `gpt-6-luna` at
+  100K TPM for free, `gpt-6-luna-premium` (DataZoneStandard, 50K TPM) for
+  Premium. T027 skipped: Premium leaves `gpt-5.4-mini`.
