@@ -130,3 +130,32 @@ cd functions && npm run test:integration -- perf.test.ts   # p95 ≤ 30 s; rejec
 ```
 
 PR1 also reports live p95 from the eval, which is the SC-009 evidence.
+
+## Baselines
+
+Recorded 2026-10-29 on `main` at `d5777e8` (a detached worktree, so no 006 code
+was involved). Later PRs compare against these fixed numbers.
+
+### QG-4 perf (`npm run test:integration -- perf.test.ts`, Azurite)
+
+| Budget | p95 | Runs |
+|---|---|---|
+| Auth middleware, warm | 1.99 ms | 40 |
+| Analyze path auth + metering, warm | 2.79 ms | 40 |
+| List a 1,000-record library (incl. auth) | 20.25 ms | 10 |
+| Document extraction at the 10 MB cap (9.2 MB) | 904.62 ms | 5 |
+| Full analyze-document, mocked orchestrator | 947.70 ms (p50) | 5 |
+
+A PR fails QG-4 if any p95 is 20% or more above these. Sub-10 ms numbers are
+noisy, so re-run before calling a regression on them.
+
+### Six-posting arrangement eval (`npm run eval:postings`, live)
+
+| Tier | Deployment | Accuracy | Stated contradictions | Hybrid days | p95 |
+|---|---|---|---|---|---|
+| free | `gpt-4o-mini` | 100.0% | 0 | 2/2 | 2.3 s |
+| premium | `gpt-5.4-nano` (local settings) | 100.0% | 0 | 2/2 | 2.1 s |
+| premium | `gpt-5.4-mini` (prod since 2026-10-29) | 100.0% | 0 | 2/2 | 1.4 s |
+
+This is the "current 100%" that SC-008 must keep. All three ran at temperature
+0 on api-version `2024-08-01-preview`, the code on `main`.
