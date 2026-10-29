@@ -142,8 +142,8 @@ These are silent failures, not crashes. They were found in existing code during 
   - for SC-002, also score each violating pair with the profile's dealbreakers and preferences stripped, and report `scoreIndependence`;
   - print the per-configuration report block from the contract;
   - exit non-zero only when a `gate: true` configuration misses a target.
-- [ ] T023 Run the full eval **(live, about 3 hours at 20K TPM, about $1–3)** with `npm run eval:postings -- --configs=scripts/evalConfigs.json --runs=5 --out=../specs/006-profile-match-ux/eval-runs/pr1.json` from `functions/`. If the rate limit makes a configuration exceed about 90 minutes, rerun that configuration alone with `--concurrency=1`. Do not ask for a TPM increase without approval.
-- [ ] T024 Write `specs/006-profile-match-ux/eval-models.md`:
+- [X] T023 Run the full eval **(live, about 3 hours at 20K TPM, about $1–3)** with `npm run eval:postings -- --configs=scripts/evalConfigs.json --runs=5 --out=../specs/006-profile-match-ux/eval-runs/pr1.json` from `functions/`. If the rate limit makes a configuration exceed about 90 minutes, rerun that configuration alone with `--concurrency=1`. Do not ask for a TPM increase without approval.
+- [X] T024 Write `specs/006-profile-match-ux/eval-models.md`:
   - one comparison table across configurations from `eval-runs/pr1.json`;
   - the R2 decision rule applied step by step;
   - the chosen free and Premium settings;
