@@ -13,6 +13,7 @@ import { withAuth } from "../../src/services/auth";
 import { analyzeDocumentHandler } from "../../src/analyze-document/index";
 import { jobsItemHandler } from "../../src/jobs/index";
 import { orchestrateJobAnalysis } from "../../src/services/jobExtractionOrchestrator";
+import { ModelConfigError } from "../../src/services/modelConfig";
 import { ensureTable } from "../../src/services/tablesService";
 import { usageRowKey } from "../../src/services/meteringService";
 import { MONTHLY_ANALYSES } from "../../src/models/user";
@@ -193,6 +194,55 @@ describe("analyze-document metering (contracts/analyze-document.md, research R7)
     expect(body.canonicalUrl).toMatch(/^doc:[0-9a-f]{64}$/);
     expect(body.saveKey).toMatch(/^[0-9a-f]{64}$/);
     expect(body.usage.count).toBe(1);
+  });
+
+  it("logs one model.usage line per completion attempt (contracts/model-config.md)", async () => {
+    const sub = uniqueSub();
+    const token = signTestIdToken({ sub, email: `${sub}@example.com` });
+    const defaultImpl = vi.mocked(orchestrateJobAnalysis).getMockImplementation()!;
+    const usage = {
+      deployment: "gpt-6-luna",
+      promptTokens: 900,
+      completionTokens: 300,
+      reasoningTokens: 0,
+      cachedTokens: 0,
+      latencyMs: 3100,
+      attempt: 1 as const,
+      finishReason: "stop",
+    };
+    vi.mocked(orchestrateJobAnalysis).mockImplementationOnce((req, tier, warn, observe) => {
+      observe?.(usage);
+      return defaultImpl(req, tier, warn, observe);
+    });
+    const form = new FormData();
+    form.set("file", fixtureFile("valid.pdf", "application/pdf"));
+    const context = makeContext();
+
+    const res = await analyzeDocument(makeRequest(`Bearer ${token}`, form), context);
+
+    expect(res.status).toBe(200);
+    const usageLines = vi
+      .mocked(context.log)
+      .mock.calls.filter(([first]) => first === "model.usage");
+    expect(usageLines).toHaveLength(1);
+    expect(JSON.parse(usageLines[0][1] as string)).toEqual(usage);
+  });
+
+  it("an invalid model config is a 500 SERVICE_ERROR and is refunded", async () => {
+    const sub = uniqueSub();
+    const token = signTestIdToken({ sub, email: `${sub}@example.com` });
+    vi.mocked(orchestrateJobAnalysis).mockRejectedValueOnce(
+      new ModelConfigError("AZURE_OPENAI_JOB_REASONING_EFFORT must be one of none|low|medium|high|xhigh")
+    );
+    const form = new FormData();
+    form.set("file", fixtureFile("valid.pdf", "application/pdf"));
+
+    const res = await analyzeDocument(makeRequest(`Bearer ${token}`, form), makeContext());
+
+    expect(res.status).toBe(500);
+    expect(res.jsonBody).toMatchObject({ error: { code: "SERVICE_ERROR" } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await usageCount(sub)).toBe(0);
   });
 
   it("zero uploaded document bytes persist anywhere after a save (FR-025, SC-008)", async () => {

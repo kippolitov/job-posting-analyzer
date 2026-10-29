@@ -4,7 +4,9 @@ import path from "path";
 import {
   orchestrateJobAnalysis,
   JobSchemaError,
+  type ModelUsage,
 } from "../../src/services/jobExtractionOrchestrator";
+import { ModelConfigError } from "../../src/services/modelConfig";
 import type { AnalyzeJobRequest } from "../../src/models/job";
 
 vi.mock("openai", () => ({
@@ -61,6 +63,24 @@ async function mockCreateWith(
   return mockCreate;
 }
 
+/** Like mockCreateWith, but each completion carries `usage` and `finish_reason`. */
+async function mockCreateWithCompletions(
+  ...completions: { content: string; usage?: unknown; finishReason?: string }[]
+): Promise<ReturnType<typeof vi.fn>> {
+  const { AzureOpenAI } = await import("openai");
+  const mockCreate = vi.fn();
+  for (const { content, usage, finishReason } of completions) {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content }, finish_reason: finishReason }],
+      usage,
+    });
+  }
+  (AzureOpenAI as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+    () => ({ chat: { completions: { create: mockCreate } } })
+  );
+  return mockCreate;
+}
+
 describe("jobExtractionOrchestrator", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -69,6 +89,11 @@ describe("jobExtractionOrchestrator", () => {
     process.env.AZURE_OPENAI_DEPLOYMENT = "gpt-4o-mini";
     delete process.env.AZURE_OPENAI_JOB_DEPLOYMENT;
     delete process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM;
+    delete process.env.AZURE_OPENAI_JOB_TEMPERATURE;
+    delete process.env.AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM;
+    delete process.env.AZURE_OPENAI_JOB_REASONING_EFFORT;
+    delete process.env.AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM;
+    delete process.env.AZURE_OPENAI_API_VERSION;
   });
 
   it("sends mainText and serialized JSON-LD in the user message", async () => {
@@ -349,6 +374,180 @@ describe("jobExtractionOrchestrator", () => {
       await orchestrateJobAnalysis(baseRequest);
       const [params] = mockCreate.mock.calls[0] as [{ model: string }];
       expect(params.model).toBe("gpt-4o-mini");
+    });
+  });
+  describe("per-deployment request settings (contracts/model-config.md)", () => {
+    type CreateParams = Record<string, unknown>;
+
+    it("sends no temperature key when no temperature is set", async () => {
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const [params] = mockCreate.mock.calls[0] as [CreateParams];
+      expect(params).not.toHaveProperty("temperature");
+      expect(params).not.toHaveProperty("reasoning_effort");
+    });
+
+    it("sends temperature: 0 when it is set to 0", async () => {
+      process.env.AZURE_OPENAI_JOB_TEMPERATURE = "0";
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const [params] = mockCreate.mock.calls[0] as [CreateParams];
+      expect(params.temperature).toBe(0);
+    });
+
+    it('sends reasoning_effort: "none" and no temperature when only the effort is set', async () => {
+      process.env.AZURE_OPENAI_JOB_REASONING_EFFORT = "none";
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const [params] = mockCreate.mock.calls[0] as [CreateParams];
+      expect(params.reasoning_effort).toBe("none");
+      expect(params).not.toHaveProperty("temperature");
+    });
+
+    it("uses identical settings on the repair retry", async () => {
+      process.env.AZURE_OPENAI_JOB_TEMPERATURE = "0";
+      process.env.AZURE_OPENAI_JOB_REASONING_EFFORT = "low";
+      const mockCreate = await mockCreateWith("{{{ not json", fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const [first, second] = mockCreate.mock.calls.map(([p]) => p as CreateParams);
+      for (const key of ["model", "temperature", "reasoning_effort", "max_completion_tokens"]) {
+        expect(second[key]).toEqual(first[key]);
+      }
+      expect(second.temperature).toBe(0);
+      expect(second.reasoning_effort).toBe("low");
+    });
+
+    it("keeps max_completion_tokens at 3000", async () => {
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const [params] = mockCreate.mock.calls[0] as [CreateParams];
+      expect(params.max_completion_tokens).toBe(3000);
+    });
+
+    it("passes the resolved apiVersion to new AzureOpenAI", async () => {
+      process.env.AZURE_OPENAI_API_VERSION = "2025-04-01-preview";
+      await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const { AzureOpenAI } = await import("openai");
+      expect(AzureOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ apiVersion: "2025-04-01-preview" })
+      );
+    });
+
+    it("uses the premium settings for a premium request", async () => {
+      process.env.AZURE_OPENAI_JOB_REASONING_EFFORT = "none";
+      process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM = "gpt-5.4-mini";
+      process.env.AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM = "0";
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest, "premium");
+      const [params] = mockCreate.mock.calls[0] as [CreateParams];
+      expect(params.model).toBe("gpt-5.4-mini");
+      expect(params.temperature).toBe(0);
+      expect(params).not.toHaveProperty("reasoning_effort");
+    });
+
+    it("rejects with ModelConfigError before calling the model when a setting is invalid", async () => {
+      process.env.AZURE_OPENAI_JOB_REASONING_EFFORT = "minimal";
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await expect(orchestrateJobAnalysis(baseRequest)).rejects.toBeInstanceOf(ModelConfigError);
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("observe callback (contracts/model-config.md § Observability)", () => {
+    const fullUsage = {
+      prompt_tokens: 1800,
+      completion_tokens: 420,
+      completion_tokens_details: { reasoning_tokens: 64 },
+      prompt_tokens_details: { cached_tokens: 1024 },
+    };
+
+    it("is called once per completion with token counts, deployment and finish reason", async () => {
+      await mockCreateWithCompletions({
+        content: fixture("explicit-hybrid"),
+        usage: fullUsage,
+        finishReason: "stop",
+      });
+      const observe = vi.fn();
+      await orchestrateJobAnalysis(baseRequest, "free", () => {}, observe);
+
+      expect(observe).toHaveBeenCalledTimes(1);
+      const [usage] = observe.mock.calls[0] as [ModelUsage];
+      expect(usage).toMatchObject({
+        deployment: "gpt-4o-mini",
+        promptTokens: 1800,
+        completionTokens: 420,
+        reasoningTokens: 64,
+        cachedTokens: 1024,
+        attempt: 1,
+        finishReason: "stop",
+      });
+      expect(typeof usage.latencyMs).toBe("number");
+      expect(usage.latencyMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it("reports attempt 1 and then 2 when the repair retry runs", async () => {
+      await mockCreateWithCompletions(
+        { content: "{{{ not json", usage: fullUsage, finishReason: "length" },
+        { content: fixture("explicit-hybrid"), usage: fullUsage, finishReason: "stop" }
+      );
+      const observe = vi.fn();
+      await orchestrateJobAnalysis(baseRequest, "free", () => {}, observe);
+
+      expect(observe).toHaveBeenCalledTimes(2);
+      const attempts = observe.mock.calls.map(([u]) => (u as ModelUsage).attempt);
+      expect(attempts).toEqual([1, 2]);
+      expect((observe.mock.calls[0][0] as ModelUsage).finishReason).toBe("length");
+    });
+
+    it("defaults token fields to 0 when usage or its details are absent", async () => {
+      await mockCreateWithCompletions(
+        { content: "{{{ not json" },
+        {
+          content: fixture("explicit-hybrid"),
+          usage: { prompt_tokens: 10, completion_tokens: 5 },
+          finishReason: "stop",
+        }
+      );
+      const observe = vi.fn();
+      await orchestrateJobAnalysis(baseRequest, "free", () => {}, observe);
+
+      expect(observe.mock.calls[0][0]).toMatchObject({
+        promptTokens: 0,
+        completionTokens: 0,
+        reasoningTokens: 0,
+        cachedTokens: 0,
+        finishReason: null,
+      });
+      expect(observe.mock.calls[1][0]).toMatchObject({
+        promptTokens: 10,
+        completionTokens: 5,
+        reasoningTokens: 0,
+        cachedTokens: 0,
+      });
+    });
+
+    it("is still called for a completion whose output then fails the schema", async () => {
+      await mockCreateWithCompletions(
+        { content: "{{{ not json", usage: fullUsage },
+        { content: "also {{{ not json", usage: fullUsage }
+      );
+      const observe = vi.fn();
+      await expect(
+        orchestrateJobAnalysis(baseRequest, "free", () => {}, observe)
+      ).rejects.toBeInstanceOf(JobSchemaError);
+      expect(observe).toHaveBeenCalledTimes(2);
+    });
+
+    it("changes nothing when omitted", async () => {
+      await mockCreateWithCompletions({
+        content: fixture("explicit-hybrid"),
+        usage: fullUsage,
+        finishReason: "stop",
+      });
+      const result = await orchestrateJobAnalysis(baseRequest);
+      expect(result.arrangement).toBe("hybrid");
+      expect(result).not.toHaveProperty("usage");
     });
   });
 });
