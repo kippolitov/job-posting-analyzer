@@ -25,8 +25,8 @@ export type RawPageExtract = Omit<
 /** Cap applied to mainText before transmission (postings are short; cf. 80k video cap). */
 export const MAIN_TEXT_CAP = 40_000;
 
-/** Below this many characters (with no JSON-LD) the page is not worth analyzing. */
-export const MIN_TEXT_CHARS = 300;
+/** Lives in shared/ so the web paste and the server use the same floor (006 research R7). */
+export { MIN_TEXT_CHARS } from "../../shared/types/job";
 
 /**
  * Runs inside the target page via chrome.scripting.executeScript({ func, args }).

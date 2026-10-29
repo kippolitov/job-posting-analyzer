@@ -7,6 +7,8 @@ import type {
 import { isJobAnalysisPayload } from "../models/job";
 import type { Tier } from "../models/user";
 import { resolveModelConfig } from "./modelConfig";
+import { fingerprintForRequest, resolveScoringProfile } from "./profileFingerprint";
+import { dealbreakerLinesFromPrompt } from "../../../shared/types/profile";
 
 /** Model output violated the schema even after the repair retry → HTTP 502. */
 export class JobSchemaError extends Error {}
@@ -94,6 +96,7 @@ const JOB_ANALYSIS_SCHEMA = {
         "desired",
         "strengths",
         "weaknesses",
+        "dealbreakersViolated",
       ],
       properties: {
         score: { type: "integer", minimum: 0, maximum: 100 },
@@ -103,6 +106,7 @@ const JOB_ANALYSIS_SCHEMA = {
         desired: { type: "array", items: { type: "string" }, maxItems: 10 },
         strengths: { type: "array", items: { type: "string" }, maxItems: 5 },
         weaknesses: { type: "array", items: { type: "string" }, maxItems: 5 },
+        dealbreakersViolated: { type: "array", items: { type: "string" }, maxItems: 10 },
       },
     },
   },
@@ -131,14 +135,15 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   if (hasProfile) {
     lines.push(
       "Fit scoring (a candidate profile is provided):",
-      "- fit.score is 0-100 for how well the posting matches the profile; fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
+      "- fit.score is 0-100 and measures only how well the posting matches the candidate's skills, experience and seniority; do not lower it for dealbreakers. fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
       "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first).",
       "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of.",
       "- fit.desired: nice-to-have / preferred qualifications from the posting that the profile does not cover.",
       "- fit.strengths: what makes this specific role a strong choice for this candidate (e.g. seniority alignment, domain overlap, growth direction).",
       "- fit.weaknesses: risks or downsides of this role for this candidate (e.g. skill gaps to close, seniority mismatch, unstated arrangement, below-preference salary).",
       "- Base every item on the posting and profile text only; never invent skills or requirements.",
-      "- If the posting violates any stated dealbreaker in the profile, cap fit.score at 20 or below and name the dealbreaker in the rationale."
+      "- fit.dealbreakersViolated: when the posting violates a dealbreaker stated in the profile, copy each violated dealbreaker exactly as written in the profile into dealbreakersViolated, and also name it in the rationale. Leave it empty when none is violated.",
+      "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead."
     );
   } else {
     lines.push("No candidate profile was provided: set fit to null.");
@@ -148,8 +153,9 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
 
 function buildUserMessage(req: AnalyzeJobRequest): string {
   const parts: string[] = [];
-  if (req.profile) {
-    parts.push(`Candidate profile:\n${req.profile}`);
+  const profile = resolveScoringProfile(req);
+  if (profile) {
+    parts.push(`Candidate profile:\n${profile}`);
   }
   if (req.extract.jsonLd.length > 0) {
     parts.push(`JSON-LD JobPosting data:\n${JSON.stringify(req.extract.jsonLd)}`);
@@ -206,10 +212,44 @@ function enforceConsistency(
     result.daysInOffice = null;
     result.daysRemote = null;
   }
-  if (!req.profile) {
+  if (!resolveScoringProfile(req)) {
     result.fit = null;
   }
   return result;
+}
+
+function normalizeDealbreaker(text: string): string {
+  return normalizeWhitespace(text).toLowerCase();
+}
+
+/**
+ * Maps each model-reported violation onto the user's own dealbreaker line
+ * (research R8, FR-005): normalized equality first, then normalized
+ * containment in either direction. An unmatched entry is kept with a
+ * warning, since dropping it could hide a real violation. Never reads or
+ * writes `score`.
+ */
+export function resolveDealbreakers(
+  payload: JobAnalysisPayload,
+  dealbreakerLines: string[],
+  warn: (message: string) => void
+): JobAnalysisPayload {
+  if (!payload.fit) return payload;
+  const lines = dealbreakerLines.map((line) => ({ line, key: normalizeDealbreaker(line) }));
+  const resolved: string[] = [];
+  for (const entry of payload.fit.dealbreakersViolated ?? []) {
+    const key = normalizeDealbreaker(entry);
+    if (key.length === 0) continue;
+    const match =
+      lines.find((l) => l.key === key) ??
+      lines.find((l) => l.key.includes(key) || key.includes(l.key));
+    if (!match) {
+      warn(`dealbreakersViolated entry "${entry}" matches no profile dealbreaker; keeping it`);
+    }
+    const value = match ? match.line : entry;
+    if (!resolved.includes(value)) resolved.push(value);
+  }
+  return { ...payload, fit: { ...payload.fit, dealbreakersViolated: resolved } };
 }
 
 export async function orchestrateJobAnalysis(
@@ -231,7 +271,10 @@ export async function orchestrateJobAnalysis(
   const messages = [
     {
       role: "system" as const,
-      content: buildSystemPrompt(Boolean(req.profile), Boolean(req.assumeJobPosting)),
+      content: buildSystemPrompt(
+        Boolean(resolveScoringProfile(req)),
+        Boolean(req.assumeJobPosting)
+      ),
     },
     { role: "user" as const, content: buildUserMessage(req) },
   ];
@@ -301,6 +344,15 @@ export async function orchestrateJobAnalysis(
 
   payload = validateEvidence(payload, req, warn);
   payload = enforceConsistency(payload, req);
+  payload = resolveDealbreakers(
+    payload,
+    req.profileData?.dealbreakers ?? dealbreakerLinesFromPrompt(req.profile ?? ""),
+    warn
+  );
+  const profileFingerprint = fingerprintForRequest(req);
+  if (payload.fit && profileFingerprint) {
+    payload = { ...payload, fit: { ...payload.fit, profileFingerprint } };
+  }
 
   return {
     ...payload,

@@ -197,6 +197,9 @@ export interface JobAnalysisResponse extends JobAnalysisPayload {
 
 export const MAIN_TEXT_CAP = 40_000;
 
+/** Below this many characters (with no JSON-LD) a page or paste is not worth analyzing. */
+export const MIN_TEXT_CHARS = 300;
+
 const FINGERPRINT_RE = /^[0-9a-f]{64}$/;
 
 function isStringArray(value: unknown): value is string[] {

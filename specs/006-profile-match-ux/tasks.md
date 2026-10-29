@@ -235,11 +235,11 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for User Story 1 (write first, must fail) ⚠️
 
-- [ ] T043 [P] [US1] Add the recorded fixtures `functions/tests/fixtures/jobAnalysis/dealbreaker-onsite.json` and `functions/tests/fixtures/jobAnalysis/dealbreaker-paraphrased.json`:
+- [X] T043 [P] [US1] Add the recorded fixtures `functions/tests/fixtures/jobAnalysis/dealbreaker-onsite.json` and `functions/tests/fixtures/jobAnalysis/dealbreaker-paraphrased.json`:
   - `dealbreaker-onsite.json`: an on-site posting with `fit.score: 72` and `fit.dealbreakersViolated: ["No fully on-site roles"]`.
   - `dealbreaker-paraphrased.json`: `dealbreakersViolated: ["no on-site"]`, plus one unrelated entry, `"Must sponsor visas"`.
   Update the folder README with what each fixture proves.
-- [ ] T044 [P] [US1] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` for `resolveDealbreakers` ([research R8](./research.md#r8--server-validated-dealbreakers-and-the-rubric-pr2-fr-005fr-008)):
+- [X] T044 [P] [US1] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` for `resolveDealbreakers` ([research R8](./research.md#r8--server-validated-dealbreakers-and-the-rubric-pr2-fr-005fr-008)):
   - with `dealbreaker-onsite` and the profile dealbreaker "No fully on-site roles", the violation keeps the user's exact wording and **the score stays 72** (FR-005: violations never change the score);
   - with `dealbreaker-paraphrased`, "no on-site" maps by containment to the user's line, and the unmatched entry is kept with exactly one warning;
   - the step never changes `score`, with or without violations;
@@ -247,7 +247,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - no profile gives `fit: null` with no `dealbreakersViolated`;
   - `fit.profileFingerprint` equals `fingerprintForRequest(req)` whenever `fit` is non-null;
   - the schema sent to the model includes `fit.dealbreakersViolated` as a required string array with `maxItems: 10`.
-- [ ] T045 [P] [US1] Write `functions/tests/unit/rescoreEligibility.test.ts` for the pure `decideRescoreCharge({ intent, currentFingerprint, savedFit, fingerprintHistory, rescoresUsed })`. It covers every row of [research R6's eligibility rule](./research.md#r6--free-rescore-metering-pr2-fr-004fr-004a-constitution-v):
+- [X] T045 [P] [US1] Write `functions/tests/unit/rescoreEligibility.test.ts` for the pure `decideRescoreCharge({ intent, currentFingerprint, savedFit, fingerprintHistory, rescoresUsed })`. It covers every row of [research R6's eligibility rule](./research.md#r6--free-rescore-metering-pr2-fr-004fr-004a-constitution-v):
   - no intent, or no profile, charges an analysis;
   - a saved fit with an absent fingerprint charges a rescore;
   - a saved fit with a different fingerprint charges a rescore;
@@ -258,11 +258,11 @@ These are silent failures, not crashes. They were found in existing code during 
   - an eligible request with `rescoresUsed` at 10 or more charges an analysis;
   - a saved row with `fit: null` charges an analysis;
   - every case gives the same result for `free` and `premium` accounts (FR-026).
-- [ ] T046 [P] [US1] Extend `functions/tests/integration/metering.test.ts` (Azurite) for the **Replace hazard (trap 1)**: do a free rescore, then an ordinary analysis, and assert `rescoresUsed === 1` and `count === 1` on the row. Also cover:
+- [X] T046 [P] [US1] Extend `functions/tests/integration/metering.test.ts` (Azurite) for the **Replace hazard (trap 1)**: do a free rescore, then an ordinary analysis, and assert `rescoresUsed === 1` and `count === 1` on the row. Also cover:
   - parallel rescores at `rescoresUsed: 9` produce exactly one free rescore, and the rest fall back to analyses;
   - a refund decrements the counter that was charged;
   - a row written before 006 without the new columns reads them as 0.
-- [ ] T047 [P] [US1] Write `functions/tests/integration/rescore.test.ts` (Azurite, recorded model fixtures), using `functions/tests/helpers/savedJobsSeeder.ts`. Cover:
+- [X] T047 [P] [US1] Write `functions/tests/integration/rescore.test.ts` (Azurite, recorded model fixtures), using `functions/tests/helpers/savedJobsSeeder.ts`. Cover:
   - a rescore of a saved stale posting returns `usage.charged: "rescore"`, plus `rescoresUsed` and `rescoresLimit: 10`;
   - with the allowance exhausted (`count === limit`) but free rescores left, the rescore still returns 200;
   - with both exhausted, it returns 429 `USAGE_LIMIT_REACHED`, whose `usage` includes `rescoresUsed`;
@@ -271,14 +271,14 @@ These are silent failures, not crashes. They were found in existing code during 
   - an 11th unavailable refund in the month is not granted;
   - the same flows run through `analyze-document` using `functions/tests/fixtures/documents/valid.docx`, whose saved row is keyed by `sha256("doc:" + sha256(text))`;
   - a paste rescore through `analyze-document`'s `text` part finds a `paste:` row saved the way the extension saves it, and charges `rescore`.
-- [ ] T048 [P] [US1] Write `functions/tests/unit/pasteIdentity.test.ts` for `shared/pasteIdentity.ts`: a fixed test vector, the exact hex for one sample posting, written literally in the test; whitespace and line-ending variants give the same key; the key matches `/^paste:[0-9a-f]{64}$/`. Point `extension/tests/unit/pasteIdentity.test.ts` at the shared module and add the same literal vector, so the server and the extension are proven to agree.
-- [ ] T049 [P] [US1] Write `functions/tests/unit/analyze-document.paste.test.ts` for the `text` part per [contracts/analyze-api.md §1](./contracts/analyze-api.md), with the orchestrator and metering mocked:
+- [X] T048 [P] [US1] Write `functions/tests/unit/pasteIdentity.test.ts` for `shared/pasteIdentity.ts`: a fixed test vector, the exact hex for one sample posting, written literally in the test; whitespace and line-ending variants give the same key; the key matches `/^paste:[0-9a-f]{64}$/`. Point `extension/tests/unit/pasteIdentity.test.ts` at the shared module and add the same literal vector, so the server and the extension are proven to agree.
+- [X] T049 [P] [US1] Write `functions/tests/unit/analyze-document.paste.test.ts` for the `text` part per [contracts/analyze-api.md §1](./contracts/analyze-api.md), with the orchestrator and metering mocked:
   - both `file` and `text`, or neither, is a 400;
   - 299 characters is `400 TEXT_TOO_SHORT` and 40,001 is `413 TEXT_TOO_LONG`, and metering is never called;
   - a valid paste calls the orchestrator with an empty title and `mainText` equal to the text, and returns `source: "paste"`, no `filename`, and `canonicalUrl === await pasteIdentity(text)`;
   - a whitespace variant of the same text returns the same `saveKey`.
-- [ ] T050 [P] [US1] Extend `functions/tests/unit/analyze-job.handler.test.ts` for the **charge-after-validation side fix** ([contracts/analyze-api.md §4](./contracts/analyze-api.md)): an invalid JSON body (400), a missing extract (400) and an oversized `mainText` (413) each leave the metering mock **uncalled**.
-- [ ] T051 [P] [US1] Extend `functions/tests/unit/savedJobsRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` per [contracts/saved-jobs-api.md §4](./contracts/saved-jobs-api.md):
+- [X] T050 [P] [US1] Extend `functions/tests/unit/analyze-job.handler.test.ts` for the **charge-after-validation side fix** ([contracts/analyze-api.md §4](./contracts/analyze-api.md)): an invalid JSON body (400), a missing extract (400) and an oversized `mainText` (413) each leave the metering mock **uncalled**.
+- [X] T051 [P] [US1] Extend `functions/tests/unit/savedJobsRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` per [contracts/saved-jobs-api.md §4](./contracts/saved-jobs-api.md):
   - `PATCH {unavailableAt}` round-trips through GET and list;
   - a PATCH with `analysis` clears it, and so does a PUT;
   - an invalid date returns 400;
@@ -351,7 +351,7 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Implementation for User Story 1
 
-- [ ] T062 [US1] Add `resolveDealbreakers(payload, dealbreakerLines, warn)` to `functions/src/services/jobExtractionOrchestrator.ts`. It runs after `enforceConsistency`. Wire it in:
+- [X] T062 [US1] Add `resolveDealbreakers(payload, dealbreakerLines, warn)` to `functions/src/services/jobExtractionOrchestrator.ts`. It runs after `enforceConsistency`. Wire it in:
   - add `fit.dealbreakersViolated` (array of string, `maxItems: 10`, required) to `JOB_ANALYSIS_SCHEMA`;
   - **remove** today's prompt line "If the posting violates any stated dealbreaker in the profile, cap fit.score at 20 or below and name the dealbreaker in the rationale";
   - add the system-prompt lines "fit.score measures only how well the posting matches the candidate's skills, experience and seniority; do not lower it for dealbreakers", "copy each violated dealbreaker exactly as written in the profile into dealbreakersViolated, and also name it in the rationale" and "a fact the posting does not state is not a violation — add an `Unverified: …` weakness instead";
@@ -360,14 +360,14 @@ These are silent failures, not crashes. They were found in existing code during 
   - build the user message from `resolveScoringProfile(req)`;
   - stamp `fit.profileFingerprint`.
   This makes T044 pass.
-- [ ] T063 [US1] Implement `functions/src/services/rescoreEligibility.ts`, exporting the pure `decideRescoreCharge`, to make T045 pass. Add `FREE_RESCORES_PER_MONTH = 10` and `UNAVAILABLE_REFUNDS_PER_MONTH = 10` next to `MONTHLY_ANALYSES` in `functions/src/models/user.ts`, and add `rescoresUsed?` and `unavailableRefunds?` to `UsageEntity`.
-- [ ] T064 [US1] Extend `functions/src/services/meteringService.ts`:
+- [X] T063 [US1] Implement `functions/src/services/rescoreEligibility.ts`, exporting the pure `decideRescoreCharge`, to make T045 pass. Add `FREE_RESCORES_PER_MONTH = 10` and `UNAVAILABLE_REFUNDS_PER_MONTH = 10` next to `MONTHLY_ANALYSES` in `functions/src/models/user.ts`, and add `rescoresUsed?` and `unavailableRefunds?` to `UsageEntity`.
+- [X] T064 [US1] Extend `functions/src/services/meteringService.ts`:
   - switch every `updateEntity` in `checkAndIncrement` and `refundOnSystemFailure` from `"Replace"` to `"Merge"` with the same ETag (trap 1);
   - add `chargeAnalysis(sub, tier, decision)`, which returns `{ charged: "rescore" | "analysis", allowed, usage }`. A rescore increments `rescoresUsed` if it is below 10 and otherwise falls back to `count`.
   - add `refundCharge(sub, tier, charged)` and `grantUnavailableRefund(sub, tier, charged)`, which checks `unavailableRefunds < 10`, decrements the charged counter, and increments `unavailableRefunds`;
   - make `peekUsage` return `rescoresUsed` and `rescoresLimit`.
   This makes T046 pass.
-- [ ] T065 [US1] Restructure `functions/src/analyze-job/index.ts` to validate, then charge, then call the model (contracts/analyze-api.md §2):
+- [X] T065 [US1] Restructure `functions/src/analyze-job/index.ts` to validate, then charge, then call the model (contracts/analyze-api.md §2):
   - remove `withUsageMetering` from the route composition, keeping `withRateLimit(withAuth(handler))`;
   - after validation, look up the saved row with `getJob(user.sub, sha256Hex(extract.canonicalUrl))` and the profile's `fingerprintHistory` only when `body.rescore` is present;
   - call `decideRescoreCharge`, then `chargeAnalysis`, and return 429 as before when not allowed;
@@ -375,20 +375,20 @@ These are silent failures, not crashes. They were found in existing code during 
   - refund the charged counter on 5xx;
   - echo `usage` with `charged`, `rescoresUsed` and `rescoresLimit`.
   Delete `withUsageMetering` if nothing else uses it (Constitution I, no dead code). This makes T047 (job part) and T050 pass.
-- [ ] T066 [US1] Apply the same flow in `functions/src/analyze-document/index.ts`:
+- [X] T066 [US1] Apply the same flow in `functions/src/analyze-document/index.ts`:
   - parse the `profileData`, `rescore` and `priorFingerprint` form parts, returning 400 if `profileData` is malformed;
   - compute the saved key from the server-computed `doc:` canonical URL, after `extractDocument` and before charging;
   - use `chargeAnalysis`, `refundCharge` and `grantUnavailableRefund`.
   This makes the T047 document part pass.
-- [ ] T067 [US1] Move `extension/lib/pasteIdentity.ts` to `shared/pasteIdentity.ts`, using `globalThis.crypto.subtle` so it runs in Node 20, the service worker and browsers. Update the import in `extension/services/jobFlow.ts` and delete the old file. Move `MIN_TEXT_CHARS = 300` to `shared/types/job.ts` next to `MAIN_TEXT_CAP`, and re-export it from `extension/lib/pageExtractor.ts` so existing imports keep working. This makes T048 pass.
-- [ ] T068 [US1] Accept the `text` part in `functions/src/analyze-document/index.ts` per [contracts/analyze-api.md §1](./contracts/analyze-api.md):
+- [X] T067 [US1] Move `extension/lib/pasteIdentity.ts` to `shared/pasteIdentity.ts`, using `globalThis.crypto.subtle` so it runs in Node 20, the service worker and browsers. Update the import in `extension/services/jobFlow.ts` and delete the old file. Move `MIN_TEXT_CHARS = 300` to `shared/types/job.ts` next to `MAIN_TEXT_CAP`, and re-export it from `extension/lib/pageExtractor.ts` so existing imports keep working. This makes T048 pass.
+- [X] T068 [US1] Accept the `text` part in `functions/src/analyze-document/index.ts` per [contracts/analyze-api.md §1](./contracts/analyze-api.md):
   - exactly one of `file` and `text`, otherwise 400;
   - the length limits, with `TEXT_TOO_SHORT` and `TEXT_TOO_LONG`, checked before charging;
   - the extract built as the extension's paste flow builds it;
   - `canonicalUrl` from `pasteIdentity`, and the saved-row lookup for rescore eligibility from that key;
   - the response carries `source: "paste"` and omits `filename`.
   Add `"paste"` to the response's `source` type in `web/src/api/types.ts` and make `filename` optional there. This makes T049 and the T047 paste case pass.
-- [ ] T069 [US1] Add `unavailableAt` per [contracts/saved-jobs-api.md](./contracts/saved-jobs-api.md):
+- [X] T069 [US1] Add `unavailableAt` per [contracts/saved-jobs-api.md](./contracts/saved-jobs-api.md):
   - add the column to `SavedJobEntity`;
   - add `unavailableAt?: string | null` to `SavedJobPayload` and `SavedJobPatchBody` in `functions/src/models/user.ts`;
   - validate it as an ISO date in `isSavedJobPatchBody`;
@@ -414,7 +414,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - in `extension/components/JobPanel/SavedJobRow.tsx`, the row marker and the "Open posting to rescore" or "Paste again to rescore" action from `rescoreAction`;
   - in `extension/entrypoints/options/OptionsApp.tsx`, writing `profile:fingerprint` after save through `setProfile`.
   Get the cost line's usage numbers from `extension/services/accountService.ts` `fetchAccount()`, extended with `rescoresUsed` and `rescoresLimit`. Use only spec-vocabulary copy: "Rescore", "out of date", "Dealbreaker".
-- [ ] T075 [US1] Add `rescoresUsed` and `rescoresLimit` to the `/api/account` usage response in `functions/src/billing/index.ts`, from `peekUsage`. Extend `functions/tests/integration/billing.test.ts` with the assertion, written first.
+- [X] T075 [US1] Add `rescoresUsed` and `rescoresLimit` to the `/api/account` usage response in `functions/src/billing/index.ts`, from `peekUsage`. Extend `functions/tests/integration/billing.test.ts` with the assertion, written first.
 - [ ] T076 [US1] Implement the web side to make T057 and T058 pass:
   - in `web/src/api/endpoints.ts`, `analyzeDocument` sends `profileData`, `rescore` and `priorFingerprint`, and gains a `patchJob` function;
   - add the freshness marker and the `rescoreAction` link to `web/src/pages/Library.tsx` and `web/src/pages/PostingDetail.tsx`;

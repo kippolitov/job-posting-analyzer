@@ -31,6 +31,8 @@ export interface SavedJob {
   notes: string;
   savedAt: string;
   updatedAt: string;
+  /** Set after a rescore found no posting (006 contracts/saved-jobs-api.md). */
+  unavailableAt?: string | null;
 }
 
 /** User-authored candidate profile, stored locally, sent only with analysis requests. */

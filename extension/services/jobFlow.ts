@@ -6,7 +6,7 @@ import {
   MIN_TEXT_CHARS,
 } from "../lib/pageExtractor";
 import type { RawPageExtract } from "../lib/pageExtractor";
-import { pasteIdentity } from "../lib/pasteIdentity";
+import { pasteIdentity } from "../../shared/pasteIdentity";
 import { boundViolation } from "../lib/textBounds";
 import { postJobAnalysis } from "./jobAnalysisClient";
 import { jobStorage } from "./jobStorage";

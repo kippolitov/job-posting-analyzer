@@ -62,7 +62,7 @@ export function Upload() {
         canonicalUrl: result.canonicalUrl,
         sourceUrl: "",
         source: "document",
-        filename: result.filename,
+        filename: result.filename ?? "",
         analysis: result.analysis,
         status: "interested",
         notes: "",

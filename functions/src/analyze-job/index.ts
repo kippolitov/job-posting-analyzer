@@ -1,19 +1,37 @@
-import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import {
+  app,
+  HttpRequest,
+  HttpResponseInit,
+  InvocationContext,
+} from "@azure/functions";
 import { isAnalyzeJobRequest, MAIN_TEXT_CAP } from "../models/job";
 import type { AuthenticatedUser } from "../models/user";
-import { withAuth, type AuthedHandler } from "../services/auth";
-import { corsHeaders, errorResponse as httpErrorResponse, requestOrigin } from "../services/http";
+import { withAuth } from "../services/auth";
+import {
+  corsHeaders,
+  errorResponse as httpErrorResponse,
+  requestOrigin,
+} from "../services/http";
 import {
   orchestrateJobAnalysis,
   JobSchemaError,
 } from "../services/jobExtractionOrchestrator";
 import {
-  checkAndIncrement,
-  refundOnSystemFailure,
-  type CheckAndIncrementResult,
-} from "../services/meteringService";
+  chargeForAnalysis,
+  refundAfterFailure,
+  settleCharge,
+} from "../services/analysisMetering";
+import { fingerprintForRequest } from "../services/profileFingerprint";
+import { sha256Hex } from "../services/savedJobsRepository";
 import { withRateLimit } from "../services/rateLimiter";
 
+/**
+ * POST /api/analyze-job (contracts/analyze-api.md §2): validate (400/413, no
+ * charge) → charge the counter research R6 picks (429 when exhausted) →
+ * model → posting-unavailable refund → 200. Any 5xx after the charge
+ * refunds the charged counter. Charging after validation is 006's side fix:
+ * an invalid request used to cost an analysis (§4).
+ */
 export async function analyzeJobHandler(
   request: HttpRequest,
   context: InvocationContext,
@@ -30,14 +48,19 @@ export async function analyzeJobHandler(
   try {
     body = await request.json();
   } catch {
-    return httpErrorResponse(400, "INVALID_REQUEST", "Request body must be valid JSON.", origin);
+    return httpErrorResponse(
+      400,
+      "INVALID_REQUEST",
+      "Request body must be valid JSON.",
+      origin
+    );
   }
 
   if (!isAnalyzeJobRequest(body)) {
     return httpErrorResponse(
       400,
       "INVALID_REQUEST",
-      "Missing or invalid extract: url, title, jsonLd, and mainText are required.",
+      "Missing or invalid extract: url, title, jsonLd, and mainText are required, and profileData and rescore must be well formed.",
       origin
     );
   }
@@ -51,6 +74,20 @@ export async function analyzeJobHandler(
     );
   }
 
+  const outcome = await chargeForAnalysis(
+    {
+      user,
+      saveKey: sha256Hex(body.extract.canonicalUrl || body.extract.url),
+      intent: body.rescore,
+      currentFingerprint: fingerprintForRequest(body),
+      allowShadowMode: true,
+    },
+    context,
+    origin
+  );
+  if (!outcome.ok) return outcome.response;
+  const { charge } = outcome;
+
   try {
     const result = await orchestrateJobAnalysis(
       body,
@@ -58,8 +95,19 @@ export async function analyzeJobHandler(
       (message) => context.warn(message),
       (usage) => context.log("model.usage", JSON.stringify(usage))
     );
-    return { status: 200, headers: corsHeaders(origin), jsonBody: result };
+    const settled = await settleCharge(
+      { user, intent: body.rescore },
+      charge,
+      result,
+      Boolean(body.assumeJobPosting)
+    );
+    return {
+      status: 200,
+      headers: corsHeaders(origin),
+      jsonBody: { ...result, ...settled },
+    };
   } catch (err) {
+    refundAfterFailure(user, charge, context);
     if (err instanceof JobSchemaError) {
       context.error("analyze-job schema failure:", err.message);
       return httpErrorResponse(
@@ -72,105 +120,20 @@ export async function analyzeJobHandler(
     // Includes ModelConfigError: a misconfigured app setting is a 500, refunded
     // like any other system failure (contracts/model-config.md).
     context.error("orchestrateJobAnalysis failed:", err);
-    return httpErrorResponse(500, "SERVICE_ERROR", "Analysis failed. Please try again.", origin);
+    return httpErrorResponse(
+      500,
+      "SERVICE_ERROR",
+      "Analysis failed. Please try again.",
+      origin
+    );
   }
-}
-
-function meteringEnforced(): boolean {
-  return process.env.METERING_ENFORCED !== "false";
-}
-
-function formatResetDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function usageEcho(usage: CheckAndIncrementResult) {
-  return {
-    count: usage.count,
-    limit: usage.limit,
-    resetsAt: usage.resetsAt,
-    tier: usage.tier,
-  };
-}
-
-/**
- * withUsageMetering(handler) — composes as withAuth(withUsageMetering(handler))
- * (contracts/metering.md): increments the caller's monthly counter BEFORE the
- * wrapped handler runs (fail closed — no OpenAI spend on a 429 or a metering
- * outage), echoes usage on 200, and best-effort refunds a system-caused
- * failure. METERING_ENFORCED=false (rollout PR1 shadow mode, plan.md) still
- * counts but never blocks — used to accrue real usage data before the public
- * flag flip.
- */
-export function withUsageMetering(handler: AuthedHandler): AuthedHandler {
-  return async (
-    request: HttpRequest,
-    context: InvocationContext,
-    user: AuthenticatedUser
-  ): Promise<HttpResponseInit> => {
-    if (request.method === "OPTIONS") return handler(request, context, user);
-
-    const origin = requestOrigin(request);
-    let usage: CheckAndIncrementResult;
-    try {
-      usage = await checkAndIncrement(user.sub, user.tier);
-    } catch (err) {
-      context.error("usage metering check failed:", err);
-      return httpErrorResponse(
-        503,
-        "SERVICE_ERROR",
-        "Couldn't verify your usage allowance. Please try again.",
-        origin
-      );
-    }
-
-    if (!usage.allowed) {
-      if (!meteringEnforced()) {
-        // Shadow mode: count, never block (rollout PR1).
-        return handler(request, context, user);
-      }
-      const tierLabel = usage.tier === "premium" ? "premium" : "free";
-      return {
-        status: 429,
-        headers: corsHeaders(origin),
-        jsonBody: {
-          error: {
-            code: "USAGE_LIMIT_REACHED",
-            message: `You've used all ${usage.limit} ${tierLabel} analyses this month. Your allowance resets on ${formatResetDate(usage.resetsAt)}.`,
-          },
-          usage: usageEcho(usage),
-        },
-      };
-    }
-
-    const response = await handler(request, context, user);
-
-    if (response.status !== undefined && response.status >= 500) {
-      // System-caused failure after the increment — best-effort refund
-      // (FR-007); a lost refund is logged, never surfaced (metering.md).
-      refundOnSystemFailure(user.sub, user.tier).catch((err) => {
-        context.error("metering.refund_lost:", err);
-      });
-    } else if (response.status === 200) {
-      response.jsonBody = {
-        ...(response.jsonBody as Record<string, unknown>),
-        usage: usageEcho(usage),
-      };
-    }
-
-    return response;
-  };
 }
 
 app.http("analyze-job", {
   methods: ["POST"],
   authLevel: "function",
   route: "analyze-job",
-  handler: withRateLimit("analyze", withAuth(withUsageMetering(analyzeJobHandler))),
+  handler: withRateLimit("analyze", withAuth(analyzeJobHandler)),
 });
 
 app.http("analyze-job-preflight", {

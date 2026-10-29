@@ -14,6 +14,8 @@ export interface SavedJobPayload {
   notes: string;
   savedAt: string;
   updatedAt: string;
+  /** Set after a rescore found no posting (006 contracts/saved-jobs-api.md). */
+  unavailableAt?: string | null;
 }
 
 export interface ProfilePayload {
@@ -37,7 +39,14 @@ export interface PortalResult {
 export interface AccountPayload {
   email: string;
   tier: "free" | "premium";
-  usage: { count: number; limit: number; resetsAt: string };
+  usage: {
+    count: number;
+    limit: number;
+    resetsAt: string;
+    /** 006 FR-004a; optional so an older backend still type-checks. */
+    rescoresUsed?: number;
+    rescoresLimit?: number;
+  };
   subscription: { status: string; renewsAt: string | null; endsAt: string | null } | null;
 }
 
@@ -46,14 +55,21 @@ export interface UsageEcho {
   limit: number;
   resetsAt: string;
   tier: string;
+  /** 006 contracts/analyze-api.md §3: which counter paid for this analysis. */
+  charged?: "rescore" | "analysis" | "none";
+  rescoresUsed?: number;
+  rescoresLimit?: number;
 }
 
 export interface DocumentAnalysisResult {
   analysis: JobAnalysisResponse;
-  source: "document";
-  filename: string;
+  source: "document" | "paste";
+  /** Absent for a paste (FR-027). */
+  filename?: string;
   /** `doc:<sha256 of the extracted text>` — round-tripped verbatim into the save body. */
   canonicalUrl: string;
   saveKey: string;
   usage: UsageEcho;
+  /** Only on a rescore that found no posting (FR-003a). */
+  postingUnavailable?: true;
 }
