@@ -7,6 +7,7 @@ import {
   missedDealbreakers,
   p95,
   pairKey,
+  reportedViolations,
   scoreIndependence,
   truncations,
   verdictStability,
@@ -124,6 +125,29 @@ describe("falseDealbreakers / missedDealbreakers", () => {
       });
     });
 
+    it.each([
+      ["No fully on-site roles", "The role is fully on-site five days a week, which violates the candidate's dealbreaker."],
+      ["Remote only", "Requires on-site work, violating the candidate's remote-only dealbreaker."],
+      ["EU timezones only", "It also violates the candidate's EU-timezones-only dealbreaker."],
+    ])(
+      "accepts a paraphrased mention of %j when the rationale says dealbreaker and names its content words",
+      (line, rationale) => {
+        const reported = reportedViolations(
+          result("x", "y", { score: 12, rationale }, [line, "Minimum salary 120000 USD per year"])
+        );
+        expect(reported).toEqual({ violations: [line], method: "score-proxy" });
+      }
+    );
+
+    it("does not accept content words without the word dealbreaker", () => {
+      const reported = reportedViolations(
+        result("x", "y", { score: 12, rationale: "A poor match for a remote frontend engineer." }, [
+          "Remote only",
+        ])
+      );
+      expect(reported.violations).toEqual([]);
+    });
+
     it("does not report a violation above 20, even when the rationale mentions it", () => {
       const results = [
         result("onsite", "backend", {
@@ -145,7 +169,7 @@ describe("falseDealbreakers / missedDealbreakers", () => {
       const results = [
         result("silent", "backend", {
           score: 20,
-          rationale: "Assumed on-site, which conflicts with No fully on-site roles.",
+          rationale: "Assumed on-site, which violates the dealbreaker: fully on-site roles.",
         }),
       ];
       expect(falseDealbreakers(results, pairs)).toMatchObject({
