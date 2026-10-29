@@ -46,10 +46,5 @@ export async function clearProfile(): Promise<void> {
   if (!response.ok && response.status !== 204) await throwUnexpected(response);
 }
 
-/** Serialized form sent with analysis requests (unchanged; pure function). */
-export function profileToPromptText(profile: CandidateProfile): string {
-  if (profile.dealbreakers.length === 0) return profile.text;
-  return `${profile.text}\n\nDealbreakers:\n${profile.dealbreakers
-    .map((d) => `- ${d}`)
-    .join("\n")}`;
-}
+/** Serialized form sent with analysis requests (pure; shared with the web app). */
+export { profileToPromptText } from "../../shared/types/profile";

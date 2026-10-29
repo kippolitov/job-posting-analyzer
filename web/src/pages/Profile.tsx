@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { fetchProfile, saveProfile } from "@/api/endpoints";
-import type { ProfilePayload } from "@/api/types";
 import { ApiError } from "@/api/apiClient";
 
 // Must match PROFILE_TEXT_MAX in functions/src/models/user.ts and the
@@ -9,8 +8,8 @@ const PROFILE_TEXT_MAX = 20_000;
 
 /** Profile view + editor (FR-014/FR-015, US3 scenarios 2–3): one shared profile. */
 export function Profile() {
-  const [profile, setProfile] = useState<ProfilePayload | null>(null);
   const [text, setText] = useState("");
+  const [dealbreakers, setDealbreakers] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -22,8 +21,8 @@ export function Profile() {
     fetchProfile()
       .then((result) => {
         if (cancelled) return;
-        setProfile(result);
         setText(result?.text ?? "");
+        setDealbreakers(result?.dealbreakers.join("\n") ?? "");
       })
       .catch((err) => {
         if (cancelled) return;
@@ -48,8 +47,13 @@ export function Profile() {
     }
     setSaving(true);
     try {
-      const updated = await saveProfile({ text, dealbreakers: profile?.dealbreakers ?? [] });
-      setProfile(updated);
+      const updated = await saveProfile({
+        text,
+        // Blank lines are dropped server-side; the extension sends raw lines too.
+        dealbreakers: dealbreakers.split("\n"),
+      });
+      // Reflect the server-normalized dealbreakers (trimmed, blanks dropped).
+      setDealbreakers(updated.dealbreakers.join("\n"));
       setSaved(true);
     } catch (err) {
       setSaveError(
@@ -90,6 +94,21 @@ export function Profile() {
         >
           {text.length.toLocaleString()} / {PROFILE_TEXT_MAX.toLocaleString()}
         </span>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium">Dealbreakers (one per line)</span>
+        <span className="text-xs text-gray-500">
+          A posting that violates a dealbreaker is capped at a fit score of 20.
+        </span>
+        <textarea
+          aria-label="Dealbreakers"
+          value={dealbreakers}
+          onChange={(e) => setDealbreakers(e.target.value)}
+          rows={3}
+          placeholder={"no fully on-site roles\nno defense industry"}
+          className="w-full rounded-md border border-gray-300 p-3 text-sm dark:border-gray-700 dark:bg-gray-900"
+        />
       </label>
 
       {saveError && (

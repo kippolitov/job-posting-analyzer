@@ -52,8 +52,11 @@ export async function analyzeJobHandler(
   }
 
   try {
-    const result = await orchestrateJobAnalysis(body, user.tier, (message) =>
-      context.warn(message)
+    const result = await orchestrateJobAnalysis(
+      body,
+      user.tier,
+      (message) => context.warn(message),
+      (usage) => context.log("model.usage", JSON.stringify(usage))
     );
     return { status: 200, headers: corsHeaders(origin), jsonBody: result };
   } catch (err) {
@@ -66,6 +69,8 @@ export async function analyzeJobHandler(
         origin
       );
     }
+    // Includes ModelConfigError: a misconfigured app setting is a 500, refunded
+    // like any other system failure (contracts/model-config.md).
     context.error("orchestrateJobAnalysis failed:", err);
     return httpErrorResponse(500, "SERVICE_ERROR", "Analysis failed. Please try again.", origin);
   }

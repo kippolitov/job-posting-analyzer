@@ -138,8 +138,11 @@ export async function analyzeDocumentHandler(
   };
 
   try {
-    const analysis = await orchestrateJobAnalysis(syntheticRequest, user.tier, (message) =>
-      context.warn(message)
+    const analysis = await orchestrateJobAnalysis(
+      syntheticRequest,
+      user.tier,
+      (message) => context.warn(message),
+      (usage) => context.log("model.usage", JSON.stringify(usage))
     );
     const canonicalUrl = `doc:${sha256Hex(extracted.text)}`;
     const saveKey = sha256Hex(canonicalUrl);
@@ -172,6 +175,8 @@ export async function analyzeDocumentHandler(
         origin
       );
     }
+    // Includes ModelConfigError: a misconfigured app setting is a 500, refunded
+    // like any other system failure (contracts/model-config.md).
     context.error("orchestrateJobAnalysis failed:", err);
     return errorResponse(500, "SERVICE_ERROR", "Analysis failed. Please try again.", origin);
   }

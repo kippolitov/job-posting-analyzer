@@ -266,8 +266,10 @@ describe("paddle-webhook — subscription lifecycle (US4)", () => {
 
   it("out-of-order guard: a late subscription.updated after subscription.canceled leaves tier free", async () => {
     const user = await makePremiumUser();
-    const earlyTs = new Date("2026-08-10T00:00:00Z").toISOString();
-    const lateTs = new Date("2026-08-20T00:00:00Z").toISOString();
+    // Relative to now: makePremiumUser's activation is stamped with the current
+    // time, so both events must postdate it or the stale guard drops them too.
+    const earlyTs = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const lateTs = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
     const canceled = subscriptionCanceled(
       { custom_data: { sub: user.sub, email: user.email } },

@@ -1,0 +1,32 @@
+{
+  "gpt-4o-mini": {
+    "inputPer1M": 0.15,
+    "cachedInputPer1M": 0.075,
+    "outputPer1M": 0.6,
+    "source": "Azure Retail Prices API",
+    "asOf": "2026-10-28"
+  },
+  "gpt-5.4-nano": {
+    "inputPer1M": 0.2,
+    "cachedInputPer1M": 0.02,
+    "outputPer1M": 1.25,
+    "source": "Azure Retail Prices API",
+    "asOf": "2026-10-28"
+  },
+  "gpt-6-luna": {
+    "inputPer1M": 0.1,
+    "cachedInputPer1M": 0.01,
+    "cacheWritePer1M": 0.125,
+    "outputPer1M": 0.5,
+    "source": "Azure Retail Prices API",
+    "asOf": "2026-10-28"
+  },
+  "gpt-5.4-mini": {
+    "inputPer1M": 0.825,
+    "cachedInputPer1M": 0.0825,
+    "outputPer1M": 4.95,
+    "source": "Azure Retail Prices API",
+    "asOf": "2026-10-28",
+    "note": "DataZoneStandard price of the live deployment (GlobalStandard is 0.75 / 4.50)."
+  }
+}

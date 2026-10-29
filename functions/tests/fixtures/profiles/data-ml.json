@@ -1,0 +1,12 @@
+{
+  "id": "data-ml",
+  "text": "Machine Learning Engineer — 6 years\n\nSummary\nML engineer who takes models from notebook to production. Most of my work is recommendation and ranking systems, the data pipelines that feed them, and the monitoring that tells us when they drift. Based in Lisbon and working with teams across Europe.\n\nExperience\nMercado Lumi (Lisbon) — Senior Machine Learning Engineer (2022–present)\n- Built the two-tower retrieval model and LightGBM re-ranker behind the home feed; +6.2% click-through in an A/B test across 9 markets.\n- Run the feature pipelines in Spark on Databricks and orchestrate training with Airflow; daily retraining finishes in under 50 minutes.\n- Set up model monitoring (data drift, calibration) with Evidently and Prometheus, with alerts routed to the on-call rotation.\n- Serve models behind a FastAPI service on Kubernetes with p99 under 40 ms.\n- Run the fortnightly ML reading group and review every model launch with product and data analytics.\n\nDatasense (Berlin, remote) — Data Scientist → ML Engineer (2019–2022)\n- Built demand-forecasting models in Python (pandas, scikit-learn, Prophet) for 300 retail stores.\n- Moved batch scoring from cron scripts to Airflow and dbt on Snowflake.\n- Wrote the team's experiment-tracking setup on MLflow.\n\nSkills\nPython, PyTorch, scikit-learn, LightGBM, pandas, Spark, Databricks, Airflow, dbt, SQL, Snowflake, MLflow, FastAPI, Docker, Kubernetes, AWS (S3, SageMaker), GCP (BigQuery), A/B testing, recommendation systems, time-series forecasting.\n\nEducation\nMSc Data Science, Universidade de Lisboa.",
+  "dealbreakers": [
+    "EU timezones only"
+  ],
+  "preferences": {
+    "locations": [
+      "EU timezones only"
+    ]
+  }
+}

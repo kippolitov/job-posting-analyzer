@@ -1,0 +1,33 @@
+{
+  "url": "https://jobs.smartrecruiters.com/Visa/744000133907678-sr-manager",
+  "canonicalUrl": "https://jobs.smartrecruiters.com/Visa/744000133907678-sr-manager",
+  "title": "Visa Sr. Manager | SmartRecruiters",
+  "jsonLd": [],
+  "structuredSources": [
+    {
+      "kind": "microdata",
+      "data": {
+        "title": "Sr. Manager",
+        "jobLocation": {
+          "address": {
+            "addressCountry": "United States",
+            "addressLocality": "Austin",
+            "addressRegion": "Texas"
+          }
+        },
+        "employmentType": "Full-time",
+        "hiringOrganization": {
+          "name": "Visa",
+          "logo": "https://c.smartrecruiters.com/sr-company-logo-prod-aws-dc5/57a11f9de4b09d766b5b5dd6/huge?r=s3-eu-central-1&_1643423250683"
+        },
+        "datePosted": "2026-06-24T10:00:11.853Z",
+        "industry": "Information Technology And Services",
+        "description": "Additional InformationAll your information will be kept confidential according to EEO guidelines.",
+        "incentives": "All your information will be kept confidential according to EEO guidelines."
+      }
+    }
+  ],
+  "mainText": "Sr. ManagerFull-timeJob Family Group: Engineering and TechnologyAdditional InformationAll your information will be kept confidential according to EEO guidelines.By clicking the link above or any third-party link within this posting, you are leaving this site and going to a third-party website where the third-party website's terms and privacy policy applyI'm interestedI'm interestedPrivacy NoticeCookies Settings",
+  "extractedAt": "2026-07-25T05:54:26.293Z",
+  "expectNotScorable": true
+}

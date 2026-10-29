@@ -6,7 +6,11 @@ import type { HttpRequest, InvocationContext } from "@azure/functions";
 import { analyzeJobHandler, withUsageMetering } from "../../src/analyze-job/index";
 import { withAuth } from "../../src/services/auth";
 import { JobSchemaError } from "../../src/services/jobExtractionOrchestrator";
-import { orchestrateJobAnalysis } from "../../src/services/jobExtractionOrchestrator";
+import {
+  orchestrateJobAnalysis,
+  type ModelUsage,
+} from "../../src/services/jobExtractionOrchestrator";
+import { ModelConfigError } from "../../src/services/modelConfig";
 import { MONTHLY_ANALYSES } from "../../src/models/user";
 import { ensureTable } from "../../src/services/tablesService";
 import { usageRowKey } from "../../src/services/meteringService";
@@ -158,8 +162,87 @@ describe("analyze-job handler", () => {
     expect(vi.mocked(orchestrateJobAnalysis)).toHaveBeenCalledWith(
       expect.objectContaining({ profile: "P", assumeJobPosting: true }),
       testUser.tier,
+      expect.any(Function),
       expect.any(Function)
     );
+  });
+
+  it("logs one model.usage line per completion attempt, with token counts only", async () => {
+    const usage = (attempt: 1 | 2): ModelUsage => ({
+      deployment: "gpt-6-luna",
+      promptTokens: 2100,
+      completionTokens: 380,
+      reasoningTokens: 0,
+      cachedTokens: 0,
+      latencyMs: 4200,
+      attempt,
+      finishReason: "stop",
+    });
+    vi.mocked(orchestrateJobAnalysis).mockImplementation((_req, _tier, _warn, observe) => {
+      observe?.(usage(1));
+      observe?.(usage(2));
+      return Promise.resolve({
+        ...hybridAnalysis,
+        model: "gpt-6-luna",
+        analyzedAt: "2026-07-04T12:00:04Z",
+      } as never);
+    });
+    const profile = "Distinctive profile text that must never reach the logs";
+    const log = vi.fn<unknown[], void>();
+    const warn = vi.fn<unknown[], void>();
+    const error = vi.fn<unknown[], void>();
+    const context = { log, warn, error } as unknown as InvocationContext;
+
+    const res = await analyzeJobHandler(
+      makeRequest({ ...validBody, profile }),
+      context,
+      testUser
+    );
+    expect(res.status).toBe(200);
+
+    const logCalls = log.mock.calls;
+    const usageLines = logCalls.filter(([first]) => first === "model.usage");
+    expect(usageLines).toHaveLength(2);
+    expect(JSON.parse(usageLines[0][1] as string)).toEqual(usage(1));
+    expect(JSON.parse(usageLines[1][1] as string)).toEqual(usage(2));
+
+    const everything = [
+      ...logCalls,
+      ...warn.mock.calls,
+      ...error.mock.calls,
+    ]
+      .flat()
+      .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+      .join("\n");
+    expect(everything).not.toContain(validBody.extract.mainText.trim());
+    expect(everything).not.toContain(profile);
+  });
+
+  it("maps ModelConfigError to 500 SERVICE_ERROR", async () => {
+    vi.mocked(orchestrateJobAnalysis).mockRejectedValue(
+      new ModelConfigError("AZURE_OPENAI_JOB_REASONING_EFFORT must be one of none|low|medium|high|xhigh")
+    );
+    const error = vi.fn();
+    const context = { log: vi.fn(), warn: vi.fn(), error } as unknown as InvocationContext;
+    const res = await analyzeJobHandler(makeRequest(validBody), context, testUser);
+    expect(res.status).toBe(500);
+    expect(res.jsonBody).toMatchObject({ error: { code: "SERVICE_ERROR" } });
+    expect(error).toHaveBeenCalled();
+  });
+
+  it("refunds through the 5xx path when the model config is invalid", async () => {
+    const sub = uniqueSub();
+    await seedUsage(sub, 5, MONTHLY_ANALYSES.free);
+    vi.mocked(orchestrateJobAnalysis).mockRejectedValue(
+      new ModelConfigError("AZURE_OPENAI_JOB_TEMPERATURE must be a number in [0, 2]")
+    );
+    const wrapped = withUsageMetering(analyzeJobHandler);
+
+    const res = await wrapped(makeRequest(validBody), makeContext(), { ...testUser, sub });
+    expect(res.status).toBe(500);
+    await vi.waitFor(async () => {
+      expect((await readUsage(sub)).count).toBe(5);
+    });
   });
 
   it("maps JobSchemaError to 502 SCHEMA_PARSE_FAILED", async () => {

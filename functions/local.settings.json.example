@@ -24,6 +24,21 @@
     "//AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM": "Deployment used for premium-tier analyses (specs/003). When unset or empty, premium falls back to the free deployment — safe in every environment.",
     "AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM": "",
 
+    "//AZURE_OPENAI_JOB_TEMPERATURE": "specs/006 — sampling temperature (0 to 2) sent with free-tier analyses. Omitted from the request when empty, so a model that only accepts its default (e.g. gpt-6-luna) works without a code change. Set \"0\" to keep the pre-006 behaviour on gpt-4o-mini / gpt-5.4-*.",
+    "AZURE_OPENAI_JOB_TEMPERATURE": "0",
+
+    "//AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM": "specs/006 — temperature for premium analyses. Applies only when AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM is set; otherwise premium uses the free deployment with the free settings. Omitted from the request when empty.",
+    "AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM": "0",
+
+    "//AZURE_OPENAI_JOB_REASONING_EFFORT": "specs/006 — reasoning_effort for free-tier analyses: none | low | medium | high | xhigh. Omitted from the request when empty. Only reasoning models accept it (gpt-6-luna: \"none\").",
+    "AZURE_OPENAI_JOB_REASONING_EFFORT": "",
+
+    "//AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM": "specs/006 — reasoning_effort for premium analyses. Applies only when AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM is set. Omitted from the request when empty.",
+    "AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM": "",
+
+    "//AZURE_OPENAI_API_VERSION": "specs/006 — Azure OpenAI api-version for both tiers. When empty, the default in src/services/modelConfig.ts is used (the version that passed the PR1 live probe on every deployment; see specs/006-profile-match-ux/eval-models.md).",
+    "AZURE_OPENAI_API_VERSION": "",
+
     "//METERING_ENFORCED": "Free-tier usage metering (specs/003). Any value except \"false\" enforces the monthly caps; \"false\" runs shadow mode (counts but never blocks).",
     "METERING_ENFORCED": "true",
 

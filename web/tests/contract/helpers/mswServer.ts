@@ -40,6 +40,8 @@ export interface FakeApi {
   calls: Record<EndpointKey, number>;
   setJobs(jobs: SavedJobPayload[]): void;
   setProfile(profile: ProfilePayload | null): void;
+  /** The currently stored profile (reflects PUTs). */
+  getProfile(): ProfilePayload | null;
   setAccount(account: AccountPayload): void;
   setDocumentResult(result: DocumentAnalysisResult): void;
   setCheckoutResult(result: CheckoutResult): void;
@@ -153,6 +155,7 @@ export function createFakeApi(): FakeApi {
     setProfile: (next) => {
       profile = next;
     },
+    getProfile: () => profile,
     setAccount: (next) => {
       account = next;
     },

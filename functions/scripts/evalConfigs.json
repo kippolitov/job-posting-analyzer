@@ -1,0 +1,8 @@
+[
+  { "label": "free-4o-mini-t0", "tier": "free", "deployment": "gpt-4o-mini", "temperature": 0, "gate": false },
+  { "label": "premium-5.4-nano-t0", "tier": "premium", "deployment": "gpt-5.4-nano", "temperature": 0, "gate": false },
+  { "label": "luna-none", "tier": "free", "deployment": "gpt-6-luna", "reasoningEffort": "none", "gate": false },
+  { "label": "luna-low", "tier": "free", "deployment": "gpt-6-luna", "reasoningEffort": "low", "gate": false },
+  { "label": "luna-medium", "tier": "free", "deployment": "gpt-6-luna", "reasoningEffort": "medium", "gate": false },
+  { "label": "premium-5.4-mini-t0", "tier": "premium", "deployment": "gpt-5.4-mini", "temperature": 0, "gate": true }
+]
