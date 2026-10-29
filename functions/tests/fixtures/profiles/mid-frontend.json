@@ -1,0 +1,18 @@
+{
+  "id": "mid-frontend",
+  "text": "Frontend Engineer — 5 years\n\nSummary\nProduct-minded frontend engineer who cares about fast, accessible interfaces. I build React and TypeScript applications, maintain design systems, and set up the testing that keeps them stable. I have worked fully remote for four years across US and European teams.\n\nExperience\nBrightline Health — Frontend Engineer II (2023–present)\n- Own the component library (48 components) used by four product teams; built it in React, TypeScript and Storybook with visual regression tests.\n- Cut the patient portal's Largest Contentful Paint from 3.9 s to 1.6 s by moving to Vite, code-splitting routes and fixing image loading.\n- Wrote the Playwright end-to-end suite that gates every release; flake rate under 1%.\n- Led the WCAG 2.1 AA remediation of the booking flow with the accessibility consultant.\n\nLumen Analytics — Frontend Engineer (2021–2023)\n- Built dashboard features in React, Redux Toolkit and D3 for a B2B analytics product.\n- Introduced TypeScript strict mode across a 90k-line codebase, file by file, without a feature freeze.\n- Paired with designers on Figma handoff and design tokens.\n\nFreelance — Web Developer (2020–2021)\n- Shipped marketing sites and small storefronts in Next.js and Shopify.\n\nSkills\nReact, TypeScript, JavaScript, Vite, Next.js, Redux Toolkit, React Query, CSS (Tailwind, CSS Modules), Storybook, Playwright, Vitest, Jest, Testing Library, accessibility (WCAG 2.1), web performance, Node.js for tooling, GraphQL clients.\n\nEducation\nBA Interactive Media, Northeastern University.",
+  "dealbreakers": [
+    "Remote only",
+    "Minimum salary 120000 USD per year"
+  ],
+  "preferences": {
+    "arrangements": [
+      "remote"
+    ],
+    "minSalary": {
+      "amount": 120000,
+      "currency": "USD",
+      "period": "year"
+    }
+  }
+}

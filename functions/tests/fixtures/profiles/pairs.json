@@ -1,0 +1,314 @@
+{
+  "_labelling": "One entry per (posting x profile). Posting ids are the postings/*.txt file stems and the postings/full/*.json slugs; thin-posting-control is excluded because it is never scored for fit. A dealbreaker counts as violated ONLY when the posting states the contradicting fact; inference from silence is never a violation. `violations` holds the profile's dealbreaker lines exactly as written. `unstatedFacts` lists, for the facts this profile's dealbreakers depend on, the ones the posting is silent about; these pairs are SC-008's false-dealbreaker traps. Judgement calls: (1) hybrid-2-days-inferred states that the team gathers in the London studio on Tuesdays and Thursdays, which the arrangement manifest labels hybrid, so it violates 'Remote only'. (2) A salary in another currency (GBP, EUR) is not a violation of a USD minimum (quickstart P4-4). (3) onsite-explicit's 'Columbus plant' and every US city count as outside EU timezones; London and 'US and Europe' (ashby-linear, body text over its US-only JSON-LD) do not. (4) greenhouse-discord requires Bay Area residence but states no work arrangement, so it does not violate 'Remote only' or 'No fully on-site roles'. (5) phenom-intuit and lever-palantir state hybrid working, so they violate 'Remote only'.",
+  "pairs": [
+    {
+      "posting": "hybrid-2-days-inferred",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "hybrid-2-days-inferred",
+      "profile": "mid-frontend",
+      "violations": [
+        "Remote only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "hybrid-2-days-inferred",
+      "profile": "data-ml",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "hybrid-2-days-inferred",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "hybrid-3-days",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "hybrid-3-days",
+      "profile": "mid-frontend",
+      "violations": [
+        "Remote only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "hybrid-3-days",
+      "profile": "data-ml",
+      "violations": [
+        "EU timezones only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "hybrid-3-days",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "onsite-explicit",
+      "profile": "senior-backend",
+      "violations": [
+        "No fully on-site roles"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "onsite-explicit",
+      "profile": "mid-frontend",
+      "violations": [
+        "Remote only"
+      ],
+      "unstatedFacts": [
+        "salary"
+      ]
+    },
+    {
+      "posting": "onsite-explicit",
+      "profile": "data-ml",
+      "violations": [
+        "EU timezones only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "onsite-explicit",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-restricted-timezone",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-restricted-timezone",
+      "profile": "mid-frontend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-restricted-timezone",
+      "profile": "data-ml",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-restricted-timezone",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-us-only",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-us-only",
+      "profile": "mid-frontend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-us-only",
+      "profile": "data-ml",
+      "violations": [
+        "EU timezones only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "remote-us-only",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "unspecified-arrangement",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": [
+        "arrangement"
+      ]
+    },
+    {
+      "posting": "unspecified-arrangement",
+      "profile": "mid-frontend",
+      "violations": [],
+      "unstatedFacts": [
+        "arrangement",
+        "salary"
+      ]
+    },
+    {
+      "posting": "unspecified-arrangement",
+      "profile": "data-ml",
+      "violations": [],
+      "unstatedFacts": [
+        "location"
+      ]
+    },
+    {
+      "posting": "unspecified-arrangement",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "ashby-linear",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "ashby-linear",
+      "profile": "mid-frontend",
+      "violations": [],
+      "unstatedFacts": [
+        "salary"
+      ]
+    },
+    {
+      "posting": "ashby-linear",
+      "profile": "data-ml",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "ashby-linear",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "greenhouse-discord",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": [
+        "arrangement"
+      ]
+    },
+    {
+      "posting": "greenhouse-discord",
+      "profile": "mid-frontend",
+      "violations": [],
+      "unstatedFacts": [
+        "arrangement"
+      ]
+    },
+    {
+      "posting": "greenhouse-discord",
+      "profile": "data-ml",
+      "violations": [
+        "EU timezones only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "greenhouse-discord",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "lever-palantir",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "lever-palantir",
+      "profile": "mid-frontend",
+      "violations": [
+        "Remote only"
+      ],
+      "unstatedFacts": [
+        "salary"
+      ]
+    },
+    {
+      "posting": "lever-palantir",
+      "profile": "data-ml",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "lever-palantir",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "phenom-intuit",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "phenom-intuit",
+      "profile": "mid-frontend",
+      "violations": [
+        "Remote only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "phenom-intuit",
+      "profile": "data-ml",
+      "violations": [
+        "EU timezones only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "phenom-intuit",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "workday-nvidia",
+      "profile": "senior-backend",
+      "violations": [],
+      "unstatedFacts": [
+        "arrangement"
+      ]
+    },
+    {
+      "posting": "workday-nvidia",
+      "profile": "mid-frontend",
+      "violations": [],
+      "unstatedFacts": [
+        "arrangement"
+      ]
+    },
+    {
+      "posting": "workday-nvidia",
+      "profile": "data-ml",
+      "violations": [
+        "EU timezones only"
+      ],
+      "unstatedFacts": []
+    },
+    {
+      "posting": "workday-nvidia",
+      "profile": "control",
+      "violations": [],
+      "unstatedFacts": []
+    }
+  ]
+}
