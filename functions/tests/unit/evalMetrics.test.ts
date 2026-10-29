@@ -179,6 +179,33 @@ describe("falseDealbreakers / missedDealbreakers", () => {
     });
   });
 
+  describe("judged detection (judgedViolations present)", () => {
+    it("uses the judged list over both the field and the score proxy", () => {
+      const judged = {
+        ...result("onsite", "backend", {
+          score: 5,
+          rationale: `Violates ${ONSITE}.`,
+          dealbreakersViolated: [],
+        }),
+        judgedViolations: [ONSITE],
+      };
+      expect(reportedViolations(judged)).toEqual({ violations: [ONSITE], method: "judge" });
+    });
+
+    it("counts a judged-empty list on a capped score as no violation", () => {
+      const results = [
+        {
+          ...result("silent", "backend", {
+            score: 8,
+            rationale: "Fully remote, which satisfies the candidate's dealbreaker. Weak skills match.",
+          }),
+          judgedViolations: [],
+        },
+      ];
+      expect(falseDealbreakers(results, pairs)).toMatchObject({ count: 0, detectionMethod: "judge" });
+    });
+  });
+
   it("treats a null fit as reporting nothing", () => {
     const results = [result("onsite", "backend", null)];
     expect(missedDealbreakers(results, pairs).count).toBe(1);
