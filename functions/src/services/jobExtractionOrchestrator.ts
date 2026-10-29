@@ -6,9 +6,22 @@ import type {
 } from "../models/job";
 import { isJobAnalysisPayload } from "../models/job";
 import type { Tier } from "../models/user";
+import { resolveModelConfig } from "./modelConfig";
 
 /** Model output violated the schema even after the repair retry → HTTP 502. */
 export class JobSchemaError extends Error {}
+
+/** Token counts for one completion call — never content (contracts/model-config.md). */
+export interface ModelUsage {
+  deployment: string;
+  promptTokens: number;
+  completionTokens: number;
+  reasoningTokens: number;
+  cachedTokens: number;
+  latencyMs: number;
+  attempt: 1 | 2;
+  finishReason: string | null;
+}
 
 // Authoritative structured-output schema — specs/008-job-posting-analyzer/contracts/analyze-job.md
 const JOB_ANALYSIS_SCHEMA = {
@@ -202,24 +215,18 @@ function enforceConsistency(
 export async function orchestrateJobAnalysis(
   req: AnalyzeJobRequest,
   tier: Tier = "free",
-  warn: (message: string) => void = () => {}
+  warn: (message: string) => void = () => {},
+  observe?: (usage: ModelUsage) => void
 ): Promise<JobAnalysisResponse> {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT ?? "";
   const apiKey = process.env.AZURE_OPENAI_API_KEY ?? "";
-  const freeDeployment =
-    process.env.AZURE_OPENAI_JOB_DEPLOYMENT ??
-    process.env.AZURE_OPENAI_DEPLOYMENT ??
-    "gpt-4o-mini";
-  // Premium falls back to the free deployment when unset (including an
-  // empty-string placeholder, e.g. local.settings.json before the premium
-  // deployment is provisioned) — a safe default in every environment
-  // (data-model.md, research.md R6).
-  const deployment =
-    tier === "premium" && process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM
-      ? process.env.AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM
-      : freeDeployment;
+  // Throws ModelConfigError before any model call (research R1).
+  const { deployment, apiVersion, temperature, reasoningEffort } = resolveModelConfig(
+    tier,
+    process.env
+  );
 
-  const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion: "2024-08-01-preview" });
+  const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion });
 
   const messages = [
     {
@@ -230,8 +237,10 @@ export async function orchestrateJobAnalysis(
   ];
 
   const complete = async (
+    attempt: 1 | 2,
     extraInstruction?: string
   ): Promise<JobAnalysisPayload | null> => {
+    const startedAt = Date.now();
     const completion = await client.chat.completions.create({
       model: deployment,
       messages: extraInstruction
@@ -245,12 +254,26 @@ export async function orchestrateJobAnalysis(
           schema: JOB_ANALYSIS_SCHEMA as unknown as Record<string, unknown>,
         },
       },
-      temperature: 0,
+      // Each setting is sent only when configured, so a model that rejects
+      // one is a settings change, not a code change (FR-M04).
+      ...(temperature !== undefined ? { temperature } : {}),
+      ...(reasoningEffort !== undefined ? { reasoning_effort: reasoningEffort } : {}),
       // Sized for the full fit breakdown (matching/missing/desired lists) on
       // top of the extraction fields. max_completion_tokens (not max_tokens)
       // — required by the gpt-5.x deployment generation, and accepted by
       // gpt-4o-mini too.
       max_completion_tokens: 3000,
+    });
+
+    observe?.({
+      deployment,
+      promptTokens: completion.usage?.prompt_tokens ?? 0,
+      completionTokens: completion.usage?.completion_tokens ?? 0,
+      reasoningTokens: completion.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+      cachedTokens: completion.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      latencyMs: Date.now() - startedAt,
+      attempt,
+      finishReason: completion.choices[0]?.finish_reason ?? null,
     });
 
     const content = completion.choices[0]?.message?.content;
@@ -264,10 +287,11 @@ export async function orchestrateJobAnalysis(
     return isJobAnalysisPayload(parsed) ? parsed : null;
   };
 
-  let payload = await complete();
+  let payload = await complete(1);
   if (!payload) {
     warn("job analysis output failed to parse; retrying with repair instruction");
     payload = await complete(
+      2,
       "Your previous reply was not valid JSON for the required schema. Respond again with ONLY a valid JSON object matching the schema exactly."
     );
   }
