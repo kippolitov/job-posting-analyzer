@@ -7,6 +7,7 @@
  *   npm run eval:postings [-- --tier=premium]
  *   npm run eval:postings -- --configs=scripts/evalConfigs.json
  *       [--runs=5] [--concurrency=2] [--only=<postingId>] [--out=<file.json>]
+ *   npm run eval:postings -- --report=<saved.json> [--out=<file.json>]
  *
  * Without --configs it behaves as it always has: one tier, arrangement metrics
  * only, over tests/fixtures/postings/manifest.json. --tier=free (default) uses
@@ -20,6 +21,9 @@
  * dealbreakers and preferences stripped, for SC-002's score independence. The
  * process exits non-zero only when a configuration with "gate": true misses a
  * target.
+ *
+ * --report rebuilds the reports from a saved --out file without model calls,
+ * for example after scripts/judgeViolations.ts has added judged violations.
  */
 import { readFileSync, readdirSync, writeFileSync } from "fs";
 import path from "path";
@@ -252,6 +256,8 @@ interface TaskResult {
   latencyMs?: number;
   costUsd?: number;
   error?: string;
+  /** Added by scripts/judgeViolations.ts. */
+  judgedViolations?: string[];
 }
 
 function loadPostings(only: string | undefined): Posting[] {
@@ -424,6 +430,7 @@ function buildReport(
     profile: r.profile,
     dealbreakers: profiles.get(r.profile)?.dealbreakers ?? [],
     fit: r.fit ?? null,
+    judgedViolations: r.judgedViolations,
   });
   const scoredResults = scored.map(toScored);
   const falseTally = falseDealbreakers(scoredResults, pairs);
@@ -573,22 +580,53 @@ function printReport(report: ConfigReport): void {
   }
 }
 
+interface EvalContext {
+  postings: Posting[];
+  profiles: Map<string, FixtureProfile>;
+  pairs: PairLabel[];
+  prices: Record<string, PriceEntry>;
+}
+
+function loadContext(only: string | undefined): EvalContext {
+  const postings = loadPostings(only);
+  if (postings.length === 0) throw new Error(`--only=${only} matches no posting`);
+  const postingIds = new Set(postings.map((p) => p.id));
+  const pairs = readJson<{ pairs: PairLabel[] }>(
+    path.join(fixturesDir, "profiles", "pairs.json")
+  ).pairs.filter((p) => postingIds.has(p.posting));
+  return {
+    postings,
+    profiles: loadProfiles(),
+    pairs,
+    prices: readJson<Record<string, PriceEntry>>(path.join(__dirname, "modelPrices.json")),
+  };
+}
+
+interface SavedRun {
+  startedAt: string;
+  finishedAt: string;
+  args: Record<string, unknown>;
+  reports: ConfigReport[];
+  results: Record<string, TaskResult[]>;
+}
+
+function writeRun(out: string, run: SavedRun): void {
+  writeFileSync(path.resolve(out), `${JSON.stringify(run, null, 2)}\n`);
+  console.warn(`\nwrote ${out}`);
+}
+
+function exitOnGateFailure(reports: ConfigReport[]): void {
+  if (reports.some((r) => r.config.gate && r.failedTargets.length > 0)) process.exitCode = 1;
+}
+
 async function runConfigEval(argv: string[], configsFile: string): Promise<void> {
   const configs = readJson<EvalConfig[]>(path.resolve(configsFile));
   const runs = positiveInt(argv, "runs", 5);
   const concurrency = positiveInt(argv, "concurrency", 2);
   const only = flag(argv, "only");
   const out = flag(argv, "out");
-
-  const postings = loadPostings(only);
-  if (postings.length === 0) throw new Error(`--only=${only} matches no posting`);
-  const profiles = loadProfiles();
-  const allPairs = readJson<{ pairs: PairLabel[] }>(
-    path.join(fixturesDir, "profiles", "pairs.json")
-  ).pairs;
+  const { postings, profiles, pairs, prices } = loadContext(only);
   const postingById = new Map(postings.map((p) => [p.id, p]));
-  const pairs = allPairs.filter((p) => postingById.has(p.posting));
-  const prices = readJson<Record<string, PriceEntry>>(path.join(__dirname, "modelPrices.json"));
 
   const tasks: Task[] = [];
   for (let run = 0; run < runs; run++) {
@@ -616,30 +654,43 @@ async function runConfigEval(argv: string[], configsFile: string): Promise<void>
   }
 
   if (out) {
-    writeFileSync(
-      path.resolve(out),
-      `${JSON.stringify(
-        {
-          startedAt,
-          finishedAt: new Date().toISOString(),
-          args: { runs, concurrency, only: only ?? null, configs: configsFile },
-          reports,
-          results: rawResults,
-        },
-        null,
-        2
-      )}\n`
-    );
-    console.warn(`\nwrote ${out}`);
+    writeRun(out, {
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      args: { runs, concurrency, only: only ?? null, configs: configsFile },
+      reports,
+      results: rawResults,
+    });
   }
+  exitOnGateFailure(reports);
+}
 
-  if (reports.some((r) => r.config.gate && r.failedTargets.length > 0)) process.exitCode = 1;
+function runSavedReport(argv: string[], file: string): void {
+  const saved = readJson<SavedRun>(path.resolve(file));
+  const { postings, profiles, pairs, prices } = loadContext(undefined);
+  const reports = saved.reports.map(({ config }) => {
+    const report = buildReport(
+      config,
+      saved.results[config.label] ?? [],
+      pairs,
+      profiles,
+      postings,
+      prices[config.deployment]
+    );
+    printReport(report);
+    return report;
+  });
+  const out = flag(argv, "out");
+  if (out) writeRun(out, { ...saved, reports });
+  exitOnGateFailure(reports);
 }
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const configsFile = flag(argv, "configs");
-  if (configsFile) await runConfigEval(argv, configsFile);
+  const reportFile = flag(argv, "report");
+  if (reportFile) runSavedReport(argv, reportFile);
+  else if (configsFile) await runConfigEval(argv, configsFile);
   else await runArrangementEval(parseTier(argv));
 }
 

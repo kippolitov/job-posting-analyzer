@@ -7,7 +7,7 @@
 /** The five FR-009 bands. "Unrated" has no place here: every eval fit is scored. */
 export type Band = "strong" | "worth-a-shot" | "stretch" | "long-shot" | "dealbreaker";
 
-export type DetectionMethod = "field" | "score-proxy";
+export type DetectionMethod = "judge" | "field" | "score-proxy";
 
 export interface PairLabel {
   posting: string;
@@ -32,6 +32,8 @@ export interface ScoredResult {
   /** The dealbreaker lines sent with this request (for the PR1 score proxy). */
   dealbreakers: string[];
   fit: EvalFit | null;
+  /** Violations an LLM judge read from the rationale (scripts/judgeViolations.ts). */
+  judgedViolations?: string[];
 }
 
 export interface DealbreakerTally {
@@ -106,15 +108,18 @@ export function verdictStability(runsByPair: Record<string, Band[]>): number {
 }
 
 /**
- * The violations a result reports. The field wins when present; otherwise the
- * PR1 proxy counts a dealbreaker when the score is capped and the rationale
- * names it (see `mentions`). The proxy is only valid while the prompt still asks for the cap.
+ * The violations a result reports. A judge's reading wins, then the field;
+ * otherwise the PR1 proxy counts a dealbreaker when the score is capped and
+ * the rationale names it (see `mentions`). The proxy is only valid while the
+ * prompt still asks for the cap, and it cannot tell a cap from a low skills
+ * match, which is why PR1 is graded by the judge.
  */
 export function reportedViolations(result: ScoredResult): {
   violations: string[];
   method: DetectionMethod;
 } {
   const { fit } = result;
+  if (result.judgedViolations) return { violations: result.judgedViolations, method: "judge" };
   if (fit && Array.isArray(fit.dealbreakersViolated)) {
     return { violations: fit.dealbreakersViolated, method: "field" };
   }
