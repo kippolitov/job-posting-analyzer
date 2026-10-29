@@ -1,6 +1,6 @@
 # Eval: scoring-model choice (PR1, FR-M01–M05)
 
-**Status**: signed off 2026-10-29, capacity in place; settings switch waits for the PR1 deploy (T026). Raw results:
+**Status**: live in prod since 2026-10-29 (T026): free on `gpt-6-luna` at `none`, Premium on `gpt-6-luna-premium` at `low`. Raw results:
 [`eval-runs/pr1.json`](./eval-runs/pr1.json).
 
 ## Summary for sign-off
@@ -45,6 +45,7 @@
 | 2026-10-29 | Prod `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on `job-posting-analyzer-func` (T021, approved) | Inert on the deployed code; keeps temperature 0 on both tiers once PR1 deploys (research R1, trap 4). Free still resolves its deployment from `AZURE_OPENAI_DEPLOYMENT`. | Delete both settings |
 | 2026-10-29 | Raised deployment `gpt-6-luna` 20K → 100K TPM (approved) | GlobalStandard, model version 2026-09-22, for the free tier. Quota is free; only tokens are billed. | Set capacity back to 20 |
 | 2026-10-29 | Created deployment `gpt-6-luna-premium` (approved) | Model version 2026-09-22, **DataZoneStandard** (US data zone, as `gpt-5.4-mini` today), 50K TPM, for Premium only so free spikes can't throttle it. Probe with `reasoning_effort: low` returned 200. | Delete the deployment |
+| 2026-10-29 | Prod settings switch on `job-posting-analyzer-func` (T026, approved), after PR1 deployed (`ab18a2d`) | Set `AZURE_OPENAI_JOB_DEPLOYMENT=gpt-6-luna`, `AZURE_OPENAI_JOB_REASONING_EFFORT=none`, `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-6-luna-premium`, `AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM=low`; deleted both temperature settings. `AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini` kept as the free fallback. Verified: Premium analysis at 16:31 UTC logged `model.usage` on `gpt-6-luna-premium`, 6.8 s, `finishReason: stop`. | Set `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-5.4-mini`, `AZURE_OPENAI_JOB_TEMPERATURE=0`, `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0`; delete `AZURE_OPENAI_JOB_DEPLOYMENT` and both `…_REASONING_EFFORT` settings |
 
 ## API version probe (T014, quickstart P1-2)
 
