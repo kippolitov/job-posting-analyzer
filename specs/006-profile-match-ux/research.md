@@ -103,7 +103,9 @@ pass SC-009. If no `gpt-6-luna` setting passes, PR1 merges the configuration
 plumbing only, and the switch is escalated to you with the eval report. The
 retirement deadline of 2027-04-14 leaves room for that.
 
-**Premium decision rule** (decided from measurements, not in this document):
+**Premium decision (you decided 2026-10-29)**: Premium moves to `gpt-5.4-mini` at
+temperature 0, and FR-M05's cost limit is waived for Premium. The eval still
+gates it. The table below keeps the other candidates as the fallback.
 
 | Candidate | Status | Cost check, FR-M05 |
 |---|---|---|
@@ -111,11 +113,15 @@ retirement deadline of 2027-04-14 leaves room for that.
 | `gpt-6-luna` `none` | Same config as free | About $0.00066 |
 | `gpt-6-luna` `low` | | About $0.0007 |
 | `gpt-6-luna` `medium` | Not yet measured | Must measure |
-| `gpt-5.4-mini` | Retires 2027-09-21 | About $0.006 by list price. This is roughly 3.7× today's Premium cost, so FR-M05 rules it out unless you waive FR-M05. |
+| **`gpt-5.4-mini`, temperature 0 (chosen, live for Premium since 2026-10-29)** | Retires 2027-09-21. DataZoneStandard, 50K TPM. | About $0.0065 at Data Zone prices ($0.825/$4.95 per 1M), roughly 4× the old Premium cost. FR-M05 is waived for Premium. |
 
-1. Discard any candidate that fails SC-002, SC-004 or SC-008 on the corpus, or
-   whose median cost is above today's Premium median (FR-M05).
-2. Of those left, Premium takes the configuration with the best fit-quality score
+1. `gpt-5.4-mini` is Premium if it passes SC-002, SC-004 and SC-008 on the
+   corpus, keeps p95 latency at or below 30 s (SC-009), and is at least as good
+   as free on every fit metric (FR-M02). Cost is reported but not gated.
+2. If it fails, discard any other candidate that fails SC-002, SC-004 or SC-008,
+   or whose median cost is above today's Premium median (FR-M05 still applies
+   to the fallback). Of those left, Premium takes the configuration with the
+   best fit-quality score
    (R3 metrics, in this order: false dealbreakers, missed dealbreakers, verdict
    stability, then agreement with the labelled verdict range). Ties go to the
    cheaper configuration.
@@ -123,13 +129,33 @@ retirement deadline of 2027-04-14 leaves room for that.
    every metric. If the free configuration matches or beats `gpt-5.4-nano`, the
    rule above moves Premium off `gpt-5.4-nano`.
 
-**Capacity flag for you**: the `gpt-6-luna` deployment is GlobalStandard at 20K
-tokens per minute (TPM). Premium currently has its own 10K TPM deployment. If
-Premium moves to `gpt-6-luna`, both tiers share 20K TPM, which is about 5
-analyses per minute at about 4K tokens each. The options are to share the
-deployment, raise its TPM, or create a second `gpt-6-luna` deployment for
-Premium. All three are Azure resource changes and need your approval. The eval
-report will state measured tokens per analysis so the choice is informed.
+**Capacity for you** (checked read-only on 2026-10-29): the resource has three
+GlobalStandard deployments: `gpt-4o-mini` at 20K tokens per minute (TPM),
+`gpt-5.4-nano` at 50K TPM, and `gpt-6-luna` at 20K TPM. There is **no
+`gpt-5.4-mini` deployment**. The model is available in the resource as GA
+version 2026-03-17, as GlobalStandard or DataZoneStandard. Premium needs a new
+deployment, which is an Azure change needing your approval. The suggestion is
+50K TPM to match today's Premium, subject to quota. It is needed before PR1's
+live probe and eval can include it. DataZoneStandard keeps processing inside
+the US data zone, which would also answer the data-processing flag below for
+Premium; confirm its price before choosing it. A deployment has no fixed
+charge. Only tokens are billed.
+
+**Done 2026-10-29, with your approval**: deployment `gpt-5.4-mini` created as
+DataZoneStandard at 50K TPM (Data Zone quota 200K; prices $0.825 input and
+$4.95 output per 1M, about 10% above global). A probe through the unchanged
+production code path (api-version 2024-08-01-preview, temperature 0, strict
+JSON schema) returned schema-valid results:
+
+| Posting fixture, dealbreaker "no fully on-site roles" | `gpt-5.4-mini` | `gpt-5.4-nano` |
+|---|---|---|
+| `unspecified-arrangement` | fit 58, no violation, 2.3 s | fit 78, no violation, 4.4 s |
+| `onsite-explicit` | fit 0, violation named, 3.0 s | fit 20, violation named, 3.5 s |
+
+Premium was then switched in production
+(`AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM`: `gpt-5.4-nano` → `gpt-5.4-mini`). This is
+two postings, not the FR-M03 eval. The PR1 eval still gates it, and if it fails,
+Premium goes back to `gpt-5.4-nano` or to R2's fallback, with your approval.
 
 **Data-processing flag**: GlobalStandard deployments may process prompts in any
 Azure region. Prompts include the user's résumé text. Confirm the privacy policy
@@ -474,7 +500,7 @@ costing an analysis. A regression test pins this.
 **Unavailability rule (FR-003a)**: a rescore on a posting page that now shows no
 posting must consume nothing.
 - *Thin content* is detected in the extension before any request, so nothing is
-  sent and nothing is charged.
+  sent and nothing is charged. This is the common case and has no limit.
 - *The model returns `isJobPosting: false`* on a request with rescore intent and
   without `assumeJobPosting`. The server refunds whichever counter it charged.
   To stop this becoming an unbounded free-call path, these refunds are capped by
@@ -486,9 +512,9 @@ posting must consume nothing.
 
 | Item | Free quota | Metered rate | Worst case per account per month |
 |---|---|---|---|
-| Free rescores | 10 per account | Unbilled model call | Free: 10 × about $0.00066 ≈ $0.0066. Premium: depends on the R2 choice, at most 10 × $0.0016 = $0.016 if it stays on `gpt-5.4-nano`. |
-| Refunded "posting unavailable" rescores | 10 per account | Unbilled model call | Same per-call cost again: ≤ $0.0066 free, ≤ $0.016 Premium |
-| Combined unbilled ceiling | | | ≤ 20 calls. Free: ≤ $0.013, about 40% above the 50-analysis allowance's ≈ $0.033. Premium: ≤ $0.032 against a $5.00 subscription. |
+| Free rescores | 10 per account | Unbilled model call | Free: 10 × about $0.00066 ≈ $0.0066. Premium on `gpt-5.4-mini`: 10 × about $0.006 ≈ $0.06. |
+| Refunded "posting unavailable" rescores | 10 per account | Unbilled model call | Same per-call cost again: ≤ $0.0066 free, ≈ $0.06 Premium |
+| Combined unbilled ceiling | | | ≤ 20 calls. Free: ≤ $0.013, about 40% above the 50-analysis allowance's ≈ $0.033. Premium: ≤ $0.12 against a $5.00 subscription. |
 
 These calls are not new infrastructure. They draw on the same deployment TPM and
 the same $50/month budget alert set up in 003 (T043). The per-account ceiling
@@ -535,18 +561,43 @@ endpoint.
 |---|---|---|---|
 | `url` | Extension panel on the posting's page (`analyzeJobPage` with `bypassCache` and rescore intent) | "Open posting to rescore": opens `sourceUrl`; the panel shows the stored result with Rescore | Thin content on extraction (client-side, no request), or `postingUnavailable: true` from the server |
 | `document` | Web Upload page: drop the same file. `doc:<sha256 of text>` gives the same `saveKey`, so the existing entry updates in place. | "Upload again to rescore": navigates to Upload with the entry's key, and Upload sends rescore intent | Not applicable. A different file is just a different posting. |
-| `paste` | **Extension paste composer.** `pasteIdentity` maps the same text to the same `paste:` key. | Extension rows: "Paste again to rescore". Web rows: "Paste again in the extension to rescore". | Not applicable |
+| `paste` | **Extension paste composer**, or the **web Analyze posting screen's Paste text option**. `shared/pasteIdentity.ts` maps the same text to the same `paste:` key on both. | "Paste again to rescore" on both surfaces. On the web it opens `/upload?mode=paste&rescore=<key>`. | Not applicable |
 
-**Gap found, to confirm with you**: FR-003a and Clarification 5 name "the web
-upload and paste screens", but **the web has no paste screen**. Paste exists only
-in the extension's `PasteComposer.tsx`. The web also cannot call `analyze-job`,
-because that route is `authLevel: "function"` and the web bundle cannot hold a
-function key. A web user's paste-sourced entries were all created in the
-extension, so that user has the extension installed. This plan therefore keeps
-the paste rescore in the extension and adjusts only the web row's wording. It
-does not build a web paste screen. If you want one, the smallest version is an
-optional `text` part on `analyze-document`. That is a scope addition for PR2 and
-is not planned here.
+**Web paste screen, added 2026-10-28 at your request (FR-027)**: the web had no
+paste screen. It also cannot call `analyze-job`, because that route is
+`authLevel: "function"` and the web bundle cannot hold a function key. The
+Paste text option therefore goes through `analyze-document`, which already
+uses Google sign-in only:
+
+- **Request**: `analyze-document` accepts exactly one of a `file` part or a
+  `text` part. Both or neither is `400 INVALID_REQUEST`.
+- **Limits**: the same as the extension's paste composer, 300 to 40,000
+  characters of raw text. The web checks first and shows the composer's
+  messages, so a bad paste sends nothing. The server checks again before
+  charging: `400 TEXT_TOO_SHORT` or `413 TEXT_TOO_LONG`, never charged.
+- **Identity**: the server keys the posting `paste:<sha256>` with the
+  extension's normalization (whitespace collapsed, trimmed).
+  `extension/lib/pasteIdentity.ts` moves to `shared/pasteIdentity.ts`, built
+  on `globalThis.crypto.subtle`, which Node 20, the service worker and browsers
+  all provide. Both sides import it, so a paste on the web and the same paste
+  in the extension land on the same saved entry. A shared test vector guards
+  this.
+- **Model input**: identical to the extension's paste flow. The extract has
+  an empty title and `mainText` is the text capped at 40,000.
+- **Response and save**: `source: "paste"` with no filename. The saved payload
+  uses `source: "paste"` and empty `sourceUrl` and `filename`, which
+  `isSavedJobPayload` already accepts from the extension.
+- **Rescore**: the web row's "Paste again to rescore" opens
+  `/upload?mode=paste&rescore=<key>`. Upload sends rescore intent as it does
+  for documents, and charging follows R6 unchanged.
+- **Different content on "again"**: when the result's `saveKey` differs from
+  the `rescore` key, for a paste or a document, Upload does not PATCH. It
+  shows the result as a new analysis with "Save to library" and the spec's
+  "didn't match" note. Without this rule, a different file would overwrite
+  another posting's analysis.
+- **CD window**: if the new web goes live a minute before the functions, a
+  paste gets `400` "Missing required file part" and is not charged. That
+  matches the existing note for this window.
 
 **Taken-down page in the extension**: `analyzeJobPage` runs its thin-content
 check **before** `lookupStored`. Today a taken-down page with a saved analysis
@@ -644,10 +695,12 @@ not depend on it.
 At an estimated 300–600 more output tokens and $0.50/1M, that is about +$0.0002
 per analysis, roughly +30%, and about +2–4 s. Three consequences:
 
-- SC-009 is a gate on the PR1 model switch, but FR-M05 says per-analysis cost on
-  each tier "MUST NOT increase". PR3 measures the evidence cost on the eval
-  before merging and reports it as a feature cost, not a model cost. **If you
-  read FR-M05 as covering every later PR, PR3 needs your explicit sign-off.**
+- **Cost is a feature cost, not an FR-M05 limit** (decided 2026-10-28). FR-M05
+  binds the PR1 model switch only. PR3 measures the evidence cost on the eval
+  before merging, reports it per tier in dollars and percent against PR2, and
+  you approve it in the PR. At the full monthly allowance, the estimate is
+  about +$0.0075 to +$0.015 per free account and +$0.41 to +$0.81 per Premium
+  account on `gpt-5.4-mini`, whose output costs $4.50 per million tokens.
 - **QG-4 regression gate**: a p95 regression of 20% or more must be rejected or
   carry a documented exception. PR3 is the PR most likely to hit this. A 20%
   regression on about 5.5 s is only about 1.1 s. The mitigation, in order:
@@ -698,20 +751,22 @@ requirement.
 ## R11 — Structured preferences (PR4, FR-015/FR-016)
 
 **Storage**: `Profiles.preferences` is a JSON-encoded optional object holding
-`arrangements`, `minSalary {amount, currency, period}`,
-`seniority {min, max}` and `locations: string[]`.
+`arrangements`, `maxOfficeDays`, `minSalary {amount, currency, period}`,
+`seniority {min, max}`, `locations: string[]` and `needsSponsorship`.
 `Profiles.schemaVersion` goes to 2. A version-1 row reads as having no
 preferences.
 
 **Checks**: `applyPreferences(payload, preferences)` is a pure function. It
-covers arrangement, salary and seniority only.
+covers arrangement, office days, salary and seniority only.
 
 | Preference | Violation only when | Unverified note when |
 |---|---|---|
 | Arrangements | `payload.arrangement ∉ allowed` **and** `arrangementConfidence ≠ "none"` | arrangement is `unspecified` |
+| Maximum office days | `arrangement` is `hybrid` with `daysInOffice` stated and above the maximum, or `onsite` with `arrangementConfidence ≠ "none"`, which counts as 5 days. An on-site posting already reported by the Arrangements check is not reported twice. | `arrangement` is `hybrid` with no `daysInOffice` |
 | Minimum salary | The posting's `salary.max` (or `min` if there is no max) is below the minimum, with the **same currency and period** | there is no salary, or the currency or period differs |
 | Seniority range | `payload.seniority` is outside `[min, max]` on the enum's order | seniority is `unspecified` |
 | Locations | Never checked in code. It goes to the model through `profileToPromptText`, and the model's `dealbreakersViolated` entry is kept as-is (Clarification 2). | |
+| Visa sponsorship | Never checked in code, for the same reason as Locations: postings state sponsorship only in prose. The banner shows the profile line as the model copies it, "Work authorization: needs visa sponsorship", the same pattern as "Office days: at most 2 per week". | |
 
 The seniority enum mixes the individual-contributor and management tracks
 (`staff`, `principal`, `manager`, `director`). The range check uses the enum's
@@ -770,7 +825,7 @@ mirrors the web's `apiFetch`, for the multipart import.
 |---|---|
 | How to omit temperature without changing prod behaviour | R1, through settings-before-code ordering |
 | API version for `reasoning_effort` | R1, made configurable and verified by the PR1 live probe |
-| Premium model | R2, chosen by a measured decision rule that excludes `gpt-5.4-mini` on cost |
+| Premium model | R2: `gpt-5.4-mini`, your decision on 2026-10-29 with FR-M05 waived for Premium, gated on quality by the eval |
 | Corpus and metrics for FR-M03 | R3 |
 | Fit schema compatibility with old extension builds | R4, with additive-only stored shape |
 | Where the fingerprint is computed and how the extension learns it | R5 |

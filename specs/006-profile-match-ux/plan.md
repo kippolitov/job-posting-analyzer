@@ -27,7 +27,8 @@ app working against the deployed backend.
 3. **US3**: verbatim evidence quotes.
 4. **US4**: résumé import and structured preferences.
 5. **US5**: "I have this".
-6. **US6**: Saved-tab triage and the requirements-table Compare view.
+6. **US6**: Saved-tab triage, the timeline Library, and Compare as a
+   requirements-table dialog opened from the Library.
 
 **Decisions that shape every PR**, from [research.md](./research.md):
 
@@ -111,8 +112,9 @@ None of these happen without asking you at the time.
 | When | Change | Why | Reversible |
 |---|---|---|---|
 | Before merging PR1 | Set `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on `job-posting-analyzer-func` | Keeps today's behaviour once temperature becomes optional (R1). The running code ignores them. | Yes, delete them |
-| After the PR1 eval sign-off | Free: `AZURE_OPENAI_JOB_DEPLOYMENT=gpt-6-luna` and `AZURE_OPENAI_JOB_REASONING_EFFORT=none`, and delete the free temperature. Premium: per `eval-models.md`. | FR-M01, FR-M02 | Yes, restore the old values |
-| Only if the eval picks `gpt-6-luna` for Premium | Share the 20K TPM deployment, raise its TPM, or create a second `gpt-6-luna` deployment | Capacity (R2) | Yes |
+| **Done 2026-10-29** | Created deployment `gpt-5.4-mini` (version 2026-03-17, DataZoneStandard, 50K TPM) and switched `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM` from `gpt-5.4-nano` to `gpt-5.4-mini` | Premium's chosen model (R2), approved by you | Yes, set the setting back to `gpt-5.4-nano`, then delete the deployment |
+| After the PR1 eval sign-off | Free: `AZURE_OPENAI_JOB_DEPLOYMENT=gpt-6-luna` and `AZURE_OPENAI_JOB_REASONING_EFFORT=none`, and delete the free temperature. Premium: already on `gpt-5.4-mini`; it stays if it passes the eval's quality gates, otherwise it reverts or takes R2's fallback. | FR-M01, FR-M02 | Yes, restore the old values |
+| Only if `gpt-5.4-mini` fails and the fallback picks `gpt-6-luna` for Premium | Share the 20K TPM deployment, raise its TPM, or create a second `gpt-6-luna` deployment | Capacity (R2) | Yes |
 | Before the free switch | Confirm the privacy-policy wording covers GlobalStandard cross-region processing of résumé text | Data handling (R2) | n/a |
 
 ## Constitution Check
@@ -133,11 +135,15 @@ Derived from `.specify/memory/constitution.md` v1.2.0:
 - QG-1: lint with zero warnings in all three packages.
 - QG-2: as above.
 - QG-3: UX review of the score header, Rescore cost line and banner (PR2), the
-  evidence disclosure (PR3), the import flow (PR4), and the Compare table (PR6).
+  evidence disclosure (PR3), the import flow and Profile sections (PR4), and the timeline Library and
+  Compare dialog (PR6).
 - QG-4: `perf.test.ts` on every PR. PR1 also reports live p95.
 
-**Development Workflow**: all six PRs come from short-lived branches off
-`006-profile-match-ux`, or merge in sequence. There are no dependency upgrades:
+**Development Workflow**: each PR targets `main` from its own branch, cut from
+`main` after the previous PR merges. PR1 uses `006-profile-match-ux`, which
+already carries the planning artifacts. PR2 to PR6 use `006-freshness-verdict`,
+`006-evidence`, `006-profile-setup`, `006-confirm-skills` and
+`006-triage-compare`. There are no dependency upgrades:
 `openai` ^6.42 already supports `reasoning_effort`. Docs ship in the same PR
 under `contracts/`. Every PR's `## Summary` feeds the auto-changelog.
 
@@ -150,9 +156,9 @@ happens.
 
 | Item | Free quota | Rate | Worst case per account per month |
 |---|---|---|---|
-| Free rescores (FR-004) | 10 | Unbilled model call | Free ≈ 10 × $0.00066 = $0.0066. Premium ≤ 10 × $0.0016 = $0.016. |
+| Free rescores (FR-004) | 10 | Unbilled model call | Free ≈ 10 × $0.00066 = $0.0066. Premium on `gpt-5.4-mini` ≈ 10 × $0.006 = $0.06. |
 | Refunded "posting unavailable" rescores (FR-003a) | 10 (`unavailableRefunds`) | Unbilled model call | The same again |
-| **Ceiling** | | | **≤ 20 unbilled calls**: free ≤ $0.013 (about 40% above the ≈ $0.033 cost of a full 50-analysis month); Premium ≤ $0.032 against $5.00 revenue |
+| **Ceiling** | | | **≤ 20 unbilled calls**: free ≤ $0.013 (about 40% above the ≈ $0.033 cost of a full 50-analysis month); Premium ≤ $0.12 against $5.00 revenue. A full 300-analysis Premium month costs about $1.80 on `gpt-5.4-mini`, with FR-M05 waived for Premium. |
 | Résumé import (FR-014) | Rate-limited per IP | CPU only, no model call | ≈ $0 on the consumption plan |
 
 - These draw on the existing deployments' TPM and are covered by the existing
@@ -191,6 +197,8 @@ Each PR lists its scope, its compatibility story, and what is deployed when.
   - `fitView.ts` with its fixtures (contract [fit-view.md](./contracts/fit-view.md)).
   - `Fit` gains `dealbreakersViolated` and `profileFingerprint`.
   - `dealbreakerLinesFromPrompt`.
+  - `pasteIdentity` moves here from the extension, so the web paste and the
+    extension paste share one key.
 - **Backend**:
   - Fingerprints on profile GET and PUT, and `fingerprintHistory`.
   - Merge-PUT.
@@ -200,6 +208,8 @@ Each PR lists its scope, its compatibility story, and what is deployed when.
   - Rescore eligibility and counters, with Merge writes and the
     charge-after-validation side fix.
   - `postingUnavailable`.
+  - A `text` part on `analyze-document` for the web's Paste text option
+    (FR-027, research R7).
   - `unavailableAt` on saved jobs.
   - Contracts: [analyze-api.md](./contracts/analyze-api.md),
     [profile-api.md](./contracts/profile-api.md),
@@ -212,10 +222,17 @@ Each PR lists its scope, its compatibility story, and what is deployed when.
   - Dealbreaker banner, verdict label and icon, and the screen-reader label.
   - Default collapsed view (FR-025) and secondary "My profile" (FR-024).
   - FR-007's offer to rescore after a profile save.
+  - A visible, labelled "Web app" button with a Google sign-in tooltip
+    (FR-028). It touches only `AccountBar.tsx`, so it can ship earlier as its
+    own small PR if you want it sooner.
 - **Web**:
   - Freshness markers and source-specific rescore actions on library and detail.
   - Upload waits for the profile to settle (spec edge case).
   - Upload honours "Upload again to rescore" by updating the existing entry.
+  - A Paste text option on the document screen, renamed "Analyze posting" (FR-027), which also
+    serves "Paste again to rescore".
+  - "Upload again" or "Paste again" with different content saves as a new
+    posting instead of overwriting the one being rescored.
   - "Current profile only" filter.
   - Verdict on every fit.
 - **Compatibility**:
@@ -240,18 +257,22 @@ Each PR lists its scope, its compatibility story, and what is deployed when.
 - **Compatibility**: the label arrays are unchanged, and `evidence` is ignored
   by old clients.
 - **Gate**: the eval's SC-003 and the cost and p95 delta are reported in the PR,
-  with a possible QG-4 exception.
+  with a possible QG-4 exception. The cost increase is a feature cost for your
+  approval in the PR. FR-M05's no-increase limit covers only the PR1 model
+  switch (R9).
 
 ### PR4 — US4: profile setup
 
 - **Backend**:
   - `POST /api/profile/import` (no storage, no metering; R12).
-  - `preferences` storage and validation, with `schemaVersion` 2.
+  - `preferences` storage and validation, with `schemaVersion` 2. Preferences
+    include maximum office days and visa sponsorship (R11).
   - `profileToPromptText` gains a Preferences section.
   - `applyPreferences` (R11).
 - **Extension**: `apiFetch` gains `rawBody` for the multipart import. The
   options page gets import and preference fields.
-- **Web**: the Profile page gets the same import and preference fields.
+- **Web**: the Profile page gets the same import and preference fields,
+  organized into headed sections: résumé, dealbreakers and preferences.
 - **Compatibility**:
   - Old extension saves keep preferences, because PUT merges.
   - Old extension analyses omit preferences, so they are fingerprinted and shown
@@ -273,6 +294,13 @@ Each PR lists its scope, its compatibility story, and what is deployed when.
 - **Extension**: Saved tab sort and verdict filter.
 - **Web**:
   - `CompareGrid` becomes the requirements table, scrolling inside its container.
+  - Compare moves into a modal dialog opened from the Library, built on the
+    native `<dialog>` element, which gives focus containment and Escape for
+    free. The Compare page and nav entry are deleted, and `/compare`
+    redirects to `/library`.
+  - The Library becomes a timeline grouped by save day, and each entry shows
+    fit, salary, arrangement, location, seniority, status and source
+    (data-model §9).
   - `libraryQuery` delegates to the shared helpers.
 - **Compatibility**: client-only. It works against any 006 backend.
 
@@ -282,11 +310,12 @@ Each PR lists its scope, its compatibility story, and what is deployed when.
 |---|---|
 | `gpt-6-luna` at `none` fails SC-004 or SC-008 on the full corpus, since the spec's evidence is one posting | The R2 fallback order is `low`, then escalation. The deadline leaves months of margin. |
 | The eval corpus is small (5 full-length postings) | `eval-models.md` states the sample size and corpus gaps. Re-run the eval if the corpus grows. |
-| No configuration beats `gpt-5.4-nano` within FR-M05's cost cap | Premium stays on `gpt-5.4-nano`, which retires 2027-09-21. A follow-up issue is filed for Premium's own migration. |
+| `gpt-5.4-mini` is unmeasured and could fail a quality gate, for example by flagging unstated facts as violations as `gpt-5.4-nano` did | The PR1 eval gates it. On failure, R2's fallback rule picks among the other candidates, and you are told before any switch. |
+| `gpt-5.4-mini` retires 2027-09-21, so Premium must migrate again within a year | A follow-up issue is filed when PR1 merges (T027). |
 | The model still lowers the score when it sees a dealbreaker, despite the instruction | SC-002's score-independence check in the PR2 eval. Below 90%, the fallback is scoring fit without dealbreakers in the prompt, which costs a second call and goes to you first (research R8). |
 | Model paraphrases dealbreakers | R8 matching keeps unmatched entries, which fails safe toward showing a violation. SC-008 in the eval catches over-reporting. |
 | Evidence pushes latency and cost up | R9 mitigations, measurement in the PR, and an explicit sign-off |
-| **The web has no paste screen** (FR-003a mentions one) | Paste rescores run in the extension's paste composer. The web row's copy says so (R7). Building a web paste screen is a scope addition left to you. |
+| The new web goes live before the functions during CD, so a web paste reaches an `analyze-document` without the `text` part | It returns `400` "Missing required file part" for about a minute and charges nothing (R7). |
 
 ## Project Structure
 
@@ -318,6 +347,7 @@ shared/
 ├── types/job.ts                 # Fit gains dealbreakersViolated, profileFingerprint, evidence (PR2/PR3)
 ├── types/profile.ts             # profileToPromptText sections; dealbreakerLinesFromPrompt (PR2/4/5)
 ├── fitView.ts                   # NEW (PR2; extended PR3, PR6)
+├── pasteIdentity.ts             # MOVED from extension/lib (PR2), used by web paste and the server
 └── fitView.fixtures.ts          # NEW shared test table
 
 functions/
@@ -331,7 +361,7 @@ functions/
 │   ├── savedJobsRepository.ts   # unavailableAt
 │   └── documentExtraction.ts    # unchanged; reused by import
 ├── src/analyze-job/index.ts     # validate → meter order; rescore; profileData
-├── src/analyze-document/index.ts# rescore; profileData
+├── src/analyze-document/index.ts# rescore; profileData; text part (web paste)
 ├── src/profile/index.ts         # fingerprint; merge; import route (PR4)
 ├── src/models/{job,user}.ts     # FREE_RESCORES_PER_MONTH, entity columns, body guards
 ├── scripts/evalPostings.ts      # extended harness
@@ -350,14 +380,18 @@ extension/
 ├── services/jobAnalysisClient.ts            # profileData, rescore, usage echo
 ├── services/api/apiClient.ts                # rawBody (PR4)
 ├── components/JobPanel/{FitScore,SavedJobRow,SavedTab,ThisPageTab,PasteComposer}.tsx
+├── components/AccountBar.tsx                # labelled "Web app" button (FR-028)
 ├── entrypoints/options/OptionsApp.tsx       # import, preferences, confirmed skills
 └── tests/{unit,e2e}/…
 
 web/
 ├── src/api/{endpoints,types}.ts             # fingerprint, profileData, rescore, unavailableAt, import
-├── src/pages/{Upload,Library,PostingDetail,Profile,Compare}.tsx
+├── src/pages/{Upload,Library,PostingDetail,Profile}.tsx   # Compare.tsx deleted in PR6
 ├── src/components/{AnalysisView,CompareGrid,LibraryControls}.tsx
+├── src/components/{LibraryTimeline,LibraryEntry,CompareDialog}.tsx   # NEW (PR6)
+├── src/components/PastePosting.tsx          # NEW Paste text option (FR-027)
 ├── src/lib/libraryQuery.ts
+├── src/lib/{libraryTimeline,formatJob}.ts   # NEW (PR6), data-model §9
 └── tests/{unit,contract,e2e}/…
 ```
 

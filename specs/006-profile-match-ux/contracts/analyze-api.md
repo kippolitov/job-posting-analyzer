@@ -31,6 +31,18 @@ does today, except for the PR2 side fix in §4.
 New optional parts: `profileData` (a JSON string), `rescore` (`"true"`) and
 `priorFingerprint` (a 64-hex string, or absent).
 
+New alternative part `text` (FR-027, research R7): pasted posting text, sent
+**instead of** `file`. Exactly one of `file` and `text` is required.
+
+- `text` shorter than 300 characters is `400 TEXT_TOO_SHORT`, and longer than
+  40,000 is `413 TEXT_TOO_LONG`. Neither is charged. The messages match the
+  extension's paste composer.
+- The extract sent to the model has an empty title, and `mainText` is the text
+  capped at 40,000, exactly as the extension's paste flow builds it.
+- `canonicalUrl` is `await pasteIdentity(text)` from `shared/pasteIdentity.ts`,
+  and `saveKey` is `sha256Hex(canonicalUrl)`.
+- The 200 response has `source: "paste"` and no `filename`.
+
 ### Validation
 
 - `profileData` must have `text: string` and `dealbreakers: string[]`. If it
@@ -45,7 +57,8 @@ New optional parts: `profileData` (a JSON string), `rescore` (`"true"`) and
 parse → validate (400/413, no charge)
       → resolve profile: profileData ? profileToPromptText(profileData) : profile
       → fingerprint = sha256(normalizeWhitespace(serialized))
-      → [document only] extractDocument (422/413/415, no charge)
+      → [document, file part] extractDocument (422/413/415, no charge)
+      → [document, text part] length limits (400/413, no charge)
       → eligibility (research R6) → charge rescoresUsed or count (429 when exhausted)
       → model call (R1 config)
       → validateQuotes (R9, PR3) → enforceConsistency → resolveDealbreakers / applyPreferences (R8/R11)
@@ -60,6 +73,7 @@ any 5xx after the charge → refund the counter that was charged
 ```jsonc
 {
   /* JobAnalysisResponse — fit gains dealbreakersViolated, profileFingerprint (PR2), evidence (PR3) */
+  "tier": "free" | "premium",      // NEW (PR2): the tier whose model scored this analysis
   "postingUnavailable": true,      // NEW, only on a rescore that found no posting
   "usage": {
     "count": 12, "limit": 50, "resetsAt": "…", "tier": "free",   // existing
@@ -93,7 +107,7 @@ unchanged, and N parallel requests at the cap produce exactly one 200.
 |---|---|---|
 | Old extension (no new fields) | today | Gets an additive response. It ignores the new fit fields and `usage` fields. Its fit gets a fingerprint for the string it sent. It is metered as today. |
 | New extension or web | Not reachable in production: the backend deploys first, and the extension waits for Chrome Web Store review | Full behaviour |
-| New web during the CD window (web live, functions still deploying) | Unknown fields ignored. Charged normally, so the "free" cost line could be wrong for about a minute. | n/a |
+| New web during the CD window (web live, functions still deploying) | Unknown fields ignored. Charged normally, so the "free" cost line could be wrong for about a minute. A paste gets `400` "Missing required file part" and is not charged. | n/a |
 
 ## 6. Contract tests (test-first)
 
@@ -108,3 +122,8 @@ unchanged, and N parallel requests at the cap produce exactly one 200.
   unchanged field set plus additive fields.
 - Eligibility table tests, for each row of research R6, against Azurite.
 - A `postingUnavailable` refund is capped at 10 per month.
+- **`text` part**: both or neither of `file` and `text` is a 400. 299 characters
+  is `TEXT_TOO_SHORT` and 40,001 is `TEXT_TOO_LONG`, and the metering mock is
+  never called for either. A valid paste returns `source: "paste"` with
+  `canonicalUrl === await pasteIdentity(text)`. A whitespace variant of the
+  same text returns the same `saveKey`.

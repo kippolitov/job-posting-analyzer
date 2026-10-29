@@ -16,8 +16,9 @@ module returns semantic tones only.
 | `scoreTone` | 2 | `(fit: NormalizedFit) => Verdict` | The same value as the verdict. Clients map it to colour and icon (FR-010: text label always shown, icon where space allows). |
 | `ariaFitLabel` | 2 | `(fit) => string` | `"Strong match, fit 86 out of 100"`, or `"Unrated, fit 72 out of 100"` |
 | `freshness` | 2 | `(fit, current: string \| null \| undefined) => Freshness` | Mapping in data-model.md §2. `undefined` means unknown. |
-| `rescoreAction` | 2 | `(job: {source, sourceUrl, unavailableAt?}, freshness) => RescoreAction` | Returns one of `none`, `rescore-here`, `open-posting`, `upload-again` or `paste-again`, plus copy. Covers research R7's table. |
+| `rescoreAction` | 2 | `(job: {source, sourceUrl, unavailableAt?}, freshness) => RescoreAction` | Returns one of `none`, `rescore-here`, `open-posting`, `upload-again` or `paste-again`, plus copy. Covers research R7's table. `paste-again` reads "Paste again to rescore" on both surfaces. On the web it links to `/upload?mode=paste&rescore=<key>`. |
 | `rescoreCostLine` | 2 | `(usage: {rescoresUsed, rescoresLimit, count, limit}) => string` | Returns "Free — 7 of 10 free rescores left this month", "Uses 1 analysis", or the exhausted state |
+| `scoredByLabel` | 2 | `(analysis: {tier?, model}) => string` | "Scored on Premium" or "Scored on Free" from `analysis.tier`. Analyses saved before 006 fall back to "Scored by <model>". Never affects freshness (spec edge case "Free-to-Premium switch"). |
 | `previewMissing` | 2 | `(fit, n = 3) => string[]` | FR-025's default view |
 | `evidenceFor` | 3 | `(fit, list, label) => EvidenceItem \| null` | Joins evidence to a chip by label |
 | `sortByFit` | 6 | `(jobs, dir) => jobs` | Unscored jobs last. Out-of-date and unrated fits still sort by number. |

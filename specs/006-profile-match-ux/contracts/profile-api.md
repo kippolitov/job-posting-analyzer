@@ -34,17 +34,24 @@ the new `fingerprint`.
   Confirmed skills are trimmed and deduplicated case-insensitively, keeping the
   first spelling. Preferences are validated against
   [data-model.md §3](../data-model.md) and rejected with `400 INVALID_REQUEST`.
-- **Cap**: the length of the serialized `text` plus the Confirmed skills section
-  must be at most 20,000 characters. Otherwise the server returns
-  `400 PROFILE_TOO_LONG` with the existing over-limit wording. The text is no
-  longer truncated silently, because truncating would drop a just-added skill
-  without telling the user.
+- **Cap**: the serialized `text` plus the Confirmed skills section must be at
+  most 20,000 characters.
+  - A PUT that **includes** `confirmedSkills`, and the add-skill route in §4a,
+    is refused with `400 PROFILE_TOO_LONG` and the existing over-limit wording
+    when it would exceed the cap. Silent truncation would drop a just-added
+    skill without telling the user.
+  - A PUT **without** `confirmedSkills`, as a published extension sends,
+    keeps today's behaviour: `text` is truncated at 20,000. Both clients
+    already stop text at 20,000 themselves, so this can't start failing saves
+    that work today. The combined length may then exceed 20,000 by the skills
+    section, which is accepted.
 - **History**: if the new fingerprint differs from the stored profile's, the
   previous fingerprint is prepended to `fingerprintHistory`, which is capped at
   20.
-- **Concurrency**: last write wins, as today. A fast "I have this" double-click
-  sends two PUTs carrying the same skill set, and deduplication makes them
-  idempotent.
+- **Concurrency**: the read-merge-write is conditional on the row's ETag and
+  retried on 412, up to 4 times, as metering does. "I have this" never uses PUT.
+  It uses §4a, so two quick clicks on different skills can't overwrite each
+  other.
 
 ## 3. DELETE /api/profile
 
@@ -68,6 +75,22 @@ multipart/form-data; one part "file" (.pdf or .docx, ≤ 10 MB)
   over-limit message, and nothing is saved until the user saves.
 - CORS and the preflight route mirror `/api/profile`.
 
+## 4a. POST /api/profile/confirmed-skills (PR5, new)
+
+```text
+body { "label": "Terraform" }            // 1..100 chars after trim
+200  same shape as GET /api/profile      // includes the new fingerprint
+400  INVALID_REQUEST | PROFILE_TOO_LONG
+404  PROFILE_NOT_FOUND                   // no profile to add to
+```
+
+- The server appends the label to `confirmedSkills` atomically: it reads the
+  row, deduplicates case-insensitively, and writes conditionally on the ETag,
+  retrying on 412.
+- A label that is already present returns 200 with no change, so the call is
+  idempotent.
+- Fingerprint history is updated exactly as for PUT.
+
 ## 5. Contract tests (test-first)
 
 - `fingerprint` is unchanged after a whitespace-only edit, and changed after a
@@ -75,6 +98,9 @@ multipart/form-data; one part "file" (.pdf or .docx, ≤ 10 MB)
 - An old-shape PUT keeps stored preferences and confirmed skills.
 - `fingerprintHistory` grows only when the fingerprint changes, and is capped
   at 20.
+- Two concurrent add-skill calls with different labels both persist.
+- A legacy PUT with no `confirmedSkills` truncates text and never returns
+  `PROFILE_TOO_LONG`.
 - The import never calls `ensureTable` (spy) and never logs the text.
 - The import's rejection codes match analyze-document's for every fixture in
   `functions/tests/fixtures/documents/`.

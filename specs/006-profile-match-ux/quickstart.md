@@ -44,10 +44,10 @@ for the same saved posting.
 | # | Step | Expected |
 |---|---|---|
 | P1-1 | Unit: `resolveModelConfig` table (contract [model-config.md](./contracts/model-config.md)) | Unset settings are omitted. Premium falls back to free settings. Invalid values throw. |
-| P1-2 **(live)** | Probe each deployment under the chosen API version: `gpt-4o-mini` with temperature 0, `gpt-5.4-nano` with temperature 0, `gpt-6-luna` with `reasoning_effort: none` | All three return schema-valid JSON. Record the API version in `eval-models.md`. |
+| P1-2 **(live)** | Probe each deployment under the chosen API version: `gpt-4o-mini` with temperature 0, `gpt-5.4-nano` with temperature 0, `gpt-5.4-mini` with temperature 0 (after its deployment is approved and created), `gpt-6-luna` with `reasoning_effort: none` | All four return schema-valid JSON. Record the API version in `eval-models.md`. |
 | P1-3 | `cd extension && npx tsx scripts/exportCorpusExtracts.ts` | 6 files in `functions/tests/fixtures/postings/full/`, with `thin-posting-control` tagged `expectNotScorable` |
 | P1-4 **(live)** | `npm run eval:postings -- --configs=scripts/evalConfigs.json --runs=5 --out=…` | The report covers each configuration (contract [eval-harness.md](./contracts/eval-harness.md)), with about 45 minutes per configuration at 20K TPM |
-| P1-5 | Fill `eval-models.md` and apply the decision rule (research R2) | The chosen free and Premium settings pass SC-002, SC-004, SC-008 and SC-009, and FR-M05 cost holds |
+| P1-5 | Fill `eval-models.md` and apply the decision rule (research R2) | Free passes SC-002, SC-004, SC-008 and SC-009, and FR-M05 cost holds for free. Premium `gpt-5.4-mini` passes SC-002, SC-004, SC-008, SC-009 latency and FR-M02. Its cost is reported, with FR-M05 waived for Premium. |
 | P1-6 | Regression: the existing six-posting arrangement eval on the chosen free config | 100% arrangement accuracy and 0 contradictions (SC-008) |
 | P1-7 **(prod, ask first)** | Before merge, set `AZURE_OPENAI_JOB_TEMPERATURE=0` and `…_PREMIUM=0` | Inert on the running code |
 | P1-8 **(prod, ask first)** | After merge and sign-off, switch the settings (research R1 step 4) | The next analyses log `model.usage` with `deployment: gpt-6-luna`. An extension analysis still renders. |
@@ -70,6 +70,11 @@ for the same saved posting.
 | P2-12 | Library sorted by fit with "current profile only" | Out-of-date rows are marked and filtered |
 | P2-13 | `curl` a 400 body to analyze-job | `Usage.count` is unchanged (contract analyze-api §4) |
 | P2-14 | Saved-job round-trip: rescore, then an ordinary analysis | `rescoresUsed` survives the Merge write (research R6 hazard test) |
+| P2-15 | Web Analyze posting, Paste text: paste 200 characters, then a full posting | 200 characters shows the extension's "Paste more of the posting…" message with no request. The full posting analyzes, and Save to library creates a `paste:` entry. |
+| P2-16 | Paste the same posting in the extension's paste composer | It resolves to the entry the web saved, with no duplicate in the library |
+| P2-17 | Web library, a stale paste row: click "Paste again to rescore" and paste the same text | The page opens in paste mode with the cost line. The existing entry is updated in place. |
+| P2-18 | "Upload again to rescore" with a different file | The saved posting is unchanged. The result offers "Save to library" with the "didn't match" note. |
+| P2-19 | Extension account bar | A labelled "Web app" button. Hovering shows "Opens in a new tab. You'll be asked to sign in with Google." VoiceOver announces the same description. |
 
 ## PR3 — US3: evidence
 
@@ -78,7 +83,7 @@ for the same saved posting.
 | P3-1 | Expand a matching chip by keyboard (Tab, then Enter) and by pointer | Shows a verbatim posting quote and a verbatim profile quote. The panel's default height does not change (FR-013). |
 | P3-2 | Recorded fixture with a fabricated quote | The quote is dropped, the item stays, and one warning is logged |
 | P3-3 | Pre-006 saved posting | Chips render as before, with no affordance and no console error |
-| P3-4 **(live)** | Eval with evidence | SC-003 at least 95% verbatim. Report the cost and p95 delta against PR2. A p95 rise of 20% or more needs a QG-4 exception (research R9). |
+| P3-4 **(live)** | Eval with evidence | SC-003 at least 95% verbatim. Report the cost and p95 delta against PR2. The cost increase needs your approval as a feature cost, since FR-M05 covers only PR1. A p95 rise of 20% or more needs a QG-4 exception (research R9). |
 
 ## PR4 — US4: profile setup
 
@@ -91,6 +96,9 @@ for the same saved posting.
 | P4-5 **(live)** | Location "EU timezones only" against a "US residents only" posting | Banner names the location preference, and the score is unchanged |
 | P4-6 | Save preferences on the web, then save text from an **old** extension build | Preferences survive (merge PUT) |
 | P4-7 | First-time user with a résumé file, timed from opening the editor | First fit score in under 2 minutes (SC-005) |
+| P4-8 | At most 2 office days, on a hybrid posting stating 3 days, then on one stating none | First: banner "Office days: at most 2 per week", score unchanged. Second: an "Unverified: office days not stated" note. |
+| P4-9 **(live)** | "I need visa sponsorship", on a posting that says it can't sponsor | Banner "Work authorization: needs visa sponsorship", score unchanged |
+| P4-10 | Open the web Profile page | Headed sections for résumé, dealbreakers and preferences |
 
 ## PR5 — US5: "I have this"
 
@@ -108,8 +116,12 @@ for the same saved posting.
 |---|---|---|
 | P6-1 | Saved tab, "Fit (highest)" | Sorted by score, unscored last, out-of-date marked |
 | P6-2 | Verdict filter "Strong match" | Unrated fits are excluded |
-| P6-3 | Compare 3 postings sharing "Kubernetes" and "kubernetes " | One row with cells in both columns |
-| P6-4 | Compare at 375 px width | The table scrolls inside its container, and the page does not scroll horizontally |
+| P6-3 | Select 3 postings sharing "Kubernetes" and "kubernetes ", then click Compare in the Library | A dialog opens with one row for that requirement and cells in both columns |
+| P6-4 | Compare at 375 px width | The dialog fills the screen. The table scrolls inside its container, and the page does not scroll horizontally. |
+| P6-5 | Press Escape in the Compare dialog | The dialog closes, focus is on Compare, and the selection is kept |
+| P6-6 | Visit `/compare` | Redirects to the Library. The nav has no Compare entry. |
+| P6-7 | Library with postings saved today, yesterday and last month, sorted by date | Headings "Today", "Yesterday" and the dated one. Each entry shows fit and verdict, salary or "Salary not stated", arrangement, location, seniority, status and source. |
+| P6-8 | Sort the Library by fit | One ranked list without date headings, with each entry's save date |
 
 ## Performance (QG-4, every PR)
 

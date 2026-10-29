@@ -91,9 +91,11 @@ your profile" call to action applies instead.
 ```text
 Preferences = {
   arrangements?: ("remote" | "hybrid" | "onsite")[]                  // non-empty when present
+  maxOfficeDays?: integer 0..5                                        // code-checked; on-site counts as 5
   minSalary?:   { amount: number > 0, currency: ISO-4217 string, period: "year"|"month"|"day"|"hour" }
   seniority?:   { min?: Seniority, max?: Seniority }                  // enum order; min ≤ max
   locations?:   string[]                                              // free text; model-judged only
+  needsSponsorship?: true                                             // model-judged only; absent means not needed
 }
 ```
 
@@ -127,9 +129,11 @@ Dealbreakers:
 
 Preferences:            ← PR4
 - Work arrangement: remote or hybrid
+- Office days: at most 2 per week
 - Minimum salary: 120000 USD per year
 - Seniority: senior to staff
 - Locations or timezones: EU timezones only
+- Work authorization: needs visa sponsorship
 
 Confirmed skills:       ← PR5
 - Terraform
@@ -183,8 +187,10 @@ The rescore action shown on each surface is derived from `source`,
 | `profile` | both | existing | Legacy serialized string. New clients still send it, for safety during the deploy window. |
 | `profileData` | both (form field: JSON) | PR2 | `{ text, dealbreakers, preferences?, confirmedSkills? }`. When present, the server serializes it and ignores `profile`. |
 | `rescore` | `analyze-job`: `{ priorFingerprint: string \| null }`; `analyze-document`: `rescore=true` and `priorFingerprint` | PR2 | Rescore intent. Eligibility is decided on the server (R6). |
+| `text` | `analyze-document` (form field) | PR2 | Pasted posting text, sent instead of `file` (FR-027). 300 to 40,000 characters. Keyed `paste:<sha256>` by `shared/pasteIdentity.ts`. |
 
-Response additions: `usage.charged`, `usage.rescoresUsed`,
+Response additions: `source: "paste"` with no `filename` when `text` was sent, `tier` (the tier whose model scored it; stored with the
+snapshot, absent on pre-006 analyses), `usage.charged`, `usage.rescoresUsed`,
 `usage.rescoresLimit`, and `postingUnavailable?: true`. See
 [analyze-api.md](./contracts/analyze-api.md).
 
@@ -208,3 +214,15 @@ Premium uses the free deployment **and** the free settings. Full contract:
 | `profiles/<id>.json` | `{ id, text, dealbreakers, preferences?, confirmedSkills? }` |
 | `profiles/pairs.json` | `[{ posting, profile, violations: string[], unstatedFacts: string[], verdictRange?: [Verdict, Verdict] }]` |
 | `../scripts/modelPrices.json` | `{ [deployment]: { inputPer1M, cachedInputPer1M, cacheWritePer1M?, outputPer1M, source, asOf } }` |
+
+## 9. Library timeline — derived, web only (PR6)
+
+`web/src/lib/libraryTimeline.ts` holds two pure functions. Nothing is stored.
+
+| Function | Output | Rules |
+|---|---|---|
+| `groupByDay(jobs, now, timeZone)` | `{ heading, dateKey, jobs }[]` | Groups by the calendar day of `savedAt` in `timeZone`, newest day first and newest first inside a day. A `direction: "oldest"` argument, used by the "Saved (oldest)" sort, reverses both orders and keeps the same headings. Headings are "Today", "Yesterday", or "Monday, October 26", with the year added outside the current year. Empty groups are never returned. |
+| `summarizeJob(job)` | `{ salary, arrangement, location?, seniority?, sourceLabel, savedOn }` | `salary` and `arrangement` always have text, using "Salary not stated" and "Arrangement not stated". A hybrid posting with stated office days reads "Hybrid · 2 days in office". `location` is omitted when null, and `seniority` when `unspecified`. `sourceLabel` is the URL's host name, the file name, or "Pasted". |
+
+`formatSalary` moves from `AnalysisView.tsx` to `web/src/lib/formatJob.ts`, so
+the detail page and the timeline format salary identically (FR-030).
