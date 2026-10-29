@@ -666,13 +666,52 @@ describe("jobExtractionOrchestrator", () => {
       expect(result.fit?.dealbreakersViolated).toEqual([]);
     });
 
+    describe("verbatim quote requirement", () => {
+      function withQuotes(quotes: { dealbreaker: string; quote: string }[]): string {
+        const base = JSON.parse(fixture("dealbreaker-onsite")) as {
+          fit: Record<string, unknown>;
+        };
+        return JSON.stringify({ ...base, fit: { ...base.fit, dealbreakerQuotes: quotes } });
+      }
+
+      it("keeps a violation backed by a verbatim posting quote and strips the quotes field", async () => {
+        await mockCreateWith(
+          withQuotes([
+            {
+              dealbreaker: "No fully on-site roles",
+              quote: "This role is fully on-site at our Dallas office",
+            },
+          ])
+        );
+        const result = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+        expect(result.fit?.dealbreakersViolated).toEqual(["No fully on-site roles"]);
+        expect(result.fit).not.toHaveProperty("dealbreakerQuotes");
+      });
+
+      it("drops a violation whose quote is not in the posting", async () => {
+        await mockCreateWith(
+          withQuotes([{ dealbreaker: "No fully on-site roles", quote: "Five days in Paris" }])
+        );
+        const result = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+        expect(result.fit?.dealbreakersViolated).toEqual([]);
+        expect(result.fit?.score).toBe(72);
+      });
+
+      it("drops a violation with no quote entry at all", async () => {
+        await mockCreateWith(withQuotes([]));
+        const result = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+        expect(result.fit?.dealbreakersViolated).toEqual([]);
+      });
+    });
+
     it("drops the score cap and tells the model not to lower the score for dealbreakers", async () => {
       const prompt = await systemPrompt(onsiteRequest({ profileData }));
       expect(prompt).not.toContain("cap fit.score at 20");
       expect(prompt).toContain("do not lower it for dealbreakers");
       expect(prompt).toContain(
-        "copy each violated dealbreaker exactly as written in the profile into dealbreakersViolated, and also name it in the rationale"
+        "copy the dealbreaker exactly as written in the profile into dealbreakersViolated and also name it in the rationale"
       );
+      expect(prompt).toContain("VERBATIM substring of the posting");
       expect(prompt).toContain("a fact the posting does not state is not a violation");
     });
 

@@ -97,6 +97,7 @@ const JOB_ANALYSIS_SCHEMA = {
         "strengths",
         "weaknesses",
         "dealbreakersViolated",
+        "dealbreakerQuotes",
       ],
       properties: {
         score: { type: "integer", minimum: 0, maximum: 100 },
@@ -107,6 +108,19 @@ const JOB_ANALYSIS_SCHEMA = {
         strengths: { type: "array", items: { type: "string" }, maxItems: 5 },
         weaknesses: { type: "array", items: { type: "string" }, maxItems: 5 },
         dealbreakersViolated: { type: "array", items: { type: "string" }, maxItems: 10 },
+        dealbreakerQuotes: {
+          type: "array",
+          maxItems: 10,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["dealbreaker", "quote"],
+            properties: {
+              dealbreaker: { type: "string" },
+              quote: { type: "string" },
+            },
+          },
+        },
       },
     },
   },
@@ -142,7 +156,8 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
       "- fit.strengths: what makes this specific role a strong choice for this candidate (e.g. seniority alignment, domain overlap, growth direction).",
       "- fit.weaknesses: risks or downsides of this role for this candidate (e.g. skill gaps to close, seniority mismatch, unstated arrangement, below-preference salary).",
       "- Base every item on the posting and profile text only; never invent skills or requirements.",
-      "- fit.dealbreakersViolated: when the posting violates a dealbreaker stated in the profile, copy each violated dealbreaker exactly as written in the profile into dealbreakersViolated, and also name it in the rationale. Leave it empty when none is violated.",
+      "- fit.dealbreakersViolated: check each dealbreaker in the profile one at a time against the posting. A dealbreaker is violated ONLY when the posting states something that directly contradicts it (for example the dealbreaker says \"Remote only\" and the posting says the role is hybrid or on-site; or it sets a minimum salary and the posting states a maximum below it). Silence, vagueness, or a requirement the posting merely does not mention is NOT a violation. When a violation is certain, copy the dealbreaker exactly as written in the profile into dealbreakersViolated and also name it in the rationale. Leave it empty when none is certainly violated.",
+      "- fit.dealbreakerQuotes: for every entry in dealbreakersViolated add {dealbreaker, quote}: the same dealbreaker text and a VERBATIM substring of the posting that contradicts it, copied exactly. If you cannot quote such a passage, the dealbreaker is not violated: remove it from dealbreakersViolated. Empty when dealbreakersViolated is empty.",
       "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead."
     );
   } else {
@@ -216,6 +231,45 @@ function enforceConsistency(
     result.fit = null;
   }
   return result;
+}
+
+/**
+ * Drops model-reported violations that carry no verbatim posting quote
+ * (the model returned a dealbreaker it could not back up). Payloads with no
+ * `dealbreakerQuotes` field at all (recorded fixtures from before the field)
+ * pass through unchanged. The quotes field never reaches the response.
+ */
+function requireDealbreakerQuotes(
+  payload: JobAnalysisPayload,
+  req: AnalyzeJobRequest,
+  warn: (message: string) => void
+): JobAnalysisPayload {
+  if (!payload.fit) return payload;
+  const { dealbreakerQuotes, ...fit } = payload.fit as typeof payload.fit & {
+    dealbreakerQuotes?: { dealbreaker: string; quote: string }[];
+  };
+  if (!dealbreakerQuotes) return { ...payload, fit };
+  const haystack = normalizeWhitespace(
+    `${JSON.stringify(req.extract.jsonLd)} ${JSON.stringify(req.extract.structuredSources ?? [])} ${req.extract.title} ${req.extract.mainText}`
+  ).toLowerCase();
+  const backed = (entry: string): boolean => {
+    const key = normalizeDealbreaker(entry);
+    return dealbreakerQuotes.some((q) => {
+      const quote = normalizeWhitespace(q.quote).toLowerCase();
+      const named = normalizeDealbreaker(q.dealbreaker);
+      return (
+        quote.length > 0 &&
+        haystack.includes(quote) &&
+        (named === key || named.includes(key) || key.includes(named))
+      );
+    });
+  };
+  const kept = (fit.dealbreakersViolated ?? []).filter((entry) => {
+    if (backed(entry)) return true;
+    warn(`dealbreakersViolated entry "${entry}" has no verbatim posting quote; dropping it`);
+    return false;
+  });
+  return { ...payload, fit: { ...fit, dealbreakersViolated: kept } };
 }
 
 function normalizeDealbreaker(text: string): string {
@@ -344,6 +398,7 @@ export async function orchestrateJobAnalysis(
 
   payload = validateEvidence(payload, req, warn);
   payload = enforceConsistency(payload, req);
+  payload = requireDealbreakerQuotes(payload, req, warn);
   payload = resolveDealbreakers(
     payload,
     req.profileData?.dealbreakers ?? dealbreakerLinesFromPrompt(req.profile ?? ""),

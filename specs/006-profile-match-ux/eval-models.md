@@ -219,13 +219,26 @@ DataZoneStandard `gpt-6-luna` 0 of 100 used.
 
 ## PR2 — rubric and dealbreakers listed without changing the score
 
-Run 2026-10-29, `--runs=5`, 44 pairs, `detectionMethod: "field"`. Raw output:
-[`eval-runs/pr2.json`](./eval-runs/pr2.json). **Gate failed on both configurations.**
+Run 2026-10-29, `--runs=5`, 44 pairs, `detectionMethod: "field"`. Attempt 1 raw output:
+[`eval-runs/pr2-attempt1.json`](./eval-runs/pr2-attempt1.json). **Gate failed on both configurations.**
 
 | Configuration | False dealbreakers (SC-008, 0) | Missed (SC-002, 0) | Score independence (SC-002, ≥ 90%) | Verdict stability (SC-004, ≥ 90%) | Arrangement accuracy | p50 / p95 latency |
 |---|---|---|---|---|---|---|
 | free `gpt-6-luna`, `none` | 31 | 5 | 66.7% | 77.3% | 100% | 3.3 s / 7.8 s |
 | Premium `gpt-6-luna-premium`, `low` | 9 | 7 | 66.7% | 75.0% | 100% | 4.9 s / 16.8 s |
+
+Attempt 2 (same day) added a required verbatim posting quote per violation, with the
+server dropping violations whose quote is not in the posting; the prompt also says silence is
+not a violation. Raw output: [`eval-runs/pr2.json`](./eval-runs/pr2.json); attempt 1 is
+[`eval-runs/pr2-attempt1.json`](./eval-runs/pr2-attempt1.json). **Gate still failed.**
+
+| Configuration (attempt 2) | False dealbreakers | Missed | Score independence | Verdict stability | p50 / p95 latency |
+|---|---|---|---|---|---|
+| free `gpt-6-luna`, `none` | 26 | 18 | 75.0% | 63.6% | 3.4 s / 9.7 s |
+| Premium `gpt-6-luna-premium`, `low` | 2 | 16 | 66.7% | 72.7% | 4.9 s / 15.3 s |
+
+The quote requirement cut false positives but made the model skip real violations (missed
+5 → 18 free, 7 → 16 Premium). Verdict stability and score independence did not improve.
 
 Premium cost is not computed because `modelPrices.json` has no `gpt-6-luna-premium` entry.
 Per research R8, SC-004 and score independence below 90% mean stop and report before merging.
