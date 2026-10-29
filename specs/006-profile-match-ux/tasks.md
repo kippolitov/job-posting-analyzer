@@ -333,7 +333,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - "Save to library" PUTs a payload with `source: "paste"`, empty `sourceUrl` and `filename`, and the response's `canonicalUrl`;
   - the result header reads "From pasted text" instead of a filename;
   - `?mode=paste&rescore=<key>` shows the cost line before sending and PATCHes in place when the keys match.
-- [ ] T060 [US1] Write the **P1 E2E test** `extension/tests/e2e/profileFreshness.spec.ts`, using the existing `fixtures.ts` harness and localhost fixture server:
+- [x] T060 [US1] Write the **P1 E2E test** `extension/tests/e2e/profileFreshness.spec.ts`, using the existing `fixtures.ts` harness and localhost fixture server:
   1. analyze a posting and save it;
   2. change the profile through the options page;
   3. the panel shows the out-of-date notice and the Rescore cost line;
@@ -427,7 +427,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - in `web/src/pages/Upload.tsx`, add the "Upload a file" and "Paste text" toggle as a radio group (`role="radiogroup"`), driven by and written back to `?mode=`. Both modes share the profile gate, rescore mode, cost line, result view and Save flow. Rename the heading from "Analyze a document" to "Analyze a posting", and in `web/src/components/AppShell.tsx` rename the nav entry from "Analyze document" to "Analyze posting". Keep the `/upload` route. Update any existing test that queries the old names.
   - in `web/src/api/endpoints.ts`, `analyzeDocument` accepts `{ text }` as an alternative to `{ file }`;
   - a paste result's header reads "From pasted text", and Save sends `source: "paste"` with empty `sourceUrl` and `filename`.
-- [ ] T078 [US1] Run `npm run build` in `extension/`, then both P1 E2E tests: the extension test (T060) and `npm run test:e2e` from `web/` for T061. Fix until green.
+- [x] T078 [US1] Run `npm run build` in `extension/`, then both P1 E2E tests: the extension test (T060) and `npm run test:e2e` from `web/` for T061. Fix until green.
 
 **Checkpoint**: US1 is fully functional. Scores are trustworthy across all four surfaces, with dealbreakers listed next to an unchanged score, and free-rescore metering.
 

@@ -1,5 +1,7 @@
 # PR2 handoff: where implementation stopped
 
+> **Update 2026-10-29 (T060/T078 done)**: the extension E2E `profileFreshness.spec.ts` now passes against a local Functions host (`REQUIRE_AUTH=false func start` + Azurite). `regionScoping.test.ts` fails on `main` too (pre-existing). Left: T087 (live eval, ask first) and T088 (gate, QG-3, PR, ask first). Earlier note follows.
+>
 > **Update 2026-10-29 (later session)**: everything below marked ⏳ is now implemented
 > and green (functions 507, extension 472, web 123 unit/contract tests; web E2E 4/4; lint
 > clean) **except**: T060 (extension E2E `profileFreshness.spec.ts` is written but not

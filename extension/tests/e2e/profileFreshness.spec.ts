@@ -1,6 +1,6 @@
 import http from "node:http";
 import { test, expect, e2eEnabled, skipReason } from "./fixtures";
-import type { BrowserContext } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 
 /**
  * P1 journey for 006 US1 on the extension: a saved score goes out of date when
@@ -21,28 +21,17 @@ const POSTING_HTML = `<!doctype html>
   ${"We value ownership, craftsmanship, and collaboration. ".repeat(10)}</p>
 </main></body></html>`;
 
-const THIN_HTML = `<!doctype html><html><head><title>Gone</title></head>
-<body><main><p>This posting has been removed.</p></main></body></html>`;
-
-function serveFixture(): Promise<{
-  server: http.Server;
-  url: string;
-  setThin: (thin: boolean) => void;
-}> {
-  let thin = false;
+function serveFixture(): Promise<{ server: http.Server; url: string }> {
   return new Promise((resolve) => {
     const server = http.createServer((_req, res) => {
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(thin ? THIN_HTML : POSTING_HTML);
+      res.end(POSTING_HTML);
     });
     server.listen(0, "127.0.0.1", () => {
       const address = server.address() as { port: number };
       resolve({
         server,
         url: `http://127.0.0.1:${address.port}/jobs/freshness-e2e`,
-        setThin: (next) => {
-          thin = next;
-        },
       });
     });
   });
@@ -85,6 +74,10 @@ test("profile change marks the score out of date; Rescore clears it; a gone post
     }
   });
 
+  // The side panel follows the active tab, and the options page steals it, so
+  // each save hands focus back to the posting tab (a tab-switch the panel
+  // answers from the stored analysis, like a user returning to the posting).
+  let postingPage: Page | undefined;
   async function saveProfile(text: string): Promise<void> {
     const options = await context.newPage();
     await options.goto(`chrome-extension://${extensionId}/options.html`);
@@ -92,12 +85,13 @@ test("profile change marks the score out of date; Rescore clears it; a gone post
     await options.getByRole("button", { name: "Save profile" }).click();
     await expect(options.getByRole("status")).toBeVisible();
     await options.close();
+    await postingPage?.bringToFront();
   }
 
   try {
     // 1. Analyze a posting and save it, scored against the first profile.
     await saveProfile("Senior .NET engineer, Azure, 10 years.");
-    const postingPage = await context.newPage();
+    postingPage = await context.newPage();
     await postingPage.goto(fixture.url);
     const sidePanel = await context.newPage();
     await sidePanel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
@@ -126,8 +120,10 @@ test("profile change marks the score out of date; Rescore clears it; a gone post
     await expect(sidePanel.getByText("Scored against an older profile")).toBeVisible({
       timeout: 15_000,
     });
-    fixture.setThin(true);
-    await postingPage.reload();
+    // The page empties in place (a reload would reset the panel, as any navigation does).
+    await postingPage!.evaluate(() => {
+      document.body.innerHTML = "<main><p>This posting has been removed.</p></main>";
+    });
     const before = analyzeCalls.length;
     await sidePanel.getByRole("button", { name: "Rescore" }).click();
     await expect(
