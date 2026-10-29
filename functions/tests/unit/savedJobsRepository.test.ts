@@ -328,3 +328,67 @@ describe("savedJobsRepository delete / prune / export", () => {
     );
   });
 });
+
+describe("savedJobsRepository — unavailableAt (006 contracts/saved-jobs-api.md)", () => {
+  const STAMP = "2026-10-29T10:00:00.000Z";
+
+  it("PATCH {unavailableAt} round-trips through getJob and listJobs", async () => {
+    const sub = uniqueSub();
+    const job = makeJob();
+    const key = keyOf(job.canonicalUrl);
+    await saveJob(sub, key, job);
+
+    await patchJob(sub, key, { unavailableAt: STAMP });
+    expect((await getJob(sub, key))?.unavailableAt).toBe(STAMP);
+    expect((await listJobs(sub, {}))[0].unavailableAt).toBe(STAMP);
+  });
+
+  it("omits unavailableAt when it was never set", async () => {
+    const sub = uniqueSub();
+    const job = makeJob();
+    const key = keyOf(job.canonicalUrl);
+    await saveJob(sub, key, job);
+    expect(await getJob(sub, key)).not.toHaveProperty("unavailableAt");
+  });
+
+  it("a PATCH that writes analysis clears it, even if the same body sets it", async () => {
+    const sub = uniqueSub();
+    const job = makeJob();
+    const key = keyOf(job.canonicalUrl);
+    await saveJob(sub, key, job);
+    await patchJob(sub, key, { unavailableAt: STAMP });
+
+    await patchJob(sub, key, { analysis: job.analysis, unavailableAt: STAMP });
+    expect(await getJob(sub, key)).not.toHaveProperty("unavailableAt");
+  });
+
+  it("a PUT clears it", async () => {
+    const sub = uniqueSub();
+    const job = makeJob();
+    const key = keyOf(job.canonicalUrl);
+    await saveJob(sub, key, job);
+    await patchJob(sub, key, { unavailableAt: STAMP });
+    await saveJob(sub, key, job);
+    expect(await getJob(sub, key)).not.toHaveProperty("unavailableAt");
+  });
+
+  it("PATCH {unavailableAt: null} clears it", async () => {
+    const sub = uniqueSub();
+    const job = makeJob();
+    const key = keyOf(job.canonicalUrl);
+    await saveJob(sub, key, job);
+    await patchJob(sub, key, { unavailableAt: STAMP });
+    await patchJob(sub, key, { unavailableAt: null });
+    expect(await getJob(sub, key)).not.toHaveProperty("unavailableAt");
+  });
+
+  it("an old-shape PATCH {status} preserves it", async () => {
+    const sub = uniqueSub();
+    const job = makeJob();
+    const key = keyOf(job.canonicalUrl);
+    await saveJob(sub, key, job);
+    await patchJob(sub, key, { unavailableAt: STAMP });
+    await patchJob(sub, key, { status: "applied" });
+    expect(await getJob(sub, key)).toMatchObject({ status: "applied", unavailableAt: STAMP });
+  });
+});

@@ -352,6 +352,53 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
       expect(immutable.status).toBe(400);
     });
 
+    it("PATCH sets unavailableAt, GET and list return it, and an invalid date is a 400 (006)", async () => {
+      const user = makeTestUser();
+      const job = makeJobBody();
+      const key = keyOf(job.canonicalUrl);
+      await jobsItem(
+        makeRequest({ method: "PUT", token: user.token, body: job, params: { key } }),
+        makeContext()
+      );
+
+      const stamp = "2026-10-29T10:00:00.000Z";
+      const patch = await jobsItem(
+        makeRequest({
+          method: "PATCH",
+          token: user.token,
+          body: { unavailableAt: stamp },
+          params: { key },
+        }),
+        makeContext()
+      );
+      expect(patch.status).toBe(200);
+      expect(patch.jsonBody).toMatchObject({ unavailableAt: stamp });
+
+      const get = await jobsItem(
+        makeRequest({ method: "GET", token: user.token, params: { key } }),
+        makeContext()
+      );
+      expect(get.jsonBody).toMatchObject({ unavailableAt: stamp });
+
+      const list = await jobsCollection(
+        makeRequest({ method: "GET", token: user.token }),
+        makeContext()
+      );
+      expect(JSON.stringify(list.jsonBody)).toContain(stamp);
+
+      const invalid = await jobsItem(
+        makeRequest({
+          method: "PATCH",
+          token: user.token,
+          body: { unavailableAt: "not a date" },
+          params: { key },
+        }),
+        makeContext()
+      );
+      expect(invalid.status).toBe(400);
+      expect(invalid.jsonBody).toMatchObject({ error: { code: "INVALID_REQUEST" } });
+    });
+
     it("DELETE returns 204 and is idempotent", async () => {
       const user = makeTestUser();
       const job = makeJobBody();

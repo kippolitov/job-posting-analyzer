@@ -19,6 +19,7 @@
     "missing": ["Kubernetes operations"],
     "desired": ["Terraform"],
     "strengths": ["Seniority aligns with staff-level responsibilities"],
-    "weaknesses": ["No Kubernetes evidence in the profile"]
+    "weaknesses": ["No Kubernetes evidence in the profile"],
+    "dealbreakersViolated": []
   }
 }

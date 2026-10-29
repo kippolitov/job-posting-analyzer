@@ -8,6 +8,7 @@ import {
 } from "../../src/services/jobExtractionOrchestrator";
 import { ModelConfigError } from "../../src/services/modelConfig";
 import type { AnalyzeJobRequest } from "../../src/models/job";
+import { fingerprintForRequest } from "../../src/services/profileFingerprint";
 
 vi.mock("openai", () => ({
   AzureOpenAI: vi.fn().mockImplementation(() => ({
@@ -261,7 +262,7 @@ describe("jobExtractionOrchestrator", () => {
     });
   });
 
-  it("includes the profile and dealbreaker cap rule in the prompt when present", async () => {
+  it("includes the profile in the prompt when present", async () => {
     const withProfile: AnalyzeJobRequest = {
       ...baseRequest,
       profile: "Principal .NET engineer; dealbreakers: no fully on-site roles",
@@ -274,7 +275,6 @@ describe("jobExtractionOrchestrator", () => {
     ];
     const all = params.messages.map((m) => m.content).join("\n");
     expect(all).toContain("Principal .NET engineer");
-    expect(all).toMatch(/20/); // dealbreaker cap value present in instructions
   });
 
   it("retries once with a repair instruction on unparseable output, then succeeds", async () => {
@@ -548,6 +548,139 @@ describe("jobExtractionOrchestrator", () => {
       const result = await orchestrateJobAnalysis(baseRequest);
       expect(result.arrangement).toBe("hybrid");
       expect(result).not.toHaveProperty("usage");
+    });
+  });
+
+  describe("dealbreakers (006 research R8, FR-005)", () => {
+    const onsiteText =
+      "Senior Backend Engineer at Initech. This role is fully on-site at our Dallas office, five days a week. " +
+      "You will build C# and .NET services on Azure.";
+    const onsiteRequest = (extra: Partial<AnalyzeJobRequest>): AnalyzeJobRequest => ({
+      ...baseRequest,
+      extract: { ...baseRequest.extract, mainText: onsiteText },
+      ...extra,
+    });
+    const profileData = {
+      text: "Senior .NET engineer, ten years of C# and Azure.",
+      dealbreakers: ["No fully on-site roles"],
+    };
+
+    async function systemPrompt(req: AnalyzeJobRequest): Promise<string> {
+      const mockCreate = await mockCreateWith(fixture("dealbreaker-onsite"));
+      await orchestrateJobAnalysis(req);
+      const [params] = mockCreate.mock.calls[0] as [
+        { messages: { role: string; content: string }[] },
+      ];
+      return params.messages[0].content;
+    }
+
+    it("keeps the user's exact wording and leaves the score at 72", async () => {
+      await mockCreateWith(fixture("dealbreaker-onsite"));
+      const result = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+      expect(result.fit?.dealbreakersViolated).toEqual(["No fully on-site roles"]);
+      expect(result.fit?.score).toBe(72);
+    });
+
+    it("maps a paraphrase by containment and keeps an unmatched entry with one warning", async () => {
+      await mockCreateWith(fixture("dealbreaker-paraphrased"));
+      const warn = vi.fn();
+      const result = await orchestrateJobAnalysis(
+        onsiteRequest({
+          profileData: { ...profileData, dealbreakers: ["No on-site roles", "Remote only"] },
+        }),
+        "free",
+        warn
+      );
+      expect(result.fit?.dealbreakersViolated).toEqual([
+        "No on-site roles",
+        "Must sponsor visas",
+      ]);
+      const unmatched = warn.mock.calls.filter(([m]) => String(m).includes("Must sponsor visas"));
+      expect(unmatched).toHaveLength(1);
+      expect(result.fit?.score).toBe(72);
+    });
+
+    it("recovers dealbreaker lines from a legacy profile string", async () => {
+      await mockCreateWith(fixture("dealbreaker-paraphrased"));
+      const result = await orchestrateJobAnalysis(
+        onsiteRequest({
+          profile: "Senior .NET engineer\n\nDealbreakers:\n- No on-site work",
+        })
+      );
+      expect(result.fit?.dealbreakersViolated?.[0]).toBe("No on-site work");
+    });
+
+    it("never changes the score, with or without violations", async () => {
+      await mockCreateWith(fixture("with-fit"));
+      const result = await orchestrateJobAnalysis({
+        ...baseRequest,
+        extract: {
+          ...baseRequest.extract,
+          mainText: "Staff engineer role. Fully remote within the United States.",
+        },
+        profileData,
+      });
+      expect(result.fit?.score).toBe(88);
+      expect(result.fit?.dealbreakersViolated).toEqual([]);
+    });
+
+    it("drops the score cap and tells the model not to lower the score for dealbreakers", async () => {
+      const prompt = await systemPrompt(onsiteRequest({ profileData }));
+      expect(prompt).not.toContain("cap fit.score at 20");
+      expect(prompt).toContain("do not lower it for dealbreakers");
+      expect(prompt).toContain(
+        "copy each violated dealbreaker exactly as written in the profile into dealbreakersViolated, and also name it in the rationale"
+      );
+      expect(prompt).toContain("a fact the posting does not state is not a violation");
+    });
+
+    it("serializes profileData into the user message and ignores the legacy string", async () => {
+      const mockCreate = await mockCreateWith(fixture("dealbreaker-onsite"));
+      await orchestrateJobAnalysis(onsiteRequest({ profileData, profile: "stale string" }));
+      const [params] = mockCreate.mock.calls[0] as [
+        { messages: { role: string; content: string }[] },
+      ];
+      const user = params.messages[1].content;
+      expect(user).toContain("Dealbreakers:\n- No fully on-site roles");
+      expect(user).not.toContain("stale string");
+    });
+
+    it("gives fit: null and no dealbreakersViolated when no profile is sent", async () => {
+      await mockCreateWith(fixture("dealbreaker-onsite"));
+      const result = await orchestrateJobAnalysis(onsiteRequest({}));
+      expect(result.fit).toBeNull();
+    });
+
+    it("stamps fit.profileFingerprint with the request's fingerprint", async () => {
+      await mockCreateWith(fixture("dealbreaker-onsite"));
+      const req = onsiteRequest({ profileData });
+      const result = await orchestrateJobAnalysis(req);
+      expect(result.fit?.profileFingerprint).toBe(fingerprintForRequest(req));
+      expect(result.fit?.profileFingerprint).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("requires fit.dealbreakersViolated in the schema, capped at 10 items", async () => {
+      const mockCreate = await mockCreateWith(fixture("dealbreaker-onsite"));
+      await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+      const [params] = mockCreate.mock.calls[0] as [
+        {
+          response_format: {
+            json_schema: {
+              schema: {
+                properties: {
+                  fit: {
+                    required: string[];
+                    properties: Record<string, { type: string; maxItems?: number }>;
+                  };
+                };
+              };
+            };
+          };
+        },
+      ];
+      const fit = params.response_format.json_schema.schema.properties.fit;
+      expect(fit.required).toContain("dealbreakersViolated");
+      expect(fit.properties.dealbreakersViolated).toMatchObject({ type: "array", maxItems: 10 });
     });
   });
 });
