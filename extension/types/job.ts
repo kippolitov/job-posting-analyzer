@@ -38,6 +38,8 @@ export interface CandidateProfile {
   text: string;
   dealbreakers: string[];
   updatedAt: string;
+  /** Server-derived (006 R5). Optional on read so an older backend still type-checks. */
+  fingerprint?: string;
 }
 
 export type JobErrorCode =

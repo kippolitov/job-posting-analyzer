@@ -170,36 +170,36 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for the groundwork (write first, must fail) ⚠️
 
-- [ ] T028 [P] Write `shared/fitView.fixtures.ts` exporting `NORMALIZE_CASES` as `[input, expected]` pairs. Cover:
+- [X] T028 [P] Write `shared/fitView.fixtures.ts` exporting `NORMALIZE_CASES` as `[input, expected]` pairs. Cover:
   - `null`;
   - a pre-breakdown fit (`{score, rationale}` only);
   - a 005-era fit with all string arrays and no new fields;
   - a fully populated PR2 fit.
   Each expects absent arrays to become `[]`, `dealbreakersViolated` to default to `[]`, `evidence` to default to `{}`, and `profileFingerprint` to stay `undefined` when absent.
-- [ ] T029 [P] Write `extension/tests/unit/fitView.test.ts` and `web/tests/unit/fitView.test.ts`. Each iterates `NORMALIZE_CASES` from `shared/fitView.fixtures.ts` against `normalizeFit` and asserts it never throws. The two suites are deliberately duplicated (research R10, FR-023 guard). They get more fixture tables in later tasks.
-- [ ] T030 [P] Write `functions/tests/unit/profileSerialization.test.ts` for `shared/types/profile.ts`:
+- [X] T029 [P] Write `extension/tests/unit/fitView.test.ts` and `web/tests/unit/fitView.test.ts`. Each iterates `NORMALIZE_CASES` from `shared/fitView.fixtures.ts` against `normalizeFit` and asserts it never throws. The two suites are deliberately duplicated (research R10, FR-023 guard). They get more fixture tables in later tasks.
+- [X] T030 [P] Write `functions/tests/unit/profileSerialization.test.ts` for `shared/types/profile.ts`:
   - **invariant**: `profileToPromptText({text, dealbreakers})` output is byte-identical to the current implementation for 5 cases (no dealbreakers, one, several, trailing whitespace, unicode). Snapshot the strings literally in the test.
   - `dealbreakerLinesFromPrompt(profileToPromptText(p))` round-trips `p.dealbreakers` for every case.
   - `dealbreakerLinesFromPrompt` on text with no `Dealbreakers:` section returns `[]`.
-- [ ] T031 [P] Write `functions/tests/unit/profileFingerprint.test.ts`:
+- [X] T031 [P] Write `functions/tests/unit/profileFingerprint.test.ts`:
   - `profileFingerprint(s)` is 64 lowercase hex characters;
   - it equals SHA-256 of `s.replace(/\s+/g, " ").trim()`;
   - whitespace-only variants give the same fingerprint (US1 #6);
   - a changed dealbreaker gives a different one;
   - `fingerprintForRequest({ profileData })` equals `fingerprintForRequest({ profile: profileToPromptText(profileData) })`.
-- [ ] T032 [P] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` (Azurite), per [contracts/profile-api.md](./contracts/profile-api.md):
+- [X] T032 [P] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` (Azurite), per [contracts/profile-api.md](./contracts/profile-api.md):
   - GET and PUT responses include `fingerprint`;
   - **merge PUT (trap 2)**: seed a row with `preferences` and `confirmedSkills` columns, PUT `{text, dealbreakers}`, and assert both columns survive;
   - `preferences: null` clears them;
   - `fingerprintHistory` is prepended only when the fingerprint changes, capped at 20, and never returned by GET;
   - a whitespace-only PUT leaves `fingerprint` unchanged and history unchanged;
   - a PUT racing another write (simulate a 412 on the first attempt) retries and keeps both changes.
-- [ ] T033 [P] Write `functions/tests/unit/analyzeRequest.test.ts` for the request guard and profile resolution in [contracts/analyze-api.md §1](./contracts/analyze-api.md):
+- [X] T033 [P] Write `functions/tests/unit/analyzeRequest.test.ts` for the request guard and profile resolution in [contracts/analyze-api.md §1](./contracts/analyze-api.md):
   - `isAnalyzeJobRequest` accepts a body with valid `profileData`;
   - it rejects malformed `profileData` (non-string `text`, non-array `dealbreakers`) and a malformed `rescore.priorFingerprint` (not null and not 64 hex);
   - `resolveScoringProfile(body)` returns `profileToPromptText(profileData)` when `profileData` is present, ignoring `profile`, and otherwise returns `profile`;
   - a legacy body without the new fields is accepted unchanged.
-- [ ] T034 [P] Extend `extension/tests/unit/AccountBar.test.tsx` for FR-028:
+- [X] T034 [P] Extend `extension/tests/unit/AccountBar.test.tsx` for FR-028:
   - the web app control is a link whose visible text is "Web app", found with `getByRole("link", { name: "Web app" })`, opening `WXT_WEB_APP_URL` in a new tab;
   - its accessible description (`toHaveAccessibleDescription`) and its `title` are both "Opens in a new tab. You'll be asked to sign in with Google.";
   - it carries the secondary-button classes, including a minimum 24 × 24 px target (`min-h-6 min-w-6`);
@@ -209,19 +209,19 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Implementation for the groundwork
 
-- [ ] T035 Extend `Fit` in `shared/types/job.ts` with optional `dealbreakersViolated?: string[]` and `profileFingerprint?: string`, with JSDoc citing research R4. Do **not** change `matching`, `missing` or `desired`. Add `AnalyzeJobRequest.profileData?: ScoringProfile` and `AnalyzeJobRequest.rescore?: { priorFingerprint: string | null }`. `ScoringProfile` is `{ text; dealbreakers; preferences?; confirmedSkills? }`, exported from `shared/types/profile.ts`. Leave `isJobAnalysisPayload` unchanged.
-- [ ] T036 Add `dealbreakerLinesFromPrompt` to `shared/types/profile.ts`, and widen `profileToPromptText`'s generic to accept `ScoringProfile` without changing output for `{text, dealbreakers}`. This makes T030 pass.
-- [ ] T037 Implement `functions/src/services/profileFingerprint.ts`, exporting `profileFingerprint(serialized)` and `fingerprintForRequest(body)` with `node:crypto`. This makes T031 pass.
-- [ ] T038 Extend `isAnalyzeJobRequest` in `shared/types/job.ts` to validate the optional `profileData` and `rescore` shapes. Add `resolveScoringProfile` in `functions/src/services/profileFingerprint.ts`. This makes T033 pass.
-- [ ] T039 Update `functions/src/services/profileRepository.ts` and `functions/src/models/user.ts` to make T032 pass:
+- [X] T035 Extend `Fit` in `shared/types/job.ts` with optional `dealbreakersViolated?: string[]` and `profileFingerprint?: string`, with JSDoc citing research R4. Do **not** change `matching`, `missing` or `desired`. Add `AnalyzeJobRequest.profileData?: ScoringProfile` and `AnalyzeJobRequest.rescore?: { priorFingerprint: string | null }`. `ScoringProfile` is `{ text; dealbreakers; preferences?; confirmedSkills? }`, exported from `shared/types/profile.ts`. Leave `isJobAnalysisPayload` unchanged.
+- [X] T036 Add `dealbreakerLinesFromPrompt` to `shared/types/profile.ts`, and widen `profileToPromptText`'s generic to accept `ScoringProfile` without changing output for `{text, dealbreakers}`. This makes T030 pass.
+- [X] T037 Implement `functions/src/services/profileFingerprint.ts`, exporting `profileFingerprint(serialized)` and `fingerprintForRequest(body)` with `node:crypto`. This makes T031 pass.
+- [X] T038 Extend `isAnalyzeJobRequest` in `shared/types/job.ts` to validate the optional `profileData` and `rescore` shapes. Add `resolveScoringProfile` in `functions/src/services/profileFingerprint.ts`. This makes T033 pass.
+- [X] T039 Update `functions/src/services/profileRepository.ts` and `functions/src/models/user.ts` to make T032 pass:
   - `ProfileEntity` gains the optional JSON columns `fingerprintHistory`, `preferences` and `confirmedSkills`;
   - `StoredProfile` gains `fingerprint`, computed on read with `profileFingerprint(profileToPromptText(stored))`;
   - `putProfile` reads the existing row, merges the body over it, prepends the old fingerprint to `fingerprintHistory` when it changed (capped at 20), and writes **conditionally on the row's ETag** (`updateEntity(…, "Replace", { etag })`, or `createEntity` when no row exists), carrying **all** columns and retrying on 412 up to 4 times;
   - `isProfilePutBody` accepts the optional `preferences` (or `null`) and `confirmedSkills`, structurally only. Detailed validation lands in US4 and US5.
   Return `fingerprint` from the GET and PUT handlers in `functions/src/profile/index.ts`.
-- [ ] T040 Create `shared/fitView.ts` with `normalizeFit`, `NormalizedFit`, `Verdict` and `Freshness` per [data-model.md §2](./data-model.md), to make T028 and T029 pass. Keep it pure TypeScript with no DOM, `chrome` or `fetch` imports.
-- [ ] T041 [P] Rework the web app link in `extension/components/AccountBar.tsx` to make T034 pass. Keep the `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. Give it the visible text "Web app" after the existing icon (still `aria-hidden`), the "Manage subscription" button's classes (`rounded-md px-2 py-1 text-[11px] font-medium`) plus a border so it reads as a button, and `min-h-6 min-w-6`. Drop `aria-label`, so the accessible name is the visible text. Put the sign-in note in `title` and, through `aria-describedby`, in a visually hidden (`sr-only`) span. Buttons and links have no `alt` attribute; `title` gives the hover tooltip and `aria-describedby` makes screen readers announce it. Check the bar at 360 px width with the Premium fixture: nothing may wrap onto a second line except the left-hand usage text.
-- [ ] T042 [P] Add `fingerprint: string` to `web/src/api/types.ts` `ProfilePayload` and `fingerprint` to the extension's `CandidateProfile` in `extension/types/job.ts`. Both are optional on read, so an older backend still type-checks at runtime.
+- [X] T040 Create `shared/fitView.ts` with `normalizeFit`, `NormalizedFit`, `Verdict` and `Freshness` per [data-model.md §2](./data-model.md), to make T028 and T029 pass. Keep it pure TypeScript with no DOM, `chrome` or `fetch` imports.
+- [X] T041 [P] Rework the web app link in `extension/components/AccountBar.tsx` to make T034 pass. Keep the `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. Give it the visible text "Web app" after the existing icon (still `aria-hidden`), the "Manage subscription" button's classes (`rounded-md px-2 py-1 text-[11px] font-medium`) plus a border so it reads as a button, and `min-h-6 min-w-6`. Drop `aria-label`, so the accessible name is the visible text. Put the sign-in note in `title` and, through `aria-describedby`, in a visually hidden (`sr-only`) span. Buttons and links have no `alt` attribute; `title` gives the hover tooltip and `aria-describedby` makes screen readers announce it. Check the bar at 360 px width with the Premium fixture: nothing may wrap onto a second line except the left-hand usage text.
+- [X] T042 [P] Add `fingerprint: string` to `web/src/api/types.ts` `ProfilePayload` and `fingerprint` to the extension's `CandidateProfile` in `extension/types/job.ts`. Both are optional on read, so an older backend still type-checks at runtime.
 
 **Checkpoint**: shared types, fingerprinting and merge-PUT are in place, with no user-visible change yet.
 

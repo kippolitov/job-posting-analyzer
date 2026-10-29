@@ -21,6 +21,8 @@ export interface ProfilePayload {
   dealbreakers: string[];
   updatedAt: string;
   schemaVersion: number;
+  /** Server-derived (006 R5). Optional on read so an older backend still type-checks. */
+  fingerprint?: string;
 }
 
 export interface CheckoutResult {

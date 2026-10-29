@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
-import { TableClient } from "@azure/data-tables";
 import {
   getProfile,
   putProfile,
@@ -169,16 +168,17 @@ describe("profileRepository", () => {
       const sub = uniqueSub();
       await putProfile(sub, { text: "v1", dealbreakers: [] });
 
-      const original = TableClient.prototype.updateEntity;
+      // The repository uses ensureTable's cached client, so spy on that instance.
+      const client = await ensureTable("Profiles");
+      const original = client.updateEntity.bind(client);
       let raced = false;
       const spy = vi
-        .spyOn(TableClient.prototype, "updateEntity")
-        .mockImplementation(async function (this: TableClient, ...args) {
+        .spyOn(client, "updateEntity")
+        .mockImplementation(async (...args: Parameters<typeof original>) => {
           if (!raced) {
             raced = true;
             // Another writer lands between our read and our write.
-            await original.call(
-              this,
+            await original(
               {
                 partitionKey: sub,
                 rowKey: "profile",
@@ -187,11 +187,11 @@ describe("profileRepository", () => {
               "Merge"
             );
           }
-          return original.apply(this, args);
+          return original(...args);
         });
 
       await putProfile(sub, { text: "v2", dealbreakers: ["Remote only"] });
-      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(spy).toHaveBeenCalledTimes(2);
 
       const row = await readRow(sub);
       expect(row.text).toBe("v2");

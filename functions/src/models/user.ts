@@ -122,6 +122,12 @@ export interface ProfileEntity {
   dealbreakers: string;
   updatedAt: string;
   schemaVersion: number;
+  /** JSON-encoded string[]: the last 20 previous fingerprints, newest first (006 R5/R6). */
+  fingerprintHistory?: string;
+  /** JSON-encoded Preferences (006 PR4). Absent means none. */
+  preferences?: string;
+  /** JSON-encoded string[] (006 PR5). */
+  confirmedSkills?: string;
 }
 
 /** Discriminates a saved posting's origin (data-model.md §2; "paste" added by 005 FR-020/FR-021). */
@@ -175,18 +181,32 @@ export interface SavedJobAnalysis extends Record<string, unknown> {
   analyzedAt: string;
 }
 
+/**
+ * PUT /api/profile body. Merge semantics (contracts/profile-api.md §2):
+ * omitted optional fields keep their stored values; `preferences: null` and
+ * `confirmedSkills: []` clear them.
+ */
 export interface ProfilePutBody {
   text: string;
   dealbreakers: string[];
+  preferences?: Record<string, unknown> | null;
+  confirmedSkills?: string[];
 }
 
+/** Structural only; detailed preference and skill validation lands with PR4/PR5. */
 export function isProfilePutBody(body: unknown): body is ProfilePutBody {
   if (typeof body !== "object" || body === null) return false;
   const v = body as Record<string, unknown>;
   return (
     typeof v.text === "string" &&
     Array.isArray(v.dealbreakers) &&
-    v.dealbreakers.every((d) => typeof d === "string")
+    v.dealbreakers.every((d) => typeof d === "string") &&
+    (v.preferences === undefined ||
+      v.preferences === null ||
+      (typeof v.preferences === "object" && !Array.isArray(v.preferences))) &&
+    (v.confirmedSkills === undefined ||
+      (Array.isArray(v.confirmedSkills) &&
+        v.confirmedSkills.every((s) => typeof s === "string")))
   );
 }
 
