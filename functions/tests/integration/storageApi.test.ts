@@ -156,6 +156,36 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
       expect(get.jsonBody).toMatchObject({ text: "Engineer" });
     });
 
+    it("GET and PUT include the profile fingerprint, but never fingerprintHistory (006)", async () => {
+      const user = makeTestUser();
+      const put = await profile(
+        makeRequest({
+          method: "PUT",
+          token: user.token,
+          body: { text: "Engineer", dealbreakers: ["Remote only"] },
+        }),
+        makeContext()
+      );
+      const fingerprint = (put.jsonBody as { fingerprint: string }).fingerprint;
+      expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
+
+      await profile(
+        makeRequest({
+          method: "PUT",
+          token: user.token,
+          body: { text: "Engineer v2", dealbreakers: ["Remote only"] },
+        }),
+        makeContext()
+      );
+      const get = await profile(
+        makeRequest({ method: "GET", token: user.token }),
+        makeContext()
+      );
+      expect(get.jsonBody).toHaveProperty("fingerprint");
+      expect((get.jsonBody as { fingerprint: string }).fingerprint).not.toBe(fingerprint);
+      expect(get.jsonBody).not.toHaveProperty("fingerprintHistory");
+    });
+
     it("PUT rejects malformed bodies with 400 INVALID_REQUEST", async () => {
       const user = makeTestUser();
       const res = await profile(
