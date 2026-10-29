@@ -1,6 +1,6 @@
 # Eval: scoring-model choice (PR1, FR-M01–M05)
 
-**Status**: awaiting sign-off (T024, 2026-10-29). Raw results:
+**Status**: settings signed off 2026-10-29; capacity step pending (T024). Raw results:
 [`eval-runs/pr1.json`](./eval-runs/pr1.json).
 
 ## Summary for sign-off
@@ -165,7 +165,7 @@ sit on 50K TPM deployments.
      it costs less than today's Premium median, so FR-M05 holds for the
      fallback.
 
-### Chosen settings (pending your sign-off)
+### Chosen settings (signed off 2026-10-29)
 
 | Tier | Settings | Rollback |
 |---|---|---|
@@ -192,6 +192,13 @@ check that the privacy policy's wording covers cross-region processing.
 Alternatively, create the Premium luna deployment as DataZoneStandard:
 `6-luna … Std DZ` meters exist at about 10% above global.
 
+**Decision (2026-10-29)**: any-region (GlobalStandard) processing is accepted
+for the free tier. Premium's data zone is decided with the capacity step.
+
+Quota in `eastus2` on 2026-10-29 (1 unit = 1K TPM; quota itself is free,
+only tokens are billed): GlobalStandard `gpt-6-luna` 20 of 250 used,
+DataZoneStandard `gpt-6-luna` 0 of 100 used.
+
 ## Known corpus gaps
 
 - 5 full-length postings and 44 pairs, so each count above moves by 5 for a
@@ -209,4 +216,6 @@ Alternatively, create the Premium luna deployment as DataZoneStandard:
 
 ## Sign-off
 
-- [ ] Product owner: chosen settings and the capacity step approved (date):
+- [X] Product owner: chosen settings approved (2026-10-29): free `gpt-6-luna`
+  at `none`, Premium `gpt-6-luna` at `low`; any-region processing for free.
+- [ ] Product owner: capacity step approved (date):
