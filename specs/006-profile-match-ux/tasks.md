@@ -132,7 +132,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - `luna-medium`;
   - `premium-5.4-mini-t0`, the chosen Premium configuration, with `gate: true`.
   The others have `gate: false` and serve as the comparison and the R2 fallback.
-- [ ] T021 **⚠ APPROVAL**: ask the user to approve setting `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on Function App `job-posting-analyzer-func` (resource group `job-posting-analyzer-rg`) **before** PR1 merges (research R1, trap 4). After approval, set them with `az functionapp config appsettings set` and confirm by listing the setting **names**. Never print values. Record the date in `eval-models.md`.
+- [X] T021 **⚠ APPROVAL**: ask the user to approve setting `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on Function App `job-posting-analyzer-func` (resource group `job-posting-analyzer-rg`) **before** PR1 merges (research R1, trap 4). After approval, set them with `az functionapp config appsettings set` and confirm by listing the setting **names**. Never print values. Record the date in `eval-models.md`.
 - [X] T022 Implement `functions/scripts/evalMetrics.ts` to make T008 pass. Then extend `functions/scripts/evalPostings.ts` per [contracts/eval-harness.md](./contracts/eval-harness.md):
   - with no `--configs`, keep today's behaviour exactly;
   - add `--configs`, `--runs` (default 5), `--concurrency` (default 2, with exponential backoff on 429 up to 5 retries), `--only` and `--out`;

@@ -9,6 +9,7 @@ from `eval-runs/pr1.json`.
 |---|---|---|---|
 | 2026-10-29 | Created deployment `gpt-5.4-mini` (T013, approved) | Model version 2026-03-17, **DataZoneStandard** (processing stays in the US data zone), 50K TPM, in `job-posting-analyzer-openai` / `job-posting-analyzer-rg`. No fixed charge. | Delete the deployment |
 | 2026-10-29 | Prod `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM`: `gpt-5.4-nano` → `gpt-5.4-mini` (approved) | After a two-posting probe through the unchanged production code path (research R2) | Set it back to `gpt-5.4-nano` |
+| 2026-10-29 | Prod `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on `job-posting-analyzer-func` (T021, approved) | Inert on the deployed code; keeps temperature 0 on both tiers once PR1 deploys (research R1, trap 4). Free still resolves its deployment from `AZURE_OPENAI_DEPLOYMENT`. | Delete both settings |
 
 ## API version probe (T014, quickstart P1-2)
 
