@@ -283,7 +283,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - a PATCH with `analysis` clears it, and so does a PUT;
   - an invalid date returns 400;
   - `PATCH {status}` preserves it.
-- [ ] T052 [P] [US1] Add the freshness and rescore cases to `shared/fitView.fixtures.ts` as `FRESHNESS_CASES`, `RESCORE_ACTION_CASES` and `COST_LINE_CASES`:
+- [X] T052 [P] [US1] Add the freshness and rescore cases to `shared/fitView.fixtures.ts` as `FRESHNESS_CASES`, `RESCORE_ACTION_CASES` and `COST_LINE_CASES`:
   - every row of the data-model §2 freshness table;
   - `rescoreAction` for each `source` × freshness, plus `unavailableAt`, covering the research R7 table and including paste rows, whose copy is "Paste again to rescore" on both surfaces and whose web link is `/upload?mode=paste&rescore=<key>`;
   - `rescoreCostLine` for 7 of 10 left ("Free — 7 of 10 free rescores left this month"), 0 left with allowance left ("Uses 1 analysis"), and both exhausted.

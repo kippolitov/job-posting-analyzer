@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { setupServer, type SetupServerApi } from "msw/node";
 import { afterAll, beforeAll, beforeEach, vi } from "vitest";
 import type { CandidateProfile, SavedJob } from "../../../types/job";
+import { profileToPromptText } from "../../../../shared/types/profile";
 
 /**
  * In-memory fake of the storage API, faithful to contracts/storage-api.md:
@@ -24,8 +25,26 @@ export interface FakeStorageApi {
   setCap(cap: number): void;
   /** GET /api/account tier — free by default (contracts/billing-api.md). */
   setAccountTier(tier: "free" | "premium"): void;
+  /** GET /api/account usage overrides, e.g. rescore counts (006 FR-004a). */
+  setAccountUsage(usage: Partial<AccountUsage>): void;
   reset(): void;
   seededKey(canonicalUrl: string): Promise<string>;
+}
+
+interface AccountUsage {
+  count: number;
+  limit: number;
+  resetsAt: string;
+  rescoresUsed: number;
+  rescoresLimit: number;
+}
+
+/** The server's profile fingerprint (006 research R5), recomputed the same way. */
+export async function fakeFingerprint(profile: {
+  text: string;
+  dealbreakers: string[];
+}): Promise<string> {
+  return sha256Hex(profileToPromptText(profile).replace(/\s+/g, " ").trim());
 }
 
 async function sha256Hex(input: string): Promise<string> {
@@ -43,6 +62,7 @@ export function createFakeStorageApi(): FakeStorageApi {
   let profile: CandidateProfile | null = null;
   let cap = 1_000;
   let accountTier: "free" | "premium" = "free";
+  let accountUsage: Partial<AccountUsage> = {};
   let forcedFailure: { status: number; code: string } | null = null;
 
   function takeForcedFailure(): HttpResponse | null {
@@ -58,7 +78,7 @@ export function createFakeStorageApi(): FakeStorageApi {
   const base = TEST_API_BASE;
 
   const server = setupServer(
-    http.get(`${base}/profile`, () => {
+    http.get(`${base}/profile`, async () => {
       const failure = takeForcedFailure();
       if (failure) return failure;
       if (!profile) {
@@ -67,7 +87,7 @@ export function createFakeStorageApi(): FakeStorageApi {
           { status: 404 }
         );
       }
-      return HttpResponse.json(profile);
+      return HttpResponse.json({ ...profile, fingerprint: await fakeFingerprint(profile) });
     }),
 
     http.put(`${base}/profile`, async ({ request }) => {
@@ -90,7 +110,7 @@ export function createFakeStorageApi(): FakeStorageApi {
           .filter(Boolean),
         updatedAt: new Date().toISOString(),
       };
-      return HttpResponse.json(profile);
+      return HttpResponse.json({ ...profile, fingerprint: await fakeFingerprint(profile) });
     }),
 
     http.delete(`${base}/profile`, () => {
@@ -111,10 +131,14 @@ export function createFakeStorageApi(): FakeStorageApi {
       return HttpResponse.json({
         email: "user@example.com",
         tier: accountTier,
-        usage:
-          accountTier === "premium"
-            ? { count: 0, limit: 300, resetsAt: "2026-08-01T00:00:00Z" }
-            : { count: 0, limit: 50, resetsAt: "2026-08-01T00:00:00Z" },
+        usage: {
+          count: 0,
+          limit: accountTier === "premium" ? 300 : 50,
+          resetsAt: "2026-08-01T00:00:00Z",
+          rescoresUsed: 0,
+          rescoresLimit: 10,
+          ...accountUsage,
+        },
         subscription:
           accountTier === "premium"
             ? { status: "active", renewsAt: "2026-08-03T00:00:00Z", endsAt: null }
@@ -247,8 +271,17 @@ export function createFakeStorageApi(): FakeStorageApi {
         );
       }
       const patch = (await request.json()) as Partial<SavedJob>;
+      // contracts/saved-jobs-api.md: writing an analysis always clears the flag.
+      const { unavailableAt: _previous, ...rest } = existing;
+      const unavailableAt =
+        patch.analysis !== undefined
+          ? null
+          : patch.unavailableAt !== undefined
+            ? patch.unavailableAt
+            : (existing.unavailableAt ?? null);
       const updated: SavedJob = {
-        ...existing,
+        ...rest,
+        ...(unavailableAt ? { unavailableAt } : {}),
         ...(patch.status !== undefined ? { status: patch.status } : {}),
         ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
         ...(patch.analysis !== undefined ? { analysis: patch.analysis } : {}),
@@ -295,11 +328,15 @@ export function createFakeStorageApi(): FakeStorageApi {
     setAccountTier: (tier) => {
       accountTier = tier;
     },
+    setAccountUsage: (usage) => {
+      accountUsage = usage;
+    },
     reset: () => {
       jobs.clear();
       profile = null;
       cap = 1_000;
       accountTier = "free";
+      accountUsage = {};
       forcedFailure = null;
     },
     seededKey: (canonicalUrl) => sha256Hex(canonicalUrl),
