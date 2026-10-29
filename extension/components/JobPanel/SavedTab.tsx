@@ -5,6 +5,8 @@ import { fetchAccount, startCheckout, SAVED_JOBS_CAP } from "../../services/acco
 import type { Arrangement, JobStatus, SavedJob } from "../../types/job";
 import { ARRANGEMENTS, JOB_STATUSES } from "../../types/job";
 import { SavedJobRow } from "./SavedJobRow";
+import { useLiveFingerprint } from "./useFreshness";
+import { getCachedFingerprint, getProfile } from "../../services/profileStorage";
 
 type SortOrder = "newest" | "oldest";
 
@@ -53,6 +55,33 @@ export function SavedTab() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // The current profile fingerprint for the out-of-date markers: the session
+  // cache first, then one profile fetch (which fills the cache for next time).
+  const [reportedFingerprint, setReportedFingerprint] = useState<
+    string | null | undefined
+  >(undefined);
+  const currentFingerprint = useLiveFingerprint(reportedFingerprint);
+  useEffect(() => {
+    // After the list settles, so this extra request can't be the one that
+    // meets a transient failure meant for the library load.
+    if (loadState === "loading") return;
+    let cancelled = false;
+    void (async () => {
+      let value = await getCachedFingerprint();
+      if (value === undefined) {
+        try {
+          value = (await getProfile())?.fingerprint ?? null;
+        } catch {
+          value = undefined; // unknown: no markers rather than wrong ones
+        }
+      }
+      if (!cancelled) setReportedFingerprint(value);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadState]);
 
   useEffect(() => {
     fetchAccount()
@@ -315,6 +344,7 @@ export function SavedTab() {
                 <SavedJobRow
                   key={job.canonicalUrl}
                   job={job}
+                  currentFingerprint={currentFingerprint}
                   onStatusChange={(url, s) => void handleStatusChange(url, s)}
                   onNotesChange={(url, notes) => void handleNotesChange(url, notes)}
                   onDelete={(url) => void handleDelete(url)}

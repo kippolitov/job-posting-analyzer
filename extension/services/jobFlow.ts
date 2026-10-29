@@ -12,7 +12,8 @@ import { postJobAnalysis } from "./jobAnalysisClient";
 import { jobStorage } from "./jobStorage";
 import { learnedSelectors } from "./learnedSelectors";
 import { getCached, setCached } from "./jobAnalysisCache";
-import { getProfile, profileToPromptText } from "./profileStorage";
+import { getProfile, profileToPromptText, toScoringProfile } from "./profileStorage";
+import type { JobAnalysisRequest } from "./jobAnalysisClient";
 import { MessageType } from "../types/messages";
 import type {
   AnalyzeJobPageMessage,
@@ -20,6 +21,8 @@ import type {
   AnalyzeScopedRegionMessage,
   CancelAnalysisMessage,
   ExtensionMessage,
+  ProfileFreshnessFields,
+  RescoreJobPageMessage,
 } from "../types/messages";
 import type {
   CandidateProfile,
@@ -208,23 +211,54 @@ async function lookupStored(
 }
 
 /**
- * A stored analysis is fit-stale when recomputing is the only way the current
- * fit UI ever appears — the default lookup never reaches the backend again:
- * - fit is null but the profile was created/updated after the analysis ran;
- * - fit predates the breakdown fields (matching/missing/…), a one-time
- *   upgrade per stored analysis (fresh results always carry the breakdown,
- *   so this cannot loop).
+ * The profile as one analysis flow sees it. A profile that cannot be fetched
+ * must not fail the analysis (the fit is simply not scored), but the panel has
+ * to be able to say why, so the failure travels with the result (spec edge
+ * case "Profile fetch fails at analysis time").
  */
-async function needsFitRefresh(analysis: JobAnalysis): Promise<boolean> {
-  if (analysis.fit && analysis.fit.matching !== undefined) return false;
+interface LoadedProfile {
+  profile: CandidateProfile | null;
+  unavailable: boolean;
+}
+
+async function loadProfile(): Promise<LoadedProfile> {
   try {
-    const profile = await getProfile();
-    if (profile === null) return false;
-    if (analysis.fit) return true;
-    return Date.parse(analysis.analyzedAt) < Date.parse(profile.updatedAt);
+    return { profile: await getProfile(), unavailable: false };
   } catch {
-    // Can't tell — serve the stored copy rather than fail the revisit.
-    return false;
+    return { profile: null, unavailable: true };
+  }
+}
+
+/** FR-001: the structured profile and its serialized form, sent together. */
+function profileRequestFields(
+  loaded: LoadedProfile
+): Pick<JobAnalysisRequest, "profile" | "profileData"> {
+  if (!loaded.profile) return {};
+  const profileData = toScoringProfile(loaded.profile);
+  return { profileData, profile: profileToPromptText(profileData) };
+}
+
+/**
+ * Freshness fields for a broadcast. Stored results never trigger a request
+ * (R7), so the current fingerprint is all the panel needs to mark them.
+ */
+function freshnessFields(loaded: LoadedProfile): ProfileFreshnessFields {
+  if (loaded.unavailable) return { profileUnavailable: true };
+  return { currentProfileFingerprint: loaded.profile?.fingerprint ?? null };
+}
+
+/** Marks a saved posting as gone (FR-005); the stored analysis stays as it was. */
+async function markUnavailable(stored: {
+  saved: SavedJob | null;
+}, canonicalUrl: string): Promise<SavedJob | null> {
+  if (!stored.saved) return null;
+  try {
+    await jobStorage.update(canonicalUrl, {
+      unavailableAt: new Date().toISOString(),
+    });
+    return await jobStorage.get(canonicalUrl);
+  } catch {
+    return stored.saved;
   }
 }
 
@@ -251,9 +285,22 @@ export function cancelAnalysis(message: CancelAnalysisMessage): void {
   cancelGenerations.set(message.tabId, (cancelGenerations.get(message.tabId) ?? 0) + 1);
 }
 
+/** Panel → background: Rescore. The page flow with the cache bypassed and the rescore intent. */
+export function rescoreJobPage(
+  message: RescoreJobPageMessage,
+  broadcast: (m: ExtensionMessage) => void
+): Promise<void> {
+  return analyzeJobPage(
+    { type: MessageType.ANALYZE_JOB_PAGE, tabId: message.tabId, bypassCache: true },
+    broadcast,
+    { priorFingerprint: message.priorFingerprint }
+  );
+}
+
 export async function analyzeJobPage(
   message: AnalyzeJobPageMessage,
-  broadcast: (m: ExtensionMessage) => void
+  broadcast: (m: ExtensionMessage) => void,
+  rescore?: { priorFingerprint: string | null }
 ): Promise<void> {
   const generation = cancelGenerations.get(message.tabId) ?? 0;
   const cancelled = (): boolean => (cancelGenerations.get(message.tabId) ?? 0) !== generation;
@@ -313,6 +360,7 @@ export async function analyzeJobPage(
               multiplePostings: false,
               cached: true,
               saved: stored.saved,
+              ...freshnessFields(await loadProfile()),
             });
             return;
           }
@@ -371,6 +419,31 @@ export async function analyzeJobPage(
   // (contracts/extraction-payload.md §3); the code and retryability are
   // unchanged, so JobErrorCode does not grow.
   if (extract.mainText.length < MIN_TEXT_CHARS) {
+    // FR-005: a saved posting whose page has gone thin is shown from the
+    // library. Only an explicit Rescore marks it unavailable; a plain revisit
+    // just serves it.
+    try {
+      const stored = await lookupStored(canonicalUrl);
+      if (stored) {
+        const saved = rescore
+          ? await markUnavailable(stored, canonicalUrl)
+          : stored.saved;
+        broadcast({
+          type: MessageType.JOB_ANALYSIS_RESULT,
+          analysis: stored.analysis,
+          canonicalUrl,
+          sourceUrl: raw.url,
+          multiplePostings: false,
+          cached: true,
+          saved,
+          postingUnavailable: Boolean(rescore),
+          ...freshnessFields(await loadProfile()),
+        });
+        return;
+      }
+    } catch {
+      // Storage unreachable — report the thin content itself.
+    }
     const stillLoading = extract.provenance?.budgetExpired === true;
     broadcast({
       type: MessageType.JOB_ANALYSIS_ERROR,
@@ -395,7 +468,7 @@ export async function analyzeJobPage(
   if (!message.bypassCache) {
     try {
       const stored = await lookupStored(canonicalUrl);
-      if (stored && !(await needsFitRefresh(stored.analysis))) {
+      if (stored) {
         broadcast({
           type: MessageType.JOB_ANALYSIS_RESULT,
           analysis: stored.analysis,
@@ -405,6 +478,7 @@ export async function analyzeJobPage(
           cached: true,
           saved: stored.saved,
           strategy: raw.provenance?.strategy,
+          ...freshnessFields(await loadProfile()),
         });
         return;
       }
@@ -413,31 +487,42 @@ export async function analyzeJobPage(
     }
   }
 
+  // A failed rescore keeps the stored analysis on screen, marked out of date.
+  const stored = rescore ? await lookupStored(canonicalUrl).catch(() => null) : null;
+  const loaded = await loadProfile();
   try {
-    // FR-007: the profile leaves the browser only inside analysis requests.
-    // The profile is an enhancement: when it cannot be fetched, analyze
-    // without it (fit stays null and refreshes on a later revisit) instead
-    // of failing the whole analysis.
-    let profile: CandidateProfile | null = null;
-    try {
-      profile = await getProfile();
-    } catch {
-      profile = null;
-    }
     // Last check before the request: this is the line FR-006 is about — a
     // cancelled analysis must not spend the user's monthly allowance.
     if (cancelled()) return;
 
-    const analysis = await postJobAnalysis({
+    const { analysis, postingUnavailable } = await postJobAnalysis({
       extract,
-      profile: profile ? profileToPromptText(profile) : undefined,
+      ...profileRequestFields(loaded),
       assumeJobPosting: message.assumeJobPosting,
+      ...(rescore ? { rescore } : {}),
     });
+
+    if (postingUnavailable && stored) {
+      // The page no longer reads as a posting: keep the score we have.
+      const saved = await markUnavailable(stored, canonicalUrl);
+      broadcast({
+        type: MessageType.JOB_ANALYSIS_RESULT,
+        analysis: stored.analysis,
+        canonicalUrl,
+        sourceUrl: raw.url,
+        multiplePostings: false,
+        cached: true,
+        saved,
+        postingUnavailable: true,
+        ...freshnessFields(loaded),
+      });
+      return;
+    }
+
     await setCached(canonicalUrl, analysis);
 
     // A fresh analysis of an already-saved posting replaces its snapshot
-    // (status/notes survive) — explicit Re-analyze and the automatic fit
-    // refresh both land here.
+    // (status/notes survive) — explicit Re-analyze and Rescore both land here.
     let saved: SavedJob | null = null;
     try {
       const existing = await jobStorage.get(canonicalUrl);
@@ -458,8 +543,23 @@ export async function analyzeJobPage(
       cached: false,
       saved,
       strategy: raw.provenance?.strategy,
+      ...freshnessFields(loaded),
     });
   } catch (err) {
+    if (stored) {
+      broadcast({
+        type: MessageType.JOB_ANALYSIS_RESULT,
+        analysis: stored.analysis,
+        canonicalUrl,
+        sourceUrl: raw.url,
+        multiplePostings: false,
+        cached: true,
+        saved: stored.saved,
+        rescoreError: toJobPanelError(err),
+        ...freshnessFields(loaded),
+      });
+      return;
+    }
     broadcast({
       type: MessageType.JOB_ANALYSIS_ERROR,
       error: toJobPanelError(err),
@@ -506,15 +606,17 @@ export async function analyzePastedText(
 
   const canonicalUrl = await pasteIdentity(message.text);
 
+  let stored: Awaited<ReturnType<typeof lookupStored>> = null;
   try {
-    const stored = await lookupStored(canonicalUrl);
-    if (stored && !(await needsFitRefresh(stored.analysis))) {
+    stored = await lookupStored(canonicalUrl);
+    if (stored && !message.rescore) {
       broadcast({
         type: MessageType.PASTE_ANALYSIS_RESULT,
         analysis: stored.analysis,
         canonicalUrl,
         saved: stored.saved,
         strategy: "paste",
+        ...freshnessFields(await loadProfile()),
       });
       return;
     }
@@ -531,18 +633,13 @@ export async function analyzePastedText(
     extractedAt: new Date().toISOString(),
   };
 
+  const loaded = await loadProfile();
   try {
-    let profile: CandidateProfile | null = null;
-    try {
-      profile = await getProfile();
-    } catch {
-      profile = null;
-    }
-
-    const analysis = await postJobAnalysis({
+    const { analysis } = await postJobAnalysis({
       extract,
-      profile: profile ? profileToPromptText(profile) : undefined,
+      ...profileRequestFields(loaded),
       assumeJobPosting: message.assumeJobPosting,
+      ...(message.rescore ? { rescore: message.rescore } : {}),
     });
     await setCached(canonicalUrl, analysis);
 
@@ -563,8 +660,21 @@ export async function analyzePastedText(
       canonicalUrl,
       saved,
       strategy: "paste",
+      ...freshnessFields(loaded),
     });
   } catch (err) {
+    if (stored && message.rescore) {
+      broadcast({
+        type: MessageType.PASTE_ANALYSIS_RESULT,
+        analysis: stored.analysis,
+        canonicalUrl,
+        saved: stored.saved,
+        strategy: "paste",
+        rescoreError: toJobPanelError(err),
+        ...freshnessFields(loaded),
+      });
+      return;
+    }
     broadcast({
       type: MessageType.PASTE_ANALYSIS_ERROR,
       error: toJobPanelError(err),
@@ -645,17 +755,11 @@ export async function analyzeScopedRegion(
     extractedAt: new Date().toISOString(),
   };
 
+  const loaded = await loadProfile();
   try {
-    let profile: CandidateProfile | null = null;
-    try {
-      profile = await getProfile();
-    } catch {
-      profile = null;
-    }
-
-    const analysis = await postJobAnalysis({
+    const { analysis } = await postJobAnalysis({
       extract,
-      profile: profile ? profileToPromptText(profile) : undefined,
+      ...profileRequestFields(loaded),
       assumeJobPosting: message.assumeJobPosting,
     });
     await setCached(canonicalUrl, analysis);
@@ -688,6 +792,7 @@ export async function analyzeScopedRegion(
       saved,
       strategy: message.mechanism,
       scopedRegion: host ? { selector: message.selector, host } : undefined,
+      ...freshnessFields(loaded),
     });
   } catch (err) {
     broadcast({

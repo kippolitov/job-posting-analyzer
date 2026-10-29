@@ -99,7 +99,7 @@ export function Profile() {
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium">Dealbreakers (one per line)</span>
         <span className="text-xs text-gray-500">
-          A posting that violates a dealbreaker is capped at a fit score of 20.
+          A posting that violates a dealbreaker is flagged next to its score.
         </span>
         <textarea
           aria-label="Dealbreakers"

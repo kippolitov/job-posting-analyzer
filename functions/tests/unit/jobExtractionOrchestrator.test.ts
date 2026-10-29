@@ -331,6 +331,48 @@ describe("jobExtractionOrchestrator", () => {
     expect(result.model).toBe("gpt-4o");
   });
 
+  describe("scoring rubric and tier stamp (006 FR-008)", () => {
+    const withProfile: AnalyzeJobRequest = {
+      ...baseRequest,
+      profile: "Principal .NET engineer",
+    };
+
+    it("the system prompt carries the four rubric bands with exact ranges and descriptions", async () => {
+      const mockCreate = await mockCreateWith(fixture("with-fit"));
+      await orchestrateJobAnalysis(withProfile);
+      const [params] = mockCreate.mock.calls[0] as [
+        { messages: { role: string; content: string }[] },
+      ];
+      const system = params.messages.find((m) => m.role === "system")!.content;
+      expect(system).toContain("85-100: all required skills covered and seniority aligned");
+      expect(system).toContain("65-84: minor gaps");
+      expect(system).toContain("40-64: significant gaps or a level mismatch");
+      expect(system).toContain("0-39: major mismatch");
+    });
+
+    it("omits the rubric when no profile was provided", async () => {
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+      const [params] = mockCreate.mock.calls[0] as [
+        { messages: { role: string; content: string }[] },
+      ];
+      const system = params.messages.find((m) => m.role === "system")!.content;
+      expect(system).not.toContain("major mismatch");
+    });
+
+    it.each(["free", "premium"] as const)("stamps tier %s on the response", async (tier) => {
+      await mockCreateWith(fixture("with-fit"));
+      const result = await orchestrateJobAnalysis(withProfile, tier);
+      expect(result.tier).toBe(tier);
+    });
+
+    it("stamps tier even when there is no profile", async () => {
+      await mockCreateWith(fixture("explicit-hybrid"));
+      const result = await orchestrateJobAnalysis(baseRequest, "premium");
+      expect(result.tier).toBe("premium");
+    });
+  });
+
   describe("tier-aware deployment selection (data-model.md)", () => {
     it("free tier uses the free deployment", async () => {
       const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));

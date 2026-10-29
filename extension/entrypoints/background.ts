@@ -1,5 +1,6 @@
 import {
   analyzeJobPage,
+  rescoreJobPage,
   analyzePastedText,
   analyzeScopedRegion,
   cancelAnalysis,
@@ -97,6 +98,9 @@ export default defineBackground({
         }
         if (message.type === MessageType.ANALYZE_JOB_PAGE) {
           void analyzeJobPage(message, broadcastToSidePanel);
+        }
+        if (message.type === MessageType.RESCORE_JOB_PAGE) {
+          void rescoreJobPage(message, broadcastToSidePanel);
         }
         if (message.type === MessageType.CANCEL_ANALYSIS) {
           cancelAnalysis(message);

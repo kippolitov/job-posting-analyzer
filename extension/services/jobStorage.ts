@@ -87,6 +87,9 @@ async function update(
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
       ...(patch.analysis !== undefined ? { analysis: patch.analysis } : {}),
+      ...(patch.unavailableAt !== undefined
+        ? { unavailableAt: patch.unavailableAt }
+        : {}),
     },
   });
   // Matches the previous local semantics: updating a missing record is a no-op.

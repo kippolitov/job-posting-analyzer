@@ -46,6 +46,10 @@ function makeAnalysis(title: string): JobAnalysis {
   };
 }
 
+function ok(analysis: JobAnalysis, postingUnavailable = false) {
+  return { analysis, postingUnavailable };
+}
+
 function makeSavedJob(canonicalUrl: string): SavedJob {
   return {
     schemaVersion: 1,
@@ -194,7 +198,7 @@ describe("analyze flow — error paths", () => {
         { once: true }
       )
     );
-    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Role"));
+    vi.mocked(postJobAnalysis).mockResolvedValue(ok(makeAnalysis("Role")));
 
     const messages = await runFlow("https://boards.greenhouse.io/acme/jobs/11");
 
@@ -253,7 +257,7 @@ describe("analyze flow — error paths", () => {
 
 describe("revisit without page access — remembered tab URL", () => {
   it("serves the stored analysis when executeScript fails after a prior analysis on the same tab", async () => {
-    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Remembered Role"));
+    vi.mocked(postJobAnalysis).mockResolvedValue(ok(makeAnalysis("Remembered Role")));
     await runFlow("https://boards.greenhouse.io/acme/jobs/7");
 
     // Tab switch killed the activeTab grant: extraction now fails.
@@ -274,7 +278,7 @@ describe("revisit without page access — remembered tab URL", () => {
   });
 
   it("a cachedOnly probe restores the stored analysis without touching the page", async () => {
-    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Probe Role"));
+    vi.mocked(postJobAnalysis).mockResolvedValue(ok(makeAnalysis("Probe Role")));
     await runFlow("https://boards.greenhouse.io/acme/jobs/8");
     vi.mocked(chrome.scripting.executeScript).mockClear();
 
@@ -340,7 +344,7 @@ describe("revisit flow — lookup order saved → cached → backend", () => {
       text: "Principal .NET engineer",
       dealbreakers: ["no fully on-site roles"],
     });
-    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Role"));
+    vi.mocked(postJobAnalysis).mockResolvedValue(ok(makeAnalysis("Role")));
 
     await runFlow("https://boards.greenhouse.io/acme/jobs/9");
 
@@ -350,14 +354,14 @@ describe("revisit flow — lookup order saved → cached → backend", () => {
   });
 
   it("omits the profile when none is configured", async () => {
-    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Role"));
+    vi.mocked(postJobAnalysis).mockResolvedValue(ok(makeAnalysis("Role")));
     await runFlow("https://boards.greenhouse.io/acme/jobs/10");
     const [request] = vi.mocked(postJobAnalysis).mock.calls[0]!;
     expect(request.profile).toBeUndefined();
   });
 
   it("calls the backend exactly once on a miss and caches the result", async () => {
-    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Fresh Role"));
+    vi.mocked(postJobAnalysis).mockResolvedValue(ok(makeAnalysis("Fresh Role")));
 
     await runFlow("https://boards.greenhouse.io/acme/jobs/3");
     expect(postJobAnalysis).toHaveBeenCalledTimes(1);
@@ -368,80 +372,59 @@ describe("revisit flow — lookup order saved → cached → backend", () => {
     expect((second[0] as JobAnalysisResultMessage).cached).toBe(true);
   });
 
-  it("re-analyzes a cached posting whose fit is missing once a newer profile exists", async () => {
+  it("serves a cached posting whose fit is missing without a request, even with a profile (R7)", async () => {
     await setCached(
       "https://boards.greenhouse.io/acme/jobs/5",
-      makeAnalysis("Cached, no fit") // fit: null, analyzedAt in the past
+      makeAnalysis("Cached, no fit")
     );
     const { setProfile } = await import("../../services/profileStorage");
     await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
-    vi.mocked(postJobAnalysis).mockResolvedValue({
-      ...makeAnalysis("Cached, no fit"),
-      fit: { score: 82, rationale: "Strong match" },
-      analyzedAt: new Date().toISOString(),
-    });
 
     const messages = await runFlow("https://boards.greenhouse.io/acme/jobs/5");
 
-    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
+    expect(postJobAnalysis).not.toHaveBeenCalled();
     const result = messages[0] as JobAnalysisResultMessage;
-    expect(result.analysis.fit).toEqual({ score: 82, rationale: "Strong match" });
-    expect(result.cached).toBe(false);
+    expect(result.cached).toBe(true);
+    expect(result.currentProfileFingerprint).toEqual(expect.any(String));
   });
 
-  it("refreshes a saved posting's snapshot with the newly computed fit (status/notes survive)", async () => {
+  it("serves a saved posting scored against an older profile unchanged and reports the current fingerprint", async () => {
     const canonicalUrl = "https://boards.greenhouse.io/acme/jobs/1";
-    await jobStorage.save(makeSavedJob(canonicalUrl));
+    const saved = makeSavedJob(canonicalUrl);
+    saved.analysis.fit = {
+      score: 45,
+      rationale: "Partial match",
+      profileFingerprint: "f".repeat(64),
+    };
+    await jobStorage.save(saved);
     const { setProfile } = await import("../../services/profileStorage");
-    await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
-    vi.mocked(postJobAnalysis).mockResolvedValue({
-      ...makeAnalysis("Saved Role"),
-      fit: { score: 45, rationale: "Partial match" },
-      analyzedAt: new Date().toISOString(),
-    });
+    const profile = await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
 
     const messages = await runFlow(canonicalUrl);
 
+    expect(postJobAnalysis).not.toHaveBeenCalled();
     const result = messages[0] as JobAnalysisResultMessage;
     expect(result.analysis.fit?.score).toBe(45);
-    expect(result.saved?.status).toBe("applied");
-    const stored = await jobStorage.get(canonicalUrl);
-    expect(stored!.analysis.fit?.score).toBe(45);
-    expect(stored!.notes).toBe("recruiter: Dana");
+    expect(result.currentProfileFingerprint).toBe(profile.fingerprint);
+    expect(result.currentProfileFingerprint).not.toBe("f".repeat(64));
+    expect(await chrome.storage.session.get("profile:fingerprint")).toMatchObject({
+      "profile:fingerprint": { value: profile.fingerprint },
+    });
   });
 
-  it("upgrades a pre-breakdown fit snapshot to the richer breakdown once", async () => {
+  it("does not upgrade a pre-breakdown fit snapshot automatically (R7)", async () => {
     const { setProfile } = await import("../../services/profileStorage");
     await setProfile({ text: "Principal .NET engineer", dealbreakers: [] });
-    // Old-format fit: score + rationale only, and newer than the profile.
     await setCached("https://boards.greenhouse.io/acme/jobs/12", {
       ...makeAnalysis("Old Fit Role"),
       fit: { score: 70, rationale: "Old summary." },
       analyzedAt: "2099-01-01T00:00:00Z",
     });
-    const refreshed = {
-      ...makeAnalysis("Old Fit Role"),
-      fit: {
-        score: 74,
-        rationale: "New summary.",
-        matching: ["C#"],
-        missing: [],
-        desired: [],
-        strengths: [],
-        weaknesses: [],
-      },
-      analyzedAt: new Date().toISOString(),
-    };
-    vi.mocked(postJobAnalysis).mockResolvedValue(refreshed);
 
-    const first = await runFlow("https://boards.greenhouse.io/acme/jobs/12");
-    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
-    expect((first[0] as JobAnalysisResultMessage).analysis.fit?.matching).toEqual(["C#"]);
+    const messages = await runFlow("https://boards.greenhouse.io/acme/jobs/12");
 
-    // The refreshed snapshot has the breakdown — no second backend call.
-    const second = await runFlow("https://boards.greenhouse.io/acme/jobs/12");
-    expect(postJobAnalysis).toHaveBeenCalledTimes(1);
-    expect((second[0] as JobAnalysisResultMessage).cached).toBe(true);
+    expect(postJobAnalysis).not.toHaveBeenCalled();
+    expect((messages[0] as JobAnalysisResultMessage).analysis.fit?.score).toBe(70);
   });
 
   it("keeps serving the cache when the fit-less analysis is newer than the profile", async () => {
@@ -461,7 +444,7 @@ describe("revisit flow — lookup order saved → cached → backend", () => {
   it("Re-analyze bypasses saved and cache, replaces the saved snapshot, and bumps updatedAt", async () => {
     const canonicalUrl = "https://boards.greenhouse.io/acme/jobs/1";
     await jobStorage.save(makeSavedJob(canonicalUrl));
-    vi.mocked(postJobAnalysis).mockResolvedValue(makeAnalysis("Refreshed Role"));
+    vi.mocked(postJobAnalysis).mockResolvedValue(ok(makeAnalysis("Refreshed Role")));
 
     const messages = await runFlow(canonicalUrl, { bypassCache: true });
 

@@ -17,7 +17,14 @@ export interface AccountSubscription {
 export interface AccountState {
   email: string;
   tier: "free" | "premium";
-  usage: { count: number; limit: number; resetsAt: string };
+  usage: {
+    count: number;
+    limit: number;
+    resetsAt: string;
+    /** 006: absent when talking to a backend that predates free rescores. */
+    rescoresUsed?: number;
+    rescoresLimit?: number;
+  };
   subscription: AccountSubscription | null;
 }
 

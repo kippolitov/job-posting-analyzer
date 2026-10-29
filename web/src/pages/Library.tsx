@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { FreshnessMarker } from "@/components/FreshnessMarker";
+import { VerdictBadge } from "@/components/VerdictBadge";
+import { useCurrentFingerprint } from "@/lib/useCurrentFingerprint";
 import { LibraryControls } from "@/components/LibraryControls";
 import { applyLibraryQuery, DEFAULT_LIBRARY_QUERY, type LibraryQuery } from "@/lib/libraryQuery";
 import { useLibrary } from "@/lib/useLibrary";
@@ -11,6 +14,7 @@ export function Library() {
   const state = useLibrary();
   const selection = useCompareSelection();
   const [query, setQuery] = useState<LibraryQuery>(DEFAULT_LIBRARY_QUERY);
+  const currentFingerprint = useCurrentFingerprint();
 
   if (state.status === "idle" || state.status === "loading") {
     return <div className="p-6 text-sm text-gray-500">Loading your library…</div>;
@@ -28,7 +32,7 @@ export function Library() {
     return <div className="p-6 text-sm text-gray-500">No saved postings yet.</div>;
   }
 
-  const visibleJobs = applyLibraryQuery(state.jobs, query);
+  const visibleJobs = applyLibraryQuery(state.jobs, query, currentFingerprint);
 
   return (
     <div>
@@ -89,6 +93,12 @@ export function Library() {
                     </a>
                   )
                 )}
+                {job.analysis.fit && (
+                  <div className="mt-1">
+                    <VerdictBadge fit={job.analysis.fit} />
+                  </div>
+                )}
+                <FreshnessMarker job={job} currentFingerprint={currentFingerprint} />
                 <div className="mt-1 text-xs uppercase text-gray-400">{job.status}</div>
               </div>
             </li>

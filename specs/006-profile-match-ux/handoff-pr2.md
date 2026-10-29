@@ -1,5 +1,15 @@
 # PR2 handoff: where implementation stopped
 
+> **Update 2026-10-29 (later session)**: everything below marked ⏳ is now implemented
+> and green (functions 507, extension 472, web 123 unit/contract tests; web E2E 4/4; lint
+> clean) **except**: T060 (extension E2E `profileFreshness.spec.ts` is written but not
+> run — it needs a live backend baked into the build, like `savedJobs.test.ts`), T078
+> (blocked on T060), T087 (live eval, costs money, ask first) and T088 (QG-3 review,
+> compatibility smoke, perf check against T001, then the PR; ask first). Nothing is
+> committed since `db868b2`. Both client Options/Profile hints that said "capped at a
+> fit score of 20" were reworded (the score is no longer capped).
+
+
 **Branch**: `006-freshness-verdict` (cut from `main` at `4d4e9d9`). Not pushed, no PR yet.
 **Date**: 2026-10-29. **Scope of PR2**: tasks T028–T088 in [tasks.md](./tasks.md) (US1 + US2).
 

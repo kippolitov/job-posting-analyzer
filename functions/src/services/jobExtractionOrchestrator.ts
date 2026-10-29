@@ -135,7 +135,7 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   if (hasProfile) {
     lines.push(
       "Fit scoring (a candidate profile is provided):",
-      "- fit.score is 0-100 and measures only how well the posting matches the candidate's skills, experience and seniority; do not lower it for dealbreakers. fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
+      "- fit.score is 0-100 and measures only how well the posting matches the candidate's skills, experience and seniority; do not lower it for dealbreakers. Score against this rubric: 85-100: all required skills covered and seniority aligned; 65-84: minor gaps; 40-64: significant gaps or a level mismatch; 0-39: major mismatch. fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
       "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first).",
       "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of.",
       "- fit.desired: nice-to-have / preferred qualifications from the posting that the profile does not cover.",
@@ -358,5 +358,6 @@ export async function orchestrateJobAnalysis(
     ...payload,
     model: deployment,
     analyzedAt: new Date().toISOString(),
+    tier,
   };
 }

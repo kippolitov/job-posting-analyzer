@@ -1,9 +1,15 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThisPageTab } from "../../components/JobPanel/ThisPageTab";
 import type { JobView } from "../../components/JobPanel/ThisPageTab";
 import type { JobAnalysis } from "../../types/job";
+import { fetchAccount } from "../../services/accountService";
+
+vi.mock("../../services/accountService", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/accountService")>()),
+  fetchAccount: vi.fn(),
+}));
 
 const analysis: JobAnalysis = {
   isJobPosting: true,
@@ -412,5 +418,142 @@ describe("ThisPageTab", () => {
     });
     expect(screen.getByText("Not enough page content to analyze.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ThisPageTab — profile freshness (006)", () => {
+  const CURRENT = "c".repeat(64);
+  const OLDER = "o".repeat(64);
+  const staleView: JobView = {
+    ...baseView,
+    analysis: {
+      ...analysis,
+      fit: { score: 55, rationale: "r", profileFingerprint: OLDER },
+    },
+    currentProfileFingerprint: CURRENT,
+  };
+
+  beforeEach(() => {
+    vi.mocked(fetchAccount).mockReset().mockResolvedValue({
+      email: "a@b.c",
+      tier: "free",
+      usage: {
+        count: 12,
+        limit: 50,
+        resetsAt: "2026-11-01T00:00:00Z",
+        rescoresUsed: 3,
+        rescoresLimit: 10,
+      },
+      subscription: null,
+    });
+  });
+
+  it("marks an out-of-date result and shows the cost line", async () => {
+    renderTab(staleView);
+    expect(screen.getByText("Scored against an older profile")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Free — 7 of 10 free rescores left this month")
+    ).toBeInTheDocument();
+  });
+
+  it("Rescore passes the fit's own fingerprint", async () => {
+    const onRescore = vi.fn();
+    render(
+      <ThisPageTab
+        tabId={1}
+        view={staleView}
+        onAnalyze={noop}
+        onCancel={noop}
+        onForceAnalyze={noop}
+        onRescore={onRescore}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Rescore" }));
+    expect(onRescore).toHaveBeenCalledWith(OLDER);
+  });
+
+  it("a current result shows no notice", () => {
+    renderTab({
+      ...staleView,
+      currentProfileFingerprint: OLDER,
+    });
+    expect(screen.queryByText("Scored against an older profile")).not.toBeInTheDocument();
+  });
+
+  it("a storage change to profile:fingerprint re-marks the visible result without rescoring", async () => {
+    const onRescore = vi.fn();
+    const listeners: Array<(c: Record<string, unknown>, area: string) => void> = [];
+    vi.mocked(chrome.storage.onChanged.addListener).mockImplementation(((
+      l: (c: Record<string, unknown>, area: string) => void
+    ) => listeners.push(l)) as never);
+    render(
+      <ThisPageTab
+        tabId={1}
+        view={{ ...staleView, currentProfileFingerprint: OLDER }}
+        onAnalyze={noop}
+        onCancel={noop}
+        onForceAnalyze={noop}
+        onRescore={onRescore}
+      />
+    );
+    expect(screen.queryByText("Scored against an older profile")).not.toBeInTheDocument();
+
+    act(() => {
+      for (const l of listeners) {
+        l(
+          { "profile:fingerprint": { newValue: { value: CURRENT, fetchedAt: 1 } } },
+          "session"
+        );
+      }
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText("Scored against an older profile")).toBeInTheDocument()
+    );
+    expect(onRescore).not.toHaveBeenCalled();
+  });
+
+  it("renders the UsageExhausted card when a rescore hit the exhausted allowance", () => {
+    renderTab({
+      ...staleView,
+      rescoreError: {
+        code: "usage-limit-reached",
+        message: "x",
+        action: "y",
+        retryable: false,
+        usage: {
+          count: 50,
+          limit: 50,
+          resetsAt: "2026-11-01T00:00:00Z",
+          tier: "free",
+        },
+      },
+    });
+    expect(
+      screen.getByRole("status", { name: "Monthly analysis allowance used" })
+    ).toBeInTheDocument();
+    // The stored score stays visible, still marked out of date.
+    expect(screen.getByText("Scored against an older profile")).toBeInTheDocument();
+  });
+
+  it("shows the unavailable note for a saved posting marked unavailable", () => {
+    renderTab({ ...staleView, postingUnavailable: true });
+    expect(
+      screen.getByText("Posting no longer available — score can’t be updated")
+    ).toBeInTheDocument();
+  });
+
+  it("profileUnavailable shows the not-scored message, not Configure profile", () => {
+    renderTab({
+      ...baseView,
+      analysis: { ...analysis, fit: null },
+      profileUnavailable: true,
+    });
+    expect(
+      screen.getByText("Fit not scored — your profile couldn’t be loaded")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Configure profile" })
+    ).not.toBeInTheDocument();
   });
 });

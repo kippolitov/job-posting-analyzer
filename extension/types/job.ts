@@ -60,6 +60,10 @@ export interface UsageInfo {
   limit: number;
   resetsAt: string;
   tier: "free" | "premium";
+  /** 006: what this request cost, and the free-rescore allowance after it. */
+  charged?: "none" | "rescore" | "analysis";
+  rescoresUsed?: number;
+  rescoresLimit?: number;
 }
 
 export interface JobPanelError {

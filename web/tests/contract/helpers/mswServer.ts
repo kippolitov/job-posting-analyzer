@@ -1,6 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { setupServer, type SetupServerApi } from "msw/node";
 import { afterAll, beforeAll, beforeEach, vi } from "vitest";
+import { saveKeyFor } from "@/lib/saveKey";
 import type {
   AccountPayload,
   CheckoutResult,
@@ -47,6 +48,8 @@ export interface FakeApi {
   setCheckoutResult(result: CheckoutResult): void;
   setPortalResult(result: PortalResult): void;
   failNext(endpoint: EndpointKey, failure: ForcedFailure): void;
+  /** Every PATCH /api/jobs/:key received, in order (006 rescore-in-place). */
+  patches: { key: string; body: Record<string, unknown> }[];
   reset(): void;
 }
 
@@ -74,6 +77,7 @@ export function createFakeApi(): FakeApi {
   let checkoutResult: CheckoutResult = { ...DEFAULT_CHECKOUT_RESULT };
   let portalResult: PortalResult = { ...DEFAULT_PORTAL_RESULT };
   const forced = new Map<EndpointKey, ForcedFailure>();
+  const patches: { key: string; body: Record<string, unknown> }[] = [];
   const calls: Record<EndpointKey, number> = {
     jobs: 0,
     profile: 0,
@@ -127,6 +131,29 @@ export function createFakeApi(): FakeApi {
       return HttpResponse.json(body);
     }),
 
+    http.patch(`${TEST_API_BASE}/jobs/:key`, async ({ request, params }) => {
+      const failure = takeForced("jobs-item");
+      if (failure) return failure;
+      const body = (await request.json()) as Record<string, unknown>;
+      const key = String(params.key);
+      patches.push({ key, body });
+      const keys = await Promise.all(jobs.map((j) => saveKeyFor(j.canonicalUrl)));
+      const index = keys.indexOf(key);
+      if (index < 0) {
+        return HttpResponse.json(
+          { error: { code: "NOT_FOUND", message: "No such posting." } },
+          { status: 404 }
+        );
+      }
+      const merged = {
+        ...jobs[index]!,
+        ...body,
+        updatedAt: new Date().toISOString(),
+      } as SavedJobPayload;
+      jobs = jobs.map((j, i) => (i === index ? merged : j));
+      return HttpResponse.json(merged);
+    }),
+
     http.post(`${TEST_API_BASE}/analyze-document`, () => {
       const failure = takeForced("analyze-document");
       if (failure) return failure;
@@ -149,6 +176,7 @@ export function createFakeApi(): FakeApi {
   return {
     server,
     calls,
+    patches,
     setJobs: (next) => {
       jobs = next;
     },
@@ -179,6 +207,7 @@ export function createFakeApi(): FakeApi {
       checkoutResult = { ...DEFAULT_CHECKOUT_RESULT };
       portalResult = { ...DEFAULT_PORTAL_RESULT };
       forced.clear();
+      patches.length = 0;
       for (const key of Object.keys(calls) as EndpointKey[]) calls[key] = 0;
     },
   };

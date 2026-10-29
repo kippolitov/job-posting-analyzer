@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "@/App";
 import type { DocumentAnalysisResult } from "@/api/types";
@@ -52,6 +52,7 @@ describe("save a document-sourced analysis (US5 scenarios 2–3)", () => {
     render(<App />);
 
     const input = await screen.findByLabelText(/upload a document/i);
+    await waitFor(() => expect(input).toBeEnabled());
     await userEvent.upload(input, makeFile("job-description.pdf", "application/pdf"));
 
     const saveButton = await screen.findByRole("button", { name: /save to library/i });
@@ -68,6 +69,7 @@ describe("save a document-sourced analysis (US5 scenarios 2–3)", () => {
     render(<App />);
 
     const input = await screen.findByLabelText(/upload a document/i);
+    await waitFor(() => expect(input).toBeEnabled());
     await userEvent.upload(input, makeFile("job-description.pdf", "application/pdf"));
 
     const saveButton = await screen.findByRole("button", { name: /save to library/i });

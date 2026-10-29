@@ -5,6 +5,7 @@ import type {
   PageExtract,
   UsageInfo,
 } from "../types/job";
+import type { ScoringProfile } from "../../shared/types/profile";
 import {
   getIdToken,
   markNotAuthorized,
@@ -19,13 +20,25 @@ const TIMEOUT_MS = 30_000;
 
 export interface JobAnalysisRequest {
   extract: PageExtract;
+  /** Legacy serialized profile, still sent beside `profileData` (006 R5). */
   profile?: string;
+  profileData?: ScoringProfile;
   assumeJobPosting?: boolean;
+  /** Rescore intent; the server decides whether it is free (research R6). */
+  rescore?: { priorFingerprint: string | null };
+}
+
+export interface JobAnalysisResponse {
+  /** The analysis alone: `usage` and `postingUnavailable` are stripped out. */
+  analysis: JobAnalysis;
+  usage?: UsageInfo;
+  /** The model found no posting on a rescore, so the stored score stands. */
+  postingUnavailable: boolean;
 }
 
 export async function postJobAnalysis(
   request: JobAnalysisRequest
-): Promise<JobAnalysis> {
+): Promise<JobAnalysisResponse> {
   if (!WXT_AZURE_FUNCTION_URL) {
     throw makeJobError(
       "not-configured",
@@ -84,7 +97,15 @@ export async function postJobAnalysis(
         true
       );
     }
-    return payload;
+    const { usage, postingUnavailable, ...analysis } = payload as JobAnalysis & {
+      usage?: UsageInfo;
+      postingUnavailable?: boolean;
+    };
+    return {
+      analysis: analysis as JobAnalysis,
+      ...(usage ? { usage } : {}),
+      postingUnavailable: postingUnavailable === true,
+    };
   }
 
   throw mapHttpError(response.status);
@@ -142,7 +163,9 @@ async function attemptFetch(
       body: JSON.stringify({
         extract: request.extract,
         ...(request.profile ? { profile: request.profile } : {}),
+        ...(request.profileData ? { profileData: request.profileData } : {}),
         ...(request.assumeJobPosting ? { assumeJobPosting: true } : {}),
+        ...(request.rescore ? { rescore: request.rescore } : {}),
       }),
       signal: controller.signal,
     });

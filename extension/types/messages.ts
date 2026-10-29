@@ -11,6 +11,7 @@ export const MessageType = {
   PASTE_ANALYSIS_RESULT: "PASTE_ANALYSIS_RESULT",
   PASTE_ANALYSIS_ERROR: "PASTE_ANALYSIS_ERROR",
   ANALYZE_SCOPED_REGION: "ANALYZE_SCOPED_REGION",
+  RESCORE_JOB_PAGE: "RESCORE_JOB_PAGE",
 } as const;
 
 export type MessageType = (typeof MessageType)[keyof typeof MessageType];
@@ -53,6 +54,32 @@ export interface AnalyzeJobPageMessage {
 }
 
 /**
+ * Panel → background: re-run the analysis of the page against the current
+ * profile (006 FR-004). `priorFingerprint` is the fingerprint of the fit the
+ * panel is showing, which the server uses to decide the charge.
+ */
+export interface RescoreJobPageMessage {
+  type: typeof MessageType.RESCORE_JOB_PAGE;
+  tabId: number;
+  priorFingerprint: string | null;
+}
+
+/**
+ * Fields every result broadcast carries so the panel can mark freshness
+ * without a second round trip (006 R7).
+ */
+export interface ProfileFreshnessFields {
+  /** `undefined` = unknown, `null` = the account has no profile. */
+  currentProfileFingerprint?: string | null;
+  /** The profile could not be fetched, so the fit was not scored. */
+  profileUnavailable?: true;
+  /** The posting was gone when a rescore or revisit looked (FR-005). */
+  postingUnavailable?: boolean;
+  /** A rescore failed; `analysis` is the stored one, still out of date. */
+  rescoreError?: JobPanelError;
+}
+
+/**
  * Panel → background: abandon the in-flight analysis for this tab.
  *
  * Until readiness, cancelling was purely cosmetic — the panel ignored the late
@@ -83,7 +110,7 @@ export interface AnalyzeScopedRegionMessage {
   assumeJobPosting?: boolean;
 }
 
-export interface JobAnalysisResultMessage {
+export interface JobAnalysisResultMessage extends ProfileFreshnessFields {
   type: typeof MessageType.JOB_ANALYSIS_RESULT;
   analysis: JobAnalysis;
   canonicalUrl: string;
@@ -119,6 +146,8 @@ export interface AnalyzePastedTextMessage {
   type: typeof MessageType.ANALYZE_PASTED_TEXT;
   text: string;
   assumeJobPosting?: boolean;
+  /** "Paste again to rescore": bypass the stored lookup and send the rescore intent. */
+  rescore?: { priorFingerprint: string | null };
 }
 
 /**
@@ -127,7 +156,7 @@ export interface AnalyzePastedTextMessage {
  * view's state machine, and a paste analysis must land in the composer, not
  * silently overwrite whatever "This Page" was showing.
  */
-export interface PasteAnalysisResultMessage {
+export interface PasteAnalysisResultMessage extends ProfileFreshnessFields {
   type: typeof MessageType.PASTE_ANALYSIS_RESULT;
   analysis: JobAnalysis;
   canonicalUrl: string;
@@ -146,6 +175,7 @@ export type ExtensionMessage =
   | ActiveTabChangedMessage
   | AnalyzeJobPageMessage
   | CancelAnalysisMessage
+  | RescoreJobPageMessage
   | JobAnalysisResultMessage
   | JobAnalysisErrorMessage
   | AnalyzePastedTextMessage

@@ -96,8 +96,8 @@ describe("SavedTab", () => {
     render(<SavedTab />);
 
     expect(
-      await screen.findByLabelText("Fit score: 82 out of 100")
-    ).toHaveTextContent("Fit 82");
+      await screen.findByLabelText("Unrated, fit 82 out of 100")
+    ).toHaveTextContent("82");
     expect(screen.getByText("USD 150,000–180,000 / year")).toBeInTheDocument();
     const stack = screen.getByRole("list", { name: "Tech stack" });
     expect(stack).toHaveTextContent("C#");
@@ -412,5 +412,82 @@ describe("SavedTab", () => {
       // on 2026-07-16, all other 284 tests green).
       60_000
     );
+  });
+
+  it("marks a row scored against an older profile with a link to rescore", async () => {
+    const { setProfile } = await import("../../services/profileStorage");
+    await setProfile({ text: "Principal engineer", dealbreakers: [] });
+    await jobStorage.save(
+      makeJob({
+        analysis: {
+          ...analysis,
+          fit: { score: 61, rationale: "r", profileFingerprint: "o".repeat(64) },
+        },
+      })
+    );
+    render(<SavedTab />);
+
+    expect(await screen.findByText(/Scored against an older profile/)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Open posting to rescore" });
+    expect(link).toHaveAttribute("href", "https://a.example/1");
+  });
+
+  it("shows no marker for a row scored against the current profile", async () => {
+    const { setProfile } = await import("../../services/profileStorage");
+    const profile = await setProfile({ text: "Principal engineer", dealbreakers: [] });
+    await jobStorage.save(
+      makeJob({
+        analysis: {
+          ...analysis,
+          fit: { score: 61, rationale: "r", profileFingerprint: profile.fingerprint },
+        },
+      })
+    );
+    render(<SavedTab />);
+    await screen.findByText("Senior Backend Engineer");
+    await waitFor(() => expect(api.getProfile()).not.toBeNull());
+    expect(screen.queryByText(/older profile/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/May be out of date/)).not.toBeInTheDocument();
+  });
+
+  it("notes an unavailable posting on its row", async () => {
+    await jobStorage.save(makeJob({ unavailableAt: "2026-10-29T10:00:00.000Z" }));
+    render(<SavedTab />);
+    expect(
+      await screen.findByText("Posting no longer available — score can’t be updated")
+    ).toBeInTheDocument();
+  });
+
+  it("shows the shared verdict label and icon on a row scored against the profile (US2)", async () => {
+    await jobStorage.save(
+      makeJob({
+        analysis: {
+          ...analysis,
+          fit: { score: 90, rationale: "r", profileFingerprint: "f".repeat(64) },
+        },
+      })
+    );
+    render(<SavedTab />);
+    const badge = await screen.findByLabelText("Strong match, fit 90 out of 100");
+    expect(badge).toHaveTextContent("Strong match");
+    expect(badge.querySelector("svg")).not.toBeNull();
+  });
+
+  it("does not treat a different scoring tier as out of date", async () => {
+    const { setProfile } = await import("../../services/profileStorage");
+    const profile = await setProfile({ text: "Principal engineer", dealbreakers: [] });
+    await jobStorage.save(
+      makeJob({
+        analysis: {
+          ...analysis,
+          tier: "free",
+          fit: { score: 61, rationale: "r", profileFingerprint: profile.fingerprint },
+        },
+      })
+    );
+    api.setAccountTier("premium");
+    render(<SavedTab />);
+    await screen.findByLabelText("Stretch, fit 61 out of 100");
+    expect(screen.queryByText(/older profile|May be out of date/)).not.toBeInTheDocument();
   });
 });

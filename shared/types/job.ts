@@ -193,6 +193,8 @@ export interface JobAnalysisPayload {
 export interface JobAnalysisResponse extends JobAnalysisPayload {
   model: string;
   analyzedAt: string;
+  /** The tier that scored this analysis (006 FR-008). Absent on analyses saved before. */
+  tier?: "free" | "premium";
 }
 
 export const MAIN_TEXT_CAP = 40_000;

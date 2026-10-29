@@ -2,6 +2,7 @@ import type { Fit } from "./types/job";
 import type {
   Freshness,
   NormalizedFit,
+  Verdict,
   RescoreAction,
   RescoreCostUsage,
   RescoreJob,
@@ -220,4 +221,70 @@ export const COST_LINE_CASES: [string, RescoreCostUsage, string][] = [
     { rescoresUsed: 10, rescoresLimit: 10, count: 50, limit: 50 },
     "No free rescores or analyses left this month",
   ],
+];
+
+const verdictFit = (
+  score: number,
+  extra: Partial<Fit> = {},
+  fingerprint: string | null = FINGERPRINT
+): Fit => ({
+  score,
+  rationale: "r",
+  ...(fingerprint ? { profileFingerprint: fingerprint } : {}),
+  ...extra,
+});
+
+/** FR-009 mapping: [name, fit, expected verdict, expected aria label]. */
+export const VERDICT_CASES: [string, Fit, Verdict, string][] = [
+  ["0 is a long shot", verdictFit(0), "long-shot", "Long shot, fit 0 out of 100"],
+  ["39 is a long shot", verdictFit(39), "long-shot", "Long shot, fit 39 out of 100"],
+  ["40 is a stretch", verdictFit(40), "stretch", "Stretch, fit 40 out of 100"],
+  ["64 is a stretch", verdictFit(64), "stretch", "Stretch, fit 64 out of 100"],
+  ["65 is worth a shot", verdictFit(65), "worth-a-shot", "Worth a shot, fit 65 out of 100"],
+  ["84 is worth a shot", verdictFit(84), "worth-a-shot", "Worth a shot, fit 84 out of 100"],
+  ["85 is a strong match", verdictFit(85), "strong", "Strong match, fit 85 out of 100"],
+  ["86 reads as in the contract", verdictFit(86), "strong", "Strong match, fit 86 out of 100"],
+  ["100 is a strong match", verdictFit(100), "strong", "Strong match, fit 100 out of 100"],
+  [
+    "a dealbreaker overrides a score of 95",
+    verdictFit(95, { dealbreakersViolated: ["No fully on-site roles"] }),
+    "dealbreaker",
+    "Dealbreaker, fit 95 out of 100",
+  ],
+  [
+    "no fingerprint is unrated, whatever the score",
+    verdictFit(72, {}, null),
+    "unrated",
+    "Unrated, fit 72 out of 100",
+  ],
+  [
+    "no fingerprint wins over a dealbreaker",
+    verdictFit(72, { dealbreakersViolated: ["x"] }, null),
+    "unrated",
+    "Unrated, fit 72 out of 100",
+  ],
+];
+
+/** The exact user-facing copy for every verdict (spec vocabulary table). */
+export const VERDICT_LABELS: [Verdict, string][] = [
+  ["strong", "Strong match"],
+  ["worth-a-shot", "Worth a shot"],
+  ["stretch", "Stretch"],
+  ["long-shot", "Long shot"],
+  ["dealbreaker", "Dealbreaker"],
+  ["unrated", "Unrated — rescore for a verdict"],
+];
+
+/** FR-025: the default view's missing items. */
+export const PREVIEW_MISSING_CASES: [string, Fit, string[]][] = [
+  ["fewer than three", verdictFit(50, { missing: ["a", "b"] }), ["a", "b"]],
+  ["more than three keeps the first three", verdictFit(50, { missing: ["a", "b", "c", "d"] }), ["a", "b", "c"]],
+  ["a legacy fit without the list", { score: 50, rationale: "r" }, []],
+];
+
+/** Which model or tier scored this: [name, analysis, expected]. */
+export const SCORED_BY_CASES: [string, { tier?: "free" | "premium"; model: string }, string][] = [
+  ["premium", { tier: "premium", model: "gpt-6-luna-premium" }, "Scored on Premium"],
+  ["free", { tier: "free", model: "gpt-6-luna" }, "Scored on Free"],
+  ["analysis saved before tier was recorded", { model: "gpt-4o-mini" }, "Scored by gpt-4o-mini"],
 ];
