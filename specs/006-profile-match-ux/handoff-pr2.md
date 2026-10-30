@@ -330,7 +330,5 @@ Delete it once the PR is open.
 - Wait until `curl localhost:7072/api/profile` returns HTTP 200 before the first test. A test
   started earlier fails with "Could not reach the analysis service" (cold start).
 
-**Not cleaned up**: a `func start` on :7071, started at 17:42 on 2026-10-29 from `functions/`
-by an earlier session, is still running on old code. This session was not allowed to stop it.
-Stop it by hand if you don't need it.
+**Local processes**: none left running. The stale `func start` on :7071 from an earlier session was stopped on 2026-10-30. It ignores SIGTERM, so use `kill -INT <pid>`.
 
