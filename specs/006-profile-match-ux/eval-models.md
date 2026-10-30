@@ -229,7 +229,7 @@ Run 2026-10-29, `--runs=5`, 44 pairs, `detectionMethod: "field"`. Attempt 1 raw 
 
 Attempt 2 (same day) added a required verbatim posting quote per violation, with the
 server dropping violations whose quote is not in the posting; the prompt also says silence is
-not a violation. Raw output: [`eval-runs/pr2.json`](./eval-runs/pr2.json); attempt 1 is
+not a violation. Raw output: [`eval-runs/pr2-attempt2.json`](./eval-runs/pr2-attempt2.json); attempt 1 is
 [`eval-runs/pr2-attempt1.json`](./eval-runs/pr2-attempt1.json). **Gate still failed.**
 
 | Configuration (attempt 2) | False dealbreakers | Missed | Score independence | Verdict stability | p50 / p95 latency |
@@ -242,8 +242,7 @@ The quote requirement cut false positives but made the model skip real violation
 
 Attempt 3 (same day) is the R8 fallback: the fit call no longer sees the profile's dealbreakers,
 and a separate call (same deployment, run in parallel) judges them and must quote the posting.
-Raw output: [`eval-runs/pr2.json`](./eval-runs/pr2.json); attempt 2 is
-[`eval-runs/pr2-attempt2.json`](./eval-runs/pr2-attempt2.json). **Gate still failed.**
+Raw output: [`eval-runs/pr2-attempt3.json`](./eval-runs/pr2-attempt3.json). **Gate still failed.**
 
 | Configuration (attempt 3) | False dealbreakers | Missed | Score independence | Verdict stability | p50 / p95 latency |
 |---|---|---|---|---|---|
@@ -256,6 +255,52 @@ noise that limits verdict stability. Prompt and call changes did not reduce it.
 
 Premium cost is not computed because `modelPrices.json` has no `gpt-6-luna-premium` entry.
 Per research R8, SC-004 and score independence below 90% mean stop and report before merging.
+
+### Final run (attempt 4, metrics changed with sign-off)
+
+Run 2026-10-29, `--runs=5`, 44 pairs, `detectionMethod: "field"`. Raw output:
+[`eval-runs/pr2.json`](./eval-runs/pr2.json). Two changes since attempt 3:
+
+- **The judge.** It returns one check per numbered dealbreaker: a verbatim
+  quote, then `violated`, `compatible` or `not stated`. It has reading rules
+  for arrangement, salary and location dealbreakers, and the server maps each
+  check back to the user's line by number (research R8, "Superseded").
+- **The metrics** (approved 2026-10-29, spec.md Clarifications):
+  - SC-004 counts runs that agree with their pair's most common verdict.
+  - SC-002's independence is gated on identical fit input with and without
+    dealbreakers.
+
+**Verdict stability and independence pass on both configurations. False and
+missed dealbreakers are still nonzero, so the gate fails on SC-008 and on
+SC-002's detection half.**
+
+| Configuration (final) | False dealbreakers (SC-008, 0) | Missed (SC-002, 0) | Fit input identical (SC-002, 100%) | Median score within 5 pts (reported) | Verdict stability, runs (SC-004, ≥ 90%) | Pairs with 5 identical verdicts (reported) | Arrangement accuracy | Median $/analysis | p50 / p95 latency |
+|---|---|---|---|---|---|---|---|---|---|
+| free `gpt-6-luna`, `none` | 4 | 10 | 100% | 83.3% | **95.5%** | 84.1% | 100% | $0.000302 | 4.1 s / 10.9 s |
+| Premium `gpt-6-luna-premium`, `low` | 3 | 14 | 100% | 91.7% | **90.9%** | 68.2% | 100% | n/a (no price entry) | 5.4 s / 21.4 s |
+
+Where the remaining errors are (counts over 5 runs):
+
+| Pair | Dealbreaker | Free | Premium | Note |
+|---|---|---|---|---|
+| ashby-linear × data-ml | EU timezones only | 4 false | 3 false | "Open to candidates based in the US and Europe"; the label says compatible (labelling call 3), but the models read "only" as exclusive. |
+| phenom-intuit × mid-frontend | Remote only | 5 missed | 5 missed | The only hybrid text is a sidebar blog teaser. Labelling call 5 was kept by the product owner. |
+| phenom-intuit × data-ml | EU timezones only | 1 missed | 2 missed | Location "New York, New York" next to a site-wide city filter. |
+| onsite-explicit × data-ml | EU timezones only | 0 | 4 missed | "Columbus plant" names no state or country. |
+| lever-palantir × mid-frontend | Remote only | 2 missed | 1 missed | "Many teams do offer hybrid options". |
+| workday-nvidia × data-ml | EU timezones only | 2 missed | 0 | US locations. |
+| greenhouse-discord × data-ml | EU timezones only | 0 | 2 missed | San Francisco Bay Area residence. |
+
+Against attempt 3 (free 18 / 11, Premium 10 / 20), false dealbreakers fell
+by 78% (free) and 70% (Premium). Misses fell by 9% (free) and 30% (Premium).
+Five misses per configuration are the kept phenom-intuit label.
+
+- **Cost.** The free median is $0.000302 per analysis. That is 3.3% above
+  PR1's `gpt-4o-mini` baseline ($0.000292) and 3.5% above attempt 3. It is
+  the feature cost of the separate dealbreaker call, and the product owner
+  accepted up to about +11% on 2026-10-29 (FR-M05).
+- **Premium cost** is still not computed: `modelPrices.json` has no
+  `gpt-6-luna-premium` entry.
 
 ## Sign-off
 

@@ -237,7 +237,7 @@ Branch `006-freshness-verdict`, last commit `a4092e0`. Eval: `cd functions && np
 --configs=scripts/evalConfigs.chosen.json --runs=5 --out=../specs/006-profile-match-ux/eval-runs/<name>.json`
 (live, ~$ cents, about 25 min for both configs; free = `gpt-6-luna`/`none`, Premium =
 `gpt-6-luna-premium`/`low`). Tables are in `eval-models.md` ("PR2 — rubric and dealbreakers…").
-Raw runs: `eval-runs/pr2-attempt1.json`, `pr2-attempt2.json`, `pr2.json` (attempt 3).
+Raw runs: `eval-runs/pr2-attempt1.json`, `pr2-attempt2.json`, `pr2-attempt3.json`; the final run (attempt 4) is `pr2.json`.
 
 | Attempt | Change | Free: false / missed / indep / stability | Premium: false / missed / indep / stability |
 |---|---|---|---|
