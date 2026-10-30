@@ -792,4 +792,135 @@ describe("jobExtractionOrchestrator", () => {
       expect(result.fit?.profileFingerprint).toMatch(/^[0-9a-f]{64}$/);
     });
   });
+
+  describe("evidence quotes (006 research R9, FR-011/FR-012)", () => {
+    const profileData = {
+      text: "Senior .NET engineer. Ten years of C# on Azure. Led a platform team.",
+      dealbreakers: [],
+    };
+    const longQuote = (
+      JSON.parse(fixture("fabricated-quote")) as {
+        fit: { matching: { label: string; postingQuote: string }[] };
+      }
+    ).fit.matching.find((m) => m.label === "Long quote")!.postingQuote;
+    const evidenceRequest = (mainText = hybridText): AnalyzeJobRequest => ({
+      ...baseRequest,
+      extract: { ...baseRequest.extract, mainText },
+      profileData,
+    });
+
+    it("keeps label arrays on the wire and splits quotes into fit.evidence", async () => {
+      await mockCreateWith(fixture("with-evidence"));
+      const result = await orchestrateJobAnalysis(evidenceRequest());
+      expect(result.fit?.matching).toEqual(["C# and .NET", "Azure"]);
+      expect(result.fit?.missing).toEqual(["Kubernetes"]);
+      expect(result.fit?.desired).toEqual(["Austin office"]);
+      expect(result.fit?.evidence?.matching?.[0]).toEqual({
+        label: "C# and .NET",
+        postingQuote: "build backend services in C# and .NET 8",
+        profileQuote: "Ten years of C# on Azure",
+      });
+      expect(result.fit?.evidence?.missing).toEqual([
+        { label: "Kubernetes", postingQuote: "Azure and Kubernetes", profileQuote: null },
+      ]);
+      expect(result.fit?.evidence?.desired?.[0].profileQuote).toBeNull();
+    });
+
+    it("keeps every verbatim quote and logs no quote warning", async () => {
+      await mockCreateWith(fixture("with-evidence"));
+      const warn = vi.fn();
+      const result = await orchestrateJobAnalysis(evidenceRequest(), "free", warn);
+      expect(result.fit?.evidence?.matching?.every((e) => e.postingQuote && e.profileQuote)).toBe(true);
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining("quote"));
+    });
+
+    it("nulls a fabricated quote, keeps the item and label, and warns once per dropped quote", async () => {
+      await mockCreateWith(fixture("fabricated-quote"));
+      const warn = vi.fn();
+      const result = await orchestrateJobAnalysis(
+        evidenceRequest(`${hybridText} ${longQuote}`),
+        "free",
+        warn
+      );
+      const matching = result.fit?.evidence?.matching ?? [];
+      expect(result.fit?.matching).toEqual(["C# and .NET", "Azure", "Long quote"]);
+      expect(matching[0]).toEqual({
+        label: "C# and .NET",
+        postingQuote: null,
+        profileQuote: "Ten years of C# on Azure",
+      });
+      expect(matching[1]).toEqual({
+        label: "Azure",
+        postingQuote: "on Azure and Kubernetes",
+        profileQuote: null,
+      });
+      const quoteWarnings = warn.mock.calls.filter(([m]) => /quote/.test(String(m)));
+      expect(quoteWarnings).toHaveLength(3);
+    });
+
+    it("truncates a valid 260-character quote to 200 after validation", async () => {
+      await mockCreateWith(fixture("fabricated-quote"));
+      const result = await orchestrateJobAnalysis(evidenceRequest(`${hybridText} ${longQuote}`));
+      expect(longQuote).toHaveLength(260);
+      const truncated = result.fit?.evidence?.matching?.[2].postingQuote;
+      expect(truncated).toHaveLength(200);
+      expect(longQuote.startsWith(truncated!)).toBe(true);
+    });
+
+    it("always has a null profileQuote for missing and desired items", async () => {
+      await mockCreateWith(fixture("fabricated-quote"));
+      const result = await orchestrateJobAnalysis(evidenceRequest(`${hybridText} ${longQuote}`));
+      expect(result.fit?.evidence?.missing?.[0].profileQuote).toBeNull();
+    });
+
+    it("drops an item with a blank label from the lists and the evidence", async () => {
+      const raw = JSON.parse(fixture("with-evidence")) as {
+        fit: { matching: { label: string; postingQuote: string | null; profileQuote: string | null }[] };
+      };
+      raw.fit.matching.push({ label: "  ", postingQuote: "build backend services", profileQuote: null });
+      await mockCreateWith(JSON.stringify(raw));
+      const result = await orchestrateJobAnalysis(evidenceRequest());
+      expect(result.fit?.matching).toEqual(["C# and .NET", "Azure"]);
+      expect(result.fit?.evidence?.matching).toHaveLength(2);
+    });
+
+    it("matches quotes after whitespace normalization", async () => {
+      await mockCreateWith(fixture("with-evidence"));
+      const result = await orchestrateJobAnalysis(
+        evidenceRequest("About the role.\n  We offer a hybrid, 3 days per week in our Austin office schedule.\n\nYou will build backend services in C#   and .NET 8 on Azure and Kubernetes.")
+      );
+      expect(result.fit?.evidence?.matching?.[0].postingQuote).toBe(
+        "build backend services in C# and .NET 8"
+      );
+    });
+
+    it("asks for the shortest verbatim span and sends item objects in the schema", async () => {
+      const mockCreate = await mockCreateWith(fixture("with-evidence"));
+      await orchestrateJobAnalysis(evidenceRequest());
+      const [params] = mockCreate.mock.calls[0] as [
+        {
+          messages: { role: string; content: string }[];
+          response_format: { json_schema: { schema: { properties: { fit: { properties: { matching: { items: { required: string[] } } } } } } } };
+        },
+      ];
+      const system = params.messages.find((m) => m.role === "system")!.content;
+      expect(system).toContain("shortest verbatim");
+      expect(system).toContain("profileQuote");
+      const item = params.response_format.json_schema.schema.properties.fit.properties.matching.items;
+      expect(item.required).toEqual(["label", "postingQuote", "profileQuote"]);
+    });
+
+    it("leaves fit null, with no evidence, when no profile is sent", async () => {
+      await mockCreateWith(fixture("with-evidence"));
+      const result = await orchestrateJobAnalysis(baseRequest);
+      expect(result.fit).toBeNull();
+    });
+
+    it("leaves arrangement evidence behaviour unchanged", async () => {
+      await mockCreateWith(fixture("with-evidence"));
+      const result = await orchestrateJobAnalysis(evidenceRequest("Different text with no arrangement words."));
+      expect(result.arrangement).toBe("unspecified");
+      expect(result.fit?.evidence?.matching?.every((e) => e.postingQuote === null)).toBe(true);
+    });
+  });
 });

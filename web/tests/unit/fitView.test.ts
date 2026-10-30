@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ariaFitLabel,
+  evidenceFor,
   freshness,
   normalizeFit,
   previewMissing,
@@ -13,6 +14,7 @@ import {
 } from "shared/fitView";
 import {
   COST_LINE_CASES,
+  EVIDENCE_CASES,
   FRESHNESS_CASES,
   NORMALIZE_CASES,
   PREVIEW_MISSING_CASES,
@@ -64,6 +66,12 @@ describe("shared fitView (web build)", () => {
 
     it.each(VERDICT_LABELS)("label for %s", (verdict, label) => {
       expect(verdictLabel(verdict)).toBe(label);
+    });
+  });
+
+  describe("evidenceFor", () => {
+    it.each(EVIDENCE_CASES)("%s", (_name, fit, list, label, expected) => {
+      expect(evidenceFor(fit, list, label)).toEqual(expected);
     });
   });
 

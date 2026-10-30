@@ -9,17 +9,62 @@
   "daysInOffice": null,
   "daysRemote": null,
   "remoteRestrictions": null,
-  "salary": { "min": 160000, "max": 190000, "currency": "USD", "period": "year" },
+  "salary": {
+    "min": 160000,
+    "max": 190000,
+    "currency": "USD",
+    "period": "year"
+  },
   "seniority": "senior",
-  "techStack": ["C#", ".NET", "SQL Server", "Azure"],
+  "techStack": [
+    "C#",
+    ".NET",
+    "SQL Server",
+    "Azure"
+  ],
   "fit": {
     "score": 72,
     "rationale": "Solid overlap on C#, .NET and Azure backend work at the senior level. The role is on-site, which breaks the candidate's no on-site dealbreaker, and it does not sponsor visas.",
-    "matching": ["C# / .NET backend services", "Azure cloud services", "Senior-level ownership"],
-    "missing": ["SQL Server performance tuning"],
-    "desired": ["Event-driven architecture"],
-    "strengths": ["Seniority aligns with the role's scope"],
-    "weaknesses": ["Fully on-site five days a week"],
-    "dealbreakersViolated": ["no on-site", "Must sponsor visas"]
+    "matching": [
+      {
+        "label": "C# / .NET backend services",
+        "postingQuote": null,
+        "profileQuote": null
+      },
+      {
+        "label": "Azure cloud services",
+        "postingQuote": null,
+        "profileQuote": null
+      },
+      {
+        "label": "Senior-level ownership",
+        "postingQuote": null,
+        "profileQuote": null
+      }
+    ],
+    "missing": [
+      {
+        "label": "SQL Server performance tuning",
+        "postingQuote": null,
+        "profileQuote": null
+      }
+    ],
+    "desired": [
+      {
+        "label": "Event-driven architecture",
+        "postingQuote": null,
+        "profileQuote": null
+      }
+    ],
+    "strengths": [
+      "Seniority aligns with the role's scope"
+    ],
+    "weaknesses": [
+      "Fully on-site five days a week"
+    ],
+    "dealbreakersViolated": [
+      "no on-site",
+      "Must sponsor visas"
+    ]
   }
 }

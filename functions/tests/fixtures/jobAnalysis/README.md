@@ -21,6 +21,10 @@ every schema field present, enums valid.
 | `with-fit.json` | A full fit breakdown survives when a profile is sent |
 | `dealbreaker-onsite.json` | 006 R8: a violated dealbreaker copied verbatim keeps the user's wording, and the score (72) is never lowered for it (FR-005) |
 | `dealbreaker-paraphrased.json` | 006 R8: a paraphrase ("no on-site") maps to the profile line by containment; an unmatched entry ("Must sponsor visas") is kept with one warning |
+| `with-evidence.json` | 006 R9: every `postingQuote` and `profileQuote` is a verbatim substring of the test's posting and profile, so all survive validation |
+| `fabricated-quote.json` | 006 R9: a fabricated posting quote and profile quote become `null` with the item kept, a 260-character valid quote is truncated to 200, and a `profileQuote` on a `missing` item is dropped |
+
+From 006 PR3 `fit.matching`, `fit.missing` and `fit.desired` in every fixture are model-facing `{label, postingQuote, profileQuote}` arrays; the orchestrator splits them into label arrays plus `fit.evidence`.
 
 From 006 PR2 the schema requires `fit.dealbreakersViolated`, so every fixture
 with a non-null `fit` carries it (an empty array when nothing is violated).

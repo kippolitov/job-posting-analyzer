@@ -1,0 +1,57 @@
+{
+  "isJobPosting": true,
+  "title": "Senior Backend Engineer",
+  "company": "Acme",
+  "location": "Austin, TX",
+  "arrangement": "hybrid",
+  "arrangementConfidence": "explicit",
+  "arrangementEvidence": "hybrid, 3 days per week in our Austin office",
+  "daysInOffice": 3,
+  "daysRemote": 2,
+  "remoteRestrictions": null,
+  "salary": null,
+  "seniority": "senior",
+  "techStack": [
+    "C#",
+    ".NET",
+    "Azure",
+    "Kubernetes"
+  ],
+  "fit": {
+    "score": 78,
+    "rationale": "Good overlap on C# and Azure; Kubernetes is not shown in the profile.",
+    "matching": [
+      {
+        "label": "C# and .NET",
+        "postingQuote": "build backend services in C# and .NET 8",
+        "profileQuote": "Ten years of C# on Azure"
+      },
+      {
+        "label": "Azure",
+        "postingQuote": "on Azure and Kubernetes",
+        "profileQuote": "Ten years of C# on Azure"
+      }
+    ],
+    "missing": [
+      {
+        "label": "Kubernetes",
+        "postingQuote": "Azure and Kubernetes",
+        "profileQuote": null
+      }
+    ],
+    "desired": [
+      {
+        "label": "Austin office",
+        "postingQuote": "in our Austin office",
+        "profileQuote": null
+      }
+    ],
+    "strengths": [
+      "Seniority aligns"
+    ],
+    "weaknesses": [
+      "No Kubernetes evidence in the profile"
+    ],
+    "dealbreakersViolated": []
+  }
+}

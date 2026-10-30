@@ -9,17 +9,58 @@
   "daysInOffice": null,
   "daysRemote": null,
   "remoteRestrictions": "US only",
-  "salary": { "min": 200000, "max": 245000, "currency": "USD", "period": "year" },
+  "salary": {
+    "min": 200000,
+    "max": 245000,
+    "currency": "USD",
+    "period": "year"
+  },
   "seniority": "staff",
-  "techStack": ["C#", ".NET", "Azure"],
+  "techStack": [
+    "C#",
+    ".NET",
+    "Azure"
+  ],
   "fit": {
     "score": 88,
     "rationale": "Strong match on .NET and Azure at staff level; fully remote satisfies your no-onsite dealbreaker.",
-    "matching": ["C# / .NET platform work", "Azure cloud services", "Staff-level scope"],
-    "missing": ["Kubernetes operations"],
-    "desired": ["Terraform"],
-    "strengths": ["Seniority aligns with staff-level responsibilities"],
-    "weaknesses": ["No Kubernetes evidence in the profile"],
+    "matching": [
+      {
+        "label": "C# / .NET platform work",
+        "postingQuote": null,
+        "profileQuote": null
+      },
+      {
+        "label": "Azure cloud services",
+        "postingQuote": null,
+        "profileQuote": null
+      },
+      {
+        "label": "Staff-level scope",
+        "postingQuote": null,
+        "profileQuote": null
+      }
+    ],
+    "missing": [
+      {
+        "label": "Kubernetes operations",
+        "postingQuote": null,
+        "profileQuote": null
+      }
+    ],
+    "desired": [
+      {
+        "label": "Terraform",
+        "postingQuote": null,
+        "profileQuote": null
+      }
+    ],
+    "strengths": [
+      "Seniority aligns with staff-level responsibilities"
+    ],
+    "weaknesses": [
+      "No Kubernetes evidence in the profile"
+    ],
     "dealbreakersViolated": []
   }
 }

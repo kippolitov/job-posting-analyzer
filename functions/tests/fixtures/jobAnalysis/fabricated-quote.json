@@ -1,0 +1,52 @@
+{
+  "isJobPosting": true,
+  "title": "Senior Backend Engineer",
+  "company": "Acme",
+  "location": "Austin, TX",
+  "arrangement": "hybrid",
+  "arrangementConfidence": "explicit",
+  "arrangementEvidence": "hybrid, 3 days per week in our Austin office",
+  "daysInOffice": 3,
+  "daysRemote": 2,
+  "remoteRestrictions": null,
+  "salary": null,
+  "seniority": "senior",
+  "techStack": [
+    "C#",
+    ".NET",
+    "Azure",
+    "Kubernetes"
+  ],
+  "fit": {
+    "score": 70,
+    "rationale": "Partial overlap.",
+    "matching": [
+      {
+        "label": "C# and .NET",
+        "postingQuote": "an invented posting sentence about C#",
+        "profileQuote": "Ten years of C# on Azure"
+      },
+      {
+        "label": "Azure",
+        "postingQuote": "on Azure and Kubernetes",
+        "profileQuote": "an invented profile sentence about Azure"
+      },
+      {
+        "label": "Long quote",
+        "postingQuote": "abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi.",
+        "profileQuote": null
+      }
+    ],
+    "missing": [
+      {
+        "label": "Kubernetes",
+        "postingQuote": "Azure and Kubernetes",
+        "profileQuote": "not allowed on missing"
+      }
+    ],
+    "desired": [],
+    "strengths": [],
+    "weaknesses": [],
+    "dealbreakersViolated": []
+  }
+}
