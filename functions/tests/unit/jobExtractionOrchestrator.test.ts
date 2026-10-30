@@ -665,6 +665,32 @@ describe("jobExtractionOrchestrator", () => {
       expect(result.fit?.score).toBe(72);
     });
 
+    it("adds an Unverified note to weaknesses for a dealbreaker the posting does not state (#27)", async () => {
+      await mockCreateWith(
+        fixture("dealbreaker-onsite"),
+        judged([{ number: 1, postingSays: "", verdict: "not stated" }])
+      );
+      const result = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+      expect(result.fit?.dealbreakersViolated).toEqual([]);
+      expect(result.fit?.weaknesses).toContain(
+        "Unverified: No fully on-site roles — the posting doesn't say."
+      );
+    });
+
+    it("writes no Unverified note for a compatible or violated dealbreaker, or when the model already said so", async () => {
+      await mockCreateWith(fixture("dealbreaker-onsite"), judged([violated(1)]));
+      const violatedResult = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+      expect(violatedResult.fit?.weaknesses?.some((w) => w.startsWith("Unverified: No fully"))).toBe(false);
+
+      await mockCreateWith(
+        fixture("dealbreaker-onsite"),
+        judged([{ number: 1, postingSays: "", verdict: "not stated" }])
+      );
+      const once = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+      const twice = once.fit?.weaknesses?.filter((w) => w.includes("No fully on-site roles")) ?? [];
+      expect(twice).toHaveLength(1);
+    });
+
     it("drops a violation whose quote is not in the posting", async () => {
       const { result } = await calls(
         onsiteRequest({ profileData }),

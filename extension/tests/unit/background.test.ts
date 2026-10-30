@@ -121,6 +121,13 @@ describe("background entrypoint", () => {
     // no unhandled rejection — reaching this point is the assertion
   });
 
+  it("clears existing menu items before creating its own, so a service-worker restart logs no duplicate id (#20)", () => {
+    const [removeOrder] = vi.mocked(chrome.contextMenus.removeAll).mock.invocationCallOrder;
+    const [createOrder] = vi.mocked(chrome.contextMenus.create).mock.invocationCallOrder;
+    expect(removeOrder).toBeDefined();
+    expect(removeOrder).toBeLessThan(createOrder);
+  });
+
   it("registers the 'Analyze selection' context menu item, contexts: selection only", () => {
     expect(chrome.contextMenus.create).toHaveBeenCalledWith(
       expect.objectContaining({

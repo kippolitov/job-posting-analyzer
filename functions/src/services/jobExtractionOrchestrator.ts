@@ -449,6 +449,30 @@ export function violatedLines(
 }
 
 /**
+ * #27: the dealbreakers the judge could not check because the posting does not
+ * say. They become "Unverified" weaknesses, so the user knows the dealbreaker
+ * was not actually met. A line the fit call already called out is not repeated.
+ */
+export function unverifiedNotes(
+  checks: { number?: number; verdict?: string }[],
+  lines: string[],
+  existingWeaknesses: string[]
+): string[] {
+  const notes: string[] = [];
+  for (const check of checks) {
+    if (check.verdict !== "not stated") continue;
+    const line = Number.isInteger(check.number) ? lines[check.number! - 1] : undefined;
+    if (line === undefined) continue;
+    const mentioned = existingWeaknesses.some(
+      (w) => /^unverified/i.test(w) && w.toLowerCase().includes(line.toLowerCase())
+    );
+    const note = `Unverified: ${line} — the posting doesn't say.`;
+    if (!mentioned && !notes.includes(note)) notes.push(note);
+  }
+  return notes;
+}
+
+/**
  * Extensions from before PR2 send no `profileData` and ignore
  * `dealbreakersViolated`, so the violation is named in the rationale they do
  * render. The score is untouched (FR-005). Clients that send `profileData`
@@ -532,8 +556,9 @@ export async function orchestrateJobAnalysis(
   // Dealbreakers get their own call, run alongside the fit call (research R8
   // fallback): the fit call never sees them, so they cannot move the score.
   const lines = resolveScoringProfile(req) ? dealbreakerLinesFor(req) : [];
-  const judge = async (): Promise<string[]> => {
-    if (lines.length === 0) return [];
+  type Judged = { violated: string[]; unverified: { number?: number; verdict?: string }[] };
+  const judge = async (): Promise<Judged> => {
+    if (lines.length === 0) return { violated: [], unverified: [] };
     try {
       const startedAt = Date.now();
       const completion = await client.chat.completions.create({
@@ -570,10 +595,14 @@ export async function orchestrateJobAnalysis(
       const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "") as {
         checks?: { number?: number; postingSays?: string; verdict?: string }[];
       };
-      return violatedLines(parsed.checks ?? [], lines, postingHaystack(req), warn);
+      const checks = parsed.checks ?? [];
+      return {
+        violated: violatedLines(checks, lines, postingHaystack(req), warn),
+        unverified: checks.filter((c) => c.verdict === "not stated"),
+      };
     } catch (error) {
       warn(`dealbreaker check failed (${error instanceof Error ? error.message : "unknown"}); reporting none`);
-      return [];
+      return { violated: [], unverified: [] };
     }
   };
   const firstAttempt = complete(1);
@@ -594,8 +623,13 @@ export async function orchestrateJobAnalysis(
   let payload = toWirePayload(modelPayload, req, warn);
   payload = validateEvidence(payload, req, warn);
   payload = enforceConsistency(payload, req);
-  const violated = await judged;
+  const { violated, unverified } = await judged;
   if (payload.fit) {
+    const unverifiedWeaknesses = unverifiedNotes(
+      unverified,
+      lines,
+      payload.fit.weaknesses ?? []
+    );
     payload = {
       ...payload,
       fit: {
@@ -604,6 +638,7 @@ export async function orchestrateJobAnalysis(
           ? payload.fit.rationale
           : withLegacyDealbreakerNote(payload.fit.rationale, violated),
         dealbreakersViolated: violated,
+        weaknesses: [...(payload.fit.weaknesses ?? []), ...unverifiedWeaknesses],
       },
     };
   }
