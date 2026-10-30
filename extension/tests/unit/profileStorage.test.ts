@@ -11,6 +11,7 @@ import {
   getProfile,
   setProfile,
   clearProfile,
+  confirmSkill,
   profileToPromptText,
   PROFILE_TEXT_MAX,
 } from "../../services/profileStorage";
@@ -106,5 +107,24 @@ describe("profileStorage (fetch-backed, contracts/storage-api.md)", () => {
     });
     api.failNext(500);
     await expect(getProfile()).rejects.toMatchObject({ retryable: true });
+  });
+});
+
+describe("confirmSkill (006 US5)", () => {
+  it("shortens a requirement longer than the server limit instead of failing", async () => {
+    await setProfile({ text: "Engineer", dealbreakers: [] });
+    const long =
+      "Lead modernization initiatives involving IBM i (AS400/RPG/RPGLE/DB2) systems and integration with modern technology platforms";
+    await confirmSkill(long);
+    const sent = api.confirmCalls[api.confirmCalls.length - 1];
+    expect(sent.length).toBeLessThanOrEqual(100);
+    expect(sent.endsWith("…")).toBe(true);
+    expect(long.startsWith(sent.slice(0, -1))).toBe(true);
+  });
+
+  it("says to save a profile first when none is stored", async () => {
+    await expect(confirmSkill("Terraform")).rejects.toMatchObject({
+      message: expect.stringMatching(/Save a profile first/),
+    });
   });
 });

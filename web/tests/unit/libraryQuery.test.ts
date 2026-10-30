@@ -1,4 +1,5 @@
 import { sortByFit } from "shared/fitView";
+import { confirmedSkillLabel } from "shared/types/profile";
 import { describe, it, expect } from "vitest";
 import { applyLibraryQuery, activeFilterSummary, DEFAULT_LIBRARY_QUERY } from "@/lib/libraryQuery";
 import type { SavedJobPayload } from "@/api/types";
@@ -168,5 +169,18 @@ describe("libraryQuery (data-model.md §4, FR-010/FR-011/FR-012)", () => {
 
   it("activeFilterSummary is empty with no filters set", () => {
     expect(activeFilterSummary(DEFAULT_LIBRARY_QUERY)).toEqual([]);
+  });
+});
+
+describe("confirmedSkillLabel", () => {
+  it("keeps short labels, trimmed", () => {
+    expect(confirmedSkillLabel("  Terraform ")).toBe("Terraform");
+  });
+  it("shortens at a word boundary to at most 100 characters", () => {
+    const long = "Lead modernization initiatives involving IBM i (AS400/RPG/RPGLE/DB2) systems and integration with modern technology platforms";
+    const label = confirmedSkillLabel(long);
+    expect(label.length).toBeLessThanOrEqual(100);
+    expect(label.endsWith("…")).toBe(true);
+    expect(label).not.toMatch(/\s…$/);
   });
 });
