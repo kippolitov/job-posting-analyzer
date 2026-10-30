@@ -386,6 +386,93 @@ reasoning at all. Same deployment (`gpt-6-luna-premium`, DataZoneStandard),
 - Free still scores a little higher on recall and stability (83–92% and
   95–97% across its runs), which is within the spread seen between runs.
 
+## Prices, actual cost and the DataZone question (2026-10-30)
+
+### Prices
+
+Azure Retail Prices API, `eastus2`, per 1M tokens, context up to 32K:
+
+| | Input | Cached input | Cache write | Output |
+|---|---|---|---|---|
+| `gpt-6-luna` GlobalStandard (free) | $0.10 | $0.01 | $0.125 | $0.50 |
+| `gpt-6-luna` DataZoneStandard (Premium) | $0.11 | $0.011 | $0.1375 | $0.55 |
+| `gpt-6-luna` Global Flex | $0.05 | $0.005 | $0.0625 | $0.25 |
+
+DataZone is exactly 10% above Global. Flex is half price but is for
+batch-style work, not interactive analysis. `modelPrices.json` now has a
+`gpt-6-luna-premium` entry at the DataZone price.
+
+### Actual cost per analysis
+
+Recomputed from each saved run's token usage with the harness formula (uncached
+input billed at the cache-write rate, so these are upper bounds). The free
+figures match the harness's own.
+
+| Run | Median | Mean | p95 | Per month (mean × allowance) |
+|---|---|---|---|---|
+| Free, PR2 prompt (5 runs) | $0.000302 | $0.000344 | $0.000556 | |
+| Free, PR3 prompt (3 runs) | $0.000439 | $0.000584 | $0.001408 | $0.029 at 50 |
+| Premium `low`, PR2 (5 runs) | $0.000446 | $0.000498 | $0.000894 | |
+| Premium `low`, PR3 (3 runs) | $0.000596 | $0.000701 | $0.001704 | $0.21 at 300 |
+| Premium `none`, PR3 (5 runs) | $0.000452 | $0.000507 | $0.000816 | $0.15 at 300 |
+
+Premium `none` on the Global price would be about $0.000411 median, about
+$0.014 less per full month. A fully used Premium month is about 3% of $5
+revenue.
+
+### DataZone latency
+
+Same code, prompt and effort (`none`), per model call:
+
+| | Free (Global, 100K TPM) | Premium (DataZone, 50K TPM) |
+|---|---|---|
+| p50 / p90 / p95 | 4.2 / 7.6 / 8.4 s | 4.6 / 13.7 / 16.5 s |
+| Calls over 15 s | 2 of 266 | 31 of 418 |
+| Longest call | 29.8 s | 94.5 s |
+| Completion tokens per second | 137 | 118 |
+
+The median is close and the tail is not. The tail is concentrated on long
+postings (phenom-intuit median 7.3 s free against 14.8 s Premium;
+lever-palantir 4.5 s against 8.4 s), while short postings match. That fits TPM
+throttling: a long posting reserves about 13K tokens, the eval runs the fit and
+dealbreaker calls in parallel, and 429 backoff counts as latency. It is
+**consistent with, not proof of**, a capacity effect. Real users send one
+request at a time, so production tails should be milder than the eval's.
+
+**To separate capacity from DataZone**: raise `gpt-6-luna-premium` to 100K TPM
+(quota is free; 100 units were available in `eastus2` on 2026-10-29) and re-run
+`premium-luna-none`. If p95 falls to about 10 s, keep US-only processing. If it
+does not, the DataZone routing itself is the cost, and the choice is between 10%
+more and about 10 s of p95 for US-only processing against moving Premium to
+Global. The privacy policy makes no regional claim (it says only that Azure
+OpenAI processes content under Microsoft's enterprise data handling
+commitments), so Global would not contradict it. Both are product-owner
+decisions and neither is made.
+
+### Reasoning effort
+
+| | `none` | `low` | `medium` |
+|---|---|---|---|
+| **PR1 prompt, free deployment, 5 runs** | | | |
+| Trap + stated false dealbreakers | 33 | 19 | 13 |
+| Missed dealbreakers | 0 | 0 | 5 |
+| Verdict stability | 81.8% | 84.1% | 77.3% |
+| Median cost | $0.000241 | $0.000317 (+31%) | $0.000520 (+116%) |
+| Latency p50 (one run) | 4.0 s | 6.9 s | not measured |
+| **PR3 prompt, Premium deployment** | | | |
+| Recall | 76.7% (5 runs) | 76.7% (PR2, 5 runs) | |
+| Verdict stability | 91.4% | 90.9% | |
+| Median completion tokens | 685 | 653 (187 reasoning) | |
+| Median cost | $0.000452 | $0.000596 (+32%, 3 runs) | |
+| Latency p50 / p95 | 5.9 / 20.3 s | 6.6 / 20.1 s | |
+
+Under the PR1 prompt, reasoning mostly cut false dealbreakers (33, 19, 13) and
+did nothing for stability. PR2's separate dealbreaker call, which requires a
+verbatim quote, fixed false dealbreakers a different way, and since then
+`low` and `none` are equal on accuracy and stability within noise. Reasoning
+adds cost (about +32%) and 1–3 s at the median, and it does not cause
+Premium's p95: `low` and `none` have the same p95 on the same deployment.
+
 ## Sign-off
 
 - [X] Product owner: chosen settings approved (2026-10-29): free `gpt-6-luna`
