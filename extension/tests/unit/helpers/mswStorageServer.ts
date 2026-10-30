@@ -2,7 +2,7 @@ import { http, HttpResponse } from "msw";
 import { setupServer, type SetupServerApi } from "msw/node";
 import { afterAll, beforeAll, beforeEach, vi } from "vitest";
 import type { CandidateProfile, SavedJob } from "../../../types/job";
-import { profileToPromptText } from "../../../../shared/types/profile";
+import { profileToPromptText, type Preferences } from "../../../../shared/types/profile";
 
 /**
  * In-memory fake of the storage API, faithful to contracts/storage-api.md:
@@ -27,6 +27,10 @@ export interface FakeStorageApi {
   setAccountTier(tier: "free" | "premium"): void;
   /** GET /api/account usage overrides, e.g. rescore counts (006 FR-004a). */
   setAccountUsage(usage: Partial<AccountUsage>): void;
+  /** What POST /api/profile/import answers next; default is a 200 with some text. */
+  setImportResponse(response: { status: number; body: unknown }): void;
+  /** Number of POST /api/profile/import calls received. */
+  importCalls(): number;
   reset(): void;
   seededKey(canonicalUrl: string): Promise<string>;
 }
@@ -43,6 +47,7 @@ interface AccountUsage {
 export async function fakeFingerprint(profile: {
   text: string;
   dealbreakers: string[];
+  preferences?: Preferences;
 }): Promise<string> {
   return sha256Hex(profileToPromptText(profile).replace(/\s+/g, " ").trim());
 }
@@ -57,6 +62,14 @@ async function sha256Hex(input: string): Promise<string> {
     .join("");
 }
 
+function mergedPreferences(
+  stored: Preferences | undefined,
+  sent: Preferences | null | undefined
+): { preferences?: Preferences } {
+  const next = sent === undefined ? stored : (sent ?? undefined);
+  return next ? { preferences: next } : {};
+}
+
 export function createFakeStorageApi(): FakeStorageApi {
   const jobs = new Map<string, SavedJob>();
   let profile: CandidateProfile | null = null;
@@ -64,6 +77,9 @@ export function createFakeStorageApi(): FakeStorageApi {
   let accountTier: "free" | "premium" = "free";
   let accountUsage: Partial<AccountUsage> = {};
   let forcedFailure: { status: number; code: string } | null = null;
+  const DEFAULT_IMPORT = { status: 200, body: { text: "Imported resume text", charCount: 20 } };
+  let importResponse: { status: number; body: unknown } = DEFAULT_IMPORT;
+  let importCalls = 0;
 
   function takeForcedFailure(): HttpResponse | null {
     if (!forcedFailure) return null;
@@ -96,6 +112,7 @@ export function createFakeStorageApi(): FakeStorageApi {
       const body = (await request.json()) as {
         text?: unknown;
         dealbreakers?: unknown;
+        preferences?: Preferences | null;
       };
       if (typeof body?.text !== "string" || !Array.isArray(body.dealbreakers)) {
         return HttpResponse.json(
@@ -109,8 +126,15 @@ export function createFakeStorageApi(): FakeStorageApi {
           .map((d) => d.trim())
           .filter(Boolean),
         updatedAt: new Date().toISOString(),
+        // Merge semantics (contracts/profile-api.md §2): omitted keeps, null clears.
+        ...mergedPreferences(profile?.preferences, body.preferences),
       };
       return HttpResponse.json({ ...profile, fingerprint: await fakeFingerprint(profile) });
+    }),
+
+    http.post(`${base}/profile/import`, () => {
+      importCalls += 1;
+      return HttpResponse.json(importResponse.body, { status: importResponse.status });
     }),
 
     http.delete(`${base}/profile`, () => {
@@ -338,7 +362,13 @@ export function createFakeStorageApi(): FakeStorageApi {
       accountTier = "free";
       accountUsage = {};
       forcedFailure = null;
+      importResponse = DEFAULT_IMPORT;
+      importCalls = 0;
     },
+    setImportResponse: (next) => {
+      importResponse = next;
+    },
+    importCalls: () => importCalls,
     seededKey: (canonicalUrl) => sha256Hex(canonicalUrl),
   };
 }

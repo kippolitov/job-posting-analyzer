@@ -709,6 +709,52 @@ describe("jobExtractionOrchestrator", () => {
       );
     });
 
+    describe("preferences (PR4, research R11)", () => {
+      it("sends location and sponsorship to the judge as numbered lines, never to the fit call", async () => {
+        const { result, fit, check } = await calls(
+          onsiteRequest({
+            profileData: {
+              ...profileData,
+              preferences: { locations: ["EU timezones only"], needsSponsorship: true },
+            },
+          }),
+          judged([
+            { number: 3, postingSays: onsiteQuote, verdict: "violated" },
+          ])
+        );
+        const checkUser = check?.messages[1].content ?? "";
+        expect(checkUser).toContain("2. Locations or timezones: EU timezones only");
+        expect(checkUser).toContain("3. Work authorization: needs visa sponsorship");
+        expect(fit.messages[1].content).not.toContain("EU timezones");
+        expect(fit.messages[1].content).not.toContain("Preferences:");
+        expect(result.fit?.dealbreakersViolated).toEqual([
+          "Work authorization: needs visa sponsorship",
+        ]);
+      });
+
+      it("adds code-checked violations without changing the score, and no judge line for them", async () => {
+        const { result, check } = await calls(
+          onsiteRequest({
+            profileData: { ...profileData, preferences: { arrangements: ["remote"] } },
+          }),
+          judged([])
+        );
+        expect(check?.messages[1].content ?? "").not.toContain("2.");
+        expect(result.fit?.dealbreakersViolated).toEqual(["Arrangement: remote only"]);
+        expect(result.fit?.score).toBe(72);
+      });
+
+      it("changes the profile fingerprint", async () => {
+        const plain = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
+        const withPrefs = await orchestrateJobAnalysis(
+          onsiteRequest({
+            profileData: { ...profileData, preferences: { arrangements: ["remote"] } },
+          })
+        );
+        expect(withPrefs.fit?.profileFingerprint).not.toBe(plain.fit?.profileFingerprint);
+      });
+    });
+
     describe("rationale note for pre-PR2 extensions (no profileData)", () => {
       const fixtureRationale = (
         JSON.parse(fixture("dealbreaker-onsite")) as { fit: { rationale: string } }

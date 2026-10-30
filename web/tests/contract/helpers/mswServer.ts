@@ -22,6 +22,7 @@ export const TEST_API_BASE = "http://api.test";
 type EndpointKey =
   | "jobs"
   | "profile"
+  | "profile-import"
   | "account"
   | "analyze-document"
   | "jobs-item"
@@ -43,6 +44,8 @@ export interface FakeApi {
   setProfile(profile: ProfilePayload | null): void;
   /** The currently stored profile (reflects PUTs). */
   getProfile(): ProfilePayload | null;
+  /** The text POST /api/profile/import extracts next (contracts/profile-api.md §4). */
+  setImportText(text: string): void;
   setAccount(account: AccountPayload): void;
   setDocumentResult(result: DocumentAnalysisResult): void;
   setCheckoutResult(result: CheckoutResult): void;
@@ -72,6 +75,7 @@ const DEFAULT_PORTAL_RESULT: PortalResult = {
 export function createFakeApi(): FakeApi {
   let jobs: SavedJobPayload[] = [];
   let profile: ProfilePayload | null = null;
+  let importText = "Imported resume text";
   let account: AccountPayload = { ...DEFAULT_ACCOUNT };
   let documentResult: DocumentAnalysisResult | null = null;
   let checkoutResult: CheckoutResult = { ...DEFAULT_CHECKOUT_RESULT };
@@ -81,6 +85,7 @@ export function createFakeApi(): FakeApi {
   const calls: Record<EndpointKey, number> = {
     jobs: 0,
     profile: 0,
+    "profile-import": 0,
     account: 0,
     "analyze-document": 0,
     "jobs-item": 0,
@@ -116,9 +121,19 @@ export function createFakeApi(): FakeApi {
     http.put(`${TEST_API_BASE}/profile`, async ({ request }) => {
       const failure = takeForced("profile");
       if (failure) return failure;
-      const body = (await request.json()) as { text: string; dealbreakers: string[] };
+      const body = (await request.json()) as {
+        text: string;
+        dealbreakers: string[];
+        preferences?: ProfilePayload["preferences"];
+      };
       profile = { ...body, updatedAt: new Date().toISOString(), schemaVersion: 1 };
       return HttpResponse.json(profile);
+    }),
+
+    http.post(`${TEST_API_BASE}/profile/import`, () => {
+      const failure = takeForced("profile-import");
+      if (failure) return failure;
+      return HttpResponse.json({ text: importText, charCount: importText.length });
     }),
 
     http.get(`${TEST_API_BASE}/account`, () => takeForced("account") ?? HttpResponse.json(account)),
@@ -184,6 +199,9 @@ export function createFakeApi(): FakeApi {
       profile = next;
     },
     getProfile: () => profile,
+    setImportText: (next) => {
+      importText = next;
+    },
     setAccount: (next) => {
       account = next;
     },
@@ -202,6 +220,7 @@ export function createFakeApi(): FakeApi {
     reset: () => {
       jobs = [];
       profile = null;
+      importText = "Imported resume text";
       account = { ...DEFAULT_ACCOUNT };
       documentResult = null;
       checkoutResult = { ...DEFAULT_CHECKOUT_RESULT };
