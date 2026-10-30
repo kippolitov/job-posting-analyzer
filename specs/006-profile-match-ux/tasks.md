@@ -478,7 +478,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - show `scoredByLabel` in the fit details.
 - [X] T086 [US2] Update `web/src/components/AnalysisView.tsx`, `web/src/pages/Library.tsx` and `web/src/pages/PostingDetail.tsx` to show the verdict label and icon using `scoreTone`, `verdictLabel` and `ariaFitLabel`, and `scoredByLabel` on the detail page. Use a web-local class map, because Tailwind classes are not shared (contracts/fit-view.md). This makes T082 pass.
 - [X] T087 [US2] Re-run the eval with field-based detection **(live, the chosen free and Premium configurations only, `--runs=5`)** using `npm run eval:postings -- --configs=<chosen-only file> --out=../specs/006-profile-match-ux/eval-runs/pr2.json`. Run the violating pairs a second time with each profile's dealbreakers and preferences removed, for SC-002's score-independence check. Append a "PR2 — rubric and dealbreakers listed without changing the score" table to `specs/006-profile-match-ux/eval-models.md`, with SC-002, SC-004 and SC-008 now measured with `detectionMethod: "field"`. If SC-004 or score independence drops below 90%, stop and report to the user before merging (research R8 names the fallback). *2026-10-29: after three failed attempts the user approved the per-run SC-004 and the identical-fit-input SC-002 gate (spec.md Clarifications, research R8 "Superseded"). After the final run (attempt 4, `eval-runs/pr2.json`) the dealbreaker targets were relaxed too (0 trap false, ≤ 2% misreadings, ≥ 75% recall), and the gate passes on both configurations.*
-- [ ] T088 [US2] Run the PR2 gate:
+- [X] T088 [US2] Run the PR2 gate:
   - lint, tests and coverage (at least 80% on `rescoreEligibility.ts`, `meteringService.ts`, `profileRepository.ts`, `profileFingerprint.ts`, `jobExtractionOrchestrator.ts`, `savedJobsRepository.ts`, `shared/fitView.ts`, `jobFlow.ts`, `FitScore.tsx` and `libraryQuery.ts`);
   - `perf.test.ts` against the T001 baseline;
   - the compatibility smoke (rule 3), including an **old-extension profile save that must not erase anything** and old-extension rendering of a PR2-shaped saved fit.
@@ -497,11 +497,11 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for User Story 3 (write first, must fail) ⚠️
 
-- [ ] T089 [P] [US3] Add the recorded fixtures `functions/tests/fixtures/jobAnalysis/with-evidence.json` and `functions/tests/fixtures/jobAnalysis/fabricated-quote.json`, in the **model-facing** shape where `matching`, `missing` and `desired` are `{label, postingQuote, profileQuote}` arrays.
+- [X] T089 [P] [US3] Add the recorded fixtures `functions/tests/fixtures/jobAnalysis/with-evidence.json` and `functions/tests/fixtures/jobAnalysis/fabricated-quote.json`, in the **model-facing** shape where `matching`, `missing` and `desired` are `{label, postingQuote, profileQuote}` arrays.
   - `with-evidence.json`: every quote is a verbatim substring of the paired posting and profile text in the test.
   - `fabricated-quote.json`: one postingQuote and one profileQuote are not substrings, and one quote is 260 characters long.
   Update the README.
-- [ ] T090 [P] [US3] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` for wire shape (trap 3) and validation:
+- [X] T090 [P] [US3] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` for wire shape (trap 3) and validation:
   - the response's `fit.matching`, `fit.missing` and `fit.desired` are **string arrays of labels**;
   - `fit.evidence.matching[i]` is `{label, postingQuote, profileQuote}`;
   - a fabricated quote becomes `null`, its item and label are kept, and one warning is logged per dropped quote;
@@ -509,32 +509,32 @@ These are silent failures, not crashes. They were found in existing code during 
   - `profileQuote` is `null` for missing and desired items;
   - evidence whose label is not in its list is dropped;
   - the existing arrangement-evidence behaviour is unchanged (the existing tests stay green).
-- [ ] T091 [P] [US3] Add `EVIDENCE_CASES` to `shared/fitView.fixtures.ts`, covering `evidenceFor(fit, list, label)` finding by label, returning `null` for legacy fits and returning `null` for unknown labels. Iterate them in both suites.
-- [ ] T092 [P] [US3] Extend `extension/tests/unit/FitScore.test.tsx`:
+- [X] T091 [P] [US3] Add `EVIDENCE_CASES` to `shared/fitView.fixtures.ts`, covering `evidenceFor(fit, list, label)` finding by label, returning `null` for legacy fits and returning `null` for unknown labels. Iterate them in both suites.
+- [X] T092 [P] [US3] Extend `extension/tests/unit/FitScore.test.tsx`:
   - a chip with evidence shows a disclosure button with `aria-expanded="false"`;
   - Enter or Space and a click both reveal the posting quote, plus the profile quote for matching items;
   - the collapsed render adds no height, so the evidence region is not in the DOM until expanded (FR-013);
   - chips without evidence have no button and log no console error;
   - a legacy fit renders exactly as before.
-- [ ] T093 [P] [US3] Create `web/tests/contract/evidence.test.tsx` with the same assertions for `web/src/components/AnalysisView.tsx`.
+- [X] T093 [P] [US3] Create `web/tests/contract/evidence.test.tsx` with the same assertions for `web/src/components/AnalysisView.tsx`.
 
 ### Implementation for User Story 3
 
-- [ ] T094 [US3] In `functions/src/services/jobExtractionOrchestrator.ts`, make T090 pass:
+- [X] T094 [US3] In `functions/src/services/jobExtractionOrchestrator.ts`, make T090 pass:
   - change the model schema's `fit.matching`, `fit.missing` and `fit.desired` to arrays of `{label, postingQuote: string|null, profileQuote: string|null}`, keeping `maxItems` at 8 for matching and missing and 10 for desired (research R9);
   - add prompt lines asking for the shortest verbatim supporting span, with `profileQuote` null for missing and desired;
   - generalize `validateEvidence` into `validateQuotes(payload, postingHaystack, profileHaystack, warn)`;
   - add `splitEvidence(modelFit)`, which produces the label arrays plus `fit.evidence`;
   - keep a separate internal `ModelJobAnalysisPayload` type, so the wire `JobAnalysisPayload` type is unchanged apart from `evidence`.
-- [ ] T095 [US3] Add `evidence?: FitEvidence` and `EvidenceItem` to `Fit` in `shared/types/job.ts`, and `evidenceFor` to `shared/fitView.ts`. This makes T091 pass.
-- [ ] T096 [US3] Add the chip evidence disclosure to `extension/components/JobPanel/FitScore.tsx` (T092) and to `web/src/components/AnalysisView.tsx` (T093). Quotes render as `<blockquote>` with a source label ("From the posting" or "From your profile").
-- [ ] T097 [US3] Measure evidence **(live, the chosen free configuration plus Premium, `--runs=3`)** and write `eval-runs/pr3.json`. Append a "PR3 — evidence" table to `specs/006-profile-match-ux/eval-models.md` with:
+- [X] T095 [US3] Add `evidence?: FitEvidence` and `EvidenceItem` to `Fit` in `shared/types/job.ts`, and `evidenceFor` to `shared/fitView.ts`. This makes T091 pass.
+- [X] T096 [US3] Add the chip evidence disclosure to `extension/components/JobPanel/FitScore.tsx` (T092) and to `web/src/components/AnalysisView.tsx` (T093). Quotes render as `<blockquote>` with a source label ("From the posting" or "From your profile").
+- [X] T097 [US3] Measure evidence **(live, the chosen free configuration plus Premium, `--runs=3`)** and write `eval-runs/pr3.json`. Append a "PR3 — evidence" table to `specs/006-profile-match-ux/eval-models.md` with:
   - the SC-003 verbatim rate (target at least 95%);
   - the cost-per-analysis delta against `pr2.json`;
   - the p95 delta;
   - truncation count.
   If truncations are above 0, raise `max_completion_tokens` in the orchestrator and re-measure.
-- [ ] T098 [US3] Run the PR3 gate: lint, tests, coverage on `jobExtractionOrchestrator.ts`, `fitView.ts`, `FitScore.tsx` and `AnalysisView.tsx`, `perf.test.ts`, and the compatibility smoke. Rule 3 matters most here, because an old extension must render a PR3 fit without crashing.
+- [X] T098 [US3] Run the PR3 gate: lint, tests, coverage on `jobExtractionOrchestrator.ts`, `fitView.ts`, `FitScore.tsx` and `AnalysisView.tsx`, `perf.test.ts`, and the compatibility smoke. Rule 3 matters most here, because an old extension must render a PR3 fit without crashing.
   - If p95 rose 20% or more against the T001 baseline, write a QG-4 exception in the PR description, with the numbers from T097 and the absolute p95 against 30 s, and ask the user to approve it.
   - Report the measured cost per analysis on each tier, in dollars and as a percentage against PR2, as a feature cost, and ask the user to approve it. FR-M05's no-increase limit does not apply here; it covers only the PR1 model switch (research R9).
   Request QG-3 review of the evidence disclosure, then open PR3.
@@ -551,7 +551,7 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for User Story 4 (write first, must fail) ⚠️
 
-- [ ] T099 [P] [US4] Write `functions/tests/unit/profileImport.handler.test.ts` for `POST /api/profile/import` ([contracts/profile-api.md §4](./contracts/profile-api.md)):
+- [X] T099 [P] [US4] Write `functions/tests/unit/profileImport.handler.test.ts` for `POST /api/profile/import` ([contracts/profile-api.md §4](./contracts/profile-api.md)):
   - `valid.pdf` and `valid.docx` from `functions/tests/fixtures/documents/` return 200 with `{text, charCount}`;
   - `oversized.pdf` returns 413, `mislabeled.pdf` 415, `encrypted.pdf` and `encrypted.docx` 422 `FILE_PASSWORD_PROTECTED`, and `image-only.pdf` 422 `FILE_NO_TEXT` with the **same message** as analyze-document;
   - a missing file part returns 400;
