@@ -24,6 +24,8 @@ export interface EvalFit {
   score: number;
   rationale: string;
   dealbreakersViolated?: string[];
+  /** PR3: quotes behind the matching, missing and desired labels. */
+  evidence?: Partial<Record<"matching" | "missing" | "desired", { postingQuote: string | null; profileQuote: string | null }[]>>;
 }
 
 export interface ScoredResult {
@@ -308,4 +310,31 @@ export function median(samples: number[]): number {
 
 export function truncations(usages: { finishReason: string | null }[]): number {
   return usages.filter((u) => u.finishReason === "length").length;
+}
+
+export interface QuoteStats {
+  kept: number;
+  dropped: number;
+}
+
+/**
+ * One analysis's evidence quotes (research R9): `kept` survived validation,
+ * `dropped` is the orchestrator's count of fabricated ones it nulled.
+ */
+export function quoteStats(fit: EvalFit | null | undefined, dropped: number): QuoteStats {
+  let kept = 0;
+  for (const items of Object.values(fit?.evidence ?? {})) {
+    for (const item of items ?? []) {
+      if (item.postingQuote) kept++;
+      if (item.profileQuote) kept++;
+    }
+  }
+  return { kept, dropped };
+}
+
+/** SC-003: the share of returned quotes that were verbatim, in percent; NaN when none were returned. */
+export function verbatimRate(stats: QuoteStats[]): number {
+  const kept = stats.reduce((sum, s) => sum + s.kept, 0);
+  const dropped = stats.reduce((sum, s) => sum + s.dropped, 0);
+  return kept + dropped === 0 ? NaN : (kept / (kept + dropped)) * 100;
 }
