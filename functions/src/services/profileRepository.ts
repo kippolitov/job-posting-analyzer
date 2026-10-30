@@ -1,7 +1,7 @@
 import { RestError } from "@azure/data-tables";
 import type { ProfileEntity, ProfilePutBody } from "../models/user";
 import { PROFILE_TEXT_MAX } from "../models/user";
-import { profileToPromptText } from "../../../shared/types/profile";
+import { profileToPromptText, type Preferences } from "../../../shared/types/profile";
 import { profileFingerprint } from "./profileFingerprint";
 import {
   decodeJsonProperty,
@@ -32,7 +32,7 @@ export interface StoredProfile {
   updatedAt: string;
   /** Derived on every read, never stored (research R5). */
   fingerprint: string;
-  preferences?: Record<string, unknown>;
+  preferences?: Preferences;
   confirmedSkills?: string[];
 }
 
@@ -47,20 +47,20 @@ function isPreconditionFailed(err: unknown): boolean {
 }
 
 function storedFromEntity(entity: ProfileEntity): StoredProfile {
-  const base = {
-    text: entity.text,
-    dealbreakers: decodeJsonProperty<string[]>(entity.dealbreakers, []),
-  };
-  const preferences = decodeJsonProperty<Record<string, unknown> | null>(
+  const preferences = decodeJsonProperty<Preferences | null>(
     entity.preferences,
     null
   );
+  const base = {
+    text: entity.text,
+    dealbreakers: decodeJsonProperty<string[]>(entity.dealbreakers, []),
+    ...(preferences ? { preferences } : {}),
+  };
   const confirmedSkills = decodeJsonProperty<string[]>(entity.confirmedSkills, []);
   return {
     ...base,
     updatedAt: entity.updatedAt,
     fingerprint: profileFingerprint(profileToPromptText(base)),
-    ...(preferences ? { preferences } : {}),
     ...(confirmedSkills.length > 0 ? { confirmedSkills } : {}),
   };
 }
@@ -119,13 +119,15 @@ function mergeEntity(
       input.dealbreakers.map((d) => d.trim()).filter(Boolean)
     ),
     updatedAt: nowIso(),
-    schemaVersion: 1,
+    schemaVersion: 2,
   };
 
   const preferences =
-    input.preferences === undefined ? existing?.preferences : input.preferences === null
-      ? undefined
-      : encodeJsonProperty(input.preferences);
+    input.preferences === undefined
+      ? existing?.preferences
+      : input.preferences === null || Object.keys(input.preferences).length === 0
+        ? undefined
+        : encodeJsonProperty(input.preferences);
   if (preferences) entity.preferences = preferences;
 
   const confirmedSkills =

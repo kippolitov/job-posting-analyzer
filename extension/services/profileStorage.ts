@@ -1,5 +1,5 @@
 import type { CandidateProfile } from "../types/job";
-import type { ScoringProfile } from "../../shared/types/profile";
+import type { Preferences } from "../../shared/types/profile";
 import { ApiError, apiFetch } from "./api/apiClient";
 
 // Sized for a full pasted resume (a dense multi-page resume is ~15k chars).
@@ -76,6 +76,8 @@ export async function getProfile(): Promise<CandidateProfile | null> {
 export async function setProfile(input: {
   text: string;
   dealbreakers: string[];
+  /** Omitted keeps the stored preferences, `null` clears them (merge PUT). */
+  preferences?: Preferences | null;
 }): Promise<CandidateProfile> {
   const response = await apiFetch("/profile", { method: "PUT", body: input });
   if (!response.ok) await throwUnexpected(response);
@@ -90,13 +92,20 @@ export async function clearProfile(): Promise<void> {
   await writeCachedFingerprint(null);
 }
 
-/** The shape analysis requests carry as `profileData`. */
-export function toScoringProfile(profile: {
-  text: string;
-  dealbreakers: string[];
-}): ScoringProfile {
-  return { text: profile.text, dealbreakers: profile.dealbreakers };
+/**
+ * POST /api/profile/import: the text of a .pdf or .docx résumé. The file is
+ * discarded server-side; nothing is stored until the user saves (FR-014).
+ */
+export async function importResume(file: File): Promise<string> {
+  const form = new FormData();
+  form.set("file", file);
+  const response = await apiFetch("/profile/import", { method: "POST", rawBody: form });
+  if (!response.ok) await throwUnexpected(response);
+  return ((await response.json()) as { text: string }).text;
 }
+
+/** The shape analysis requests carry as `profileData`. */
+export { toScoringProfile } from "../../shared/types/profile";
 
 /** Serialized form sent with analysis requests (pure; shared with the web app). */
 export { profileToPromptText } from "../../shared/types/profile";

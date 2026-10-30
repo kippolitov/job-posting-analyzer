@@ -18,7 +18,7 @@ import { withAuth } from "../services/auth";
 import {
   DocumentRejectedError,
   extractDocument,
-  type DocumentRejectionCode,
+  REJECTION_STATUS,
 } from "../services/documentExtraction";
 import { corsHeaders, errorResponse, requestOrigin } from "../services/http";
 import {
@@ -33,14 +33,6 @@ import {
 import { fingerprintForRequest } from "../services/profileFingerprint";
 import { sha256Hex } from "../services/savedJobsRepository";
 import { withRateLimit } from "../services/rateLimiter";
-
-const REJECTION_STATUS: Record<DocumentRejectionCode, number> = {
-  FILE_TOO_LARGE: 413,
-  UNSUPPORTED_FILE_TYPE: 415,
-  FILE_PASSWORD_PROTECTED: 422,
-  FILE_UNREADABLE: 422,
-  FILE_NO_TEXT: 422,
-};
 
 /** The posting a request carries: an uploaded file's text, or pasted text (FR-027). */
 interface PostingSource {

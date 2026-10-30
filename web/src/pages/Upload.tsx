@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { rescoreCostLine } from "shared/fitView";
-import type { ScoringProfile } from "shared/types/profile";
+import { toScoringProfile, type ScoringProfile } from "shared/types/profile";
 import { AnalysisView } from "@/components/AnalysisView";
 import { PastePosting } from "@/components/PastePosting";
 import { UploadDropzone } from "@/components/UploadDropzone";
@@ -50,10 +50,7 @@ export function Upload() {
       .then((profile) =>
         setProfileState({
           status: "ready",
-          profile:
-            profile && profile.text
-              ? { text: profile.text, dealbreakers: profile.dealbreakers }
-              : null,
+          profile: profile && profile.text ? toScoringProfile(profile) : null,
         })
       )
       // A profile failure doesn't block analysis; it runs without fit scoring and says so.

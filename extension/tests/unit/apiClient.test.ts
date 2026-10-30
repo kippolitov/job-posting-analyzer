@@ -52,6 +52,18 @@ describe("apiClient.apiFetch", () => {
     expect(JSON.parse(init.body as string)).toEqual({ count: 3 });
   });
 
+  it("sends a rawBody FormData untouched with no JSON content type", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(200, {}));
+    const form = new FormData();
+    form.set("file", new Blob(["x"]), "cv.pdf");
+    await apiFetch("/profile/import", { method: "POST", rawBody: form });
+    const init = vi.mocked(fetch).mock.calls[0]![1] as RequestInit;
+    expect(init.body).toBe(form);
+    expect(
+      Object.keys(init.headers as Record<string, string>).map((h) => h.toLowerCase())
+    ).not.toContain("content-type");
+  });
+
   it("throws a non-retryable not-configured error without a base URL", async () => {
     vi.stubGlobal("WXT_API_BASE_URL", "");
     await expect(apiFetch("/jobs")).rejects.toMatchObject({

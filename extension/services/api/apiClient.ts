@@ -39,6 +39,8 @@ export class ApiError extends Error {
 export interface ApiRequestInit {
   method?: string;
   body?: unknown;
+  /** Raw body (e.g. FormData for multipart uploads) — sent untouched, with no JSON content type. */
+  rawBody?: BodyInit;
 }
 
 /**
@@ -142,14 +144,15 @@ async function attempt(
     );
   });
   try {
-    const request = fetch(url.toString(), {
-      method: init.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
-      ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-    }).catch(() => {
+    const headers: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
+    const requestInit: RequestInit = { method: init.method ?? "GET", headers };
+    if (init.rawBody !== undefined) {
+      requestInit.body = init.rawBody;
+    } else {
+      headers["Content-Type"] = "application/json";
+      if (init.body !== undefined) requestInit.body = JSON.stringify(init.body);
+    }
+    const request = fetch(url.toString(), requestInit).catch(() => {
       throw new ApiError(
         0,
         "NETWORK_ERROR",

@@ -11,6 +11,12 @@ import {
   requestOrigin,
 } from "../services/http";
 import {
+  DocumentRejectedError,
+  REJECTION_STATUS,
+  extractDocument,
+} from "../services/documentExtraction";
+import { withRateLimit } from "../services/rateLimiter";
+import {
   deleteProfile,
   getProfile,
   putProfile,
@@ -64,6 +70,48 @@ export async function profileHandler(
   }
 }
 
+/**
+ * POST /api/profile/import (contracts/profile-api.md §4): extracts a résumé's
+ * text and returns it. No model call, no metering and no storage (research
+ * R12): the bytes go out of scope when the handler returns, and the text is
+ * never logged.
+ */
+export async function profileImportHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+  _user: AuthenticatedUser
+): Promise<HttpResponseInit> {
+  const origin = requestOrigin(request);
+  if (request.method === "OPTIONS") return preflightResponse(origin);
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return errorResponse(400, "INVALID_REQUEST", "Request must be multipart/form-data.", origin);
+  }
+  const file = formData.get("file");
+  if (!(file instanceof Blob)) {
+    return errorResponse(400, "INVALID_REQUEST", "Missing required file part.", origin);
+  }
+
+  try {
+    const { text } = await extractDocument(Buffer.from(await file.arrayBuffer()));
+    return jsonResponse(200, { text, charCount: text.length }, origin);
+  } catch (err) {
+    if (err instanceof DocumentRejectedError) {
+      return errorResponse(REJECTION_STATUS[err.code], err.code, err.message, origin);
+    }
+    context.error("profile import extraction failed unexpectedly:", err);
+    return errorResponse(
+      422,
+      "FILE_UNREADABLE",
+      "This document could not be read. It may be corrupt.",
+      origin
+    );
+  }
+}
+
 app.http("profile", {
   methods: ["GET", "PUT", "DELETE"],
   authLevel: "anonymous", // withAuth (Google ID token) is the real gate; anonymous so the public web SPA can call this route too
@@ -75,6 +123,23 @@ app.http("profile-preflight", {
   methods: ["OPTIONS"],
   authLevel: "anonymous",
   route: "profile",
+  handler: (request: HttpRequest) => ({
+    status: 204,
+    headers: corsHeaders(requestOrigin(request)),
+  }),
+});
+
+app.http("profile-import", {
+  methods: ["POST"],
+  authLevel: "anonymous", // withAuth is the real gate, as for /api/profile
+  route: "profile/import",
+  handler: withRateLimit("analyze", withAuth(profileImportHandler)),
+});
+
+app.http("profile-import-preflight", {
+  methods: ["OPTIONS"],
+  authLevel: "anonymous",
+  route: "profile/import",
   handler: (request: HttpRequest) => ({
     status: 204,
     headers: corsHeaders(requestOrigin(request)),

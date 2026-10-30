@@ -11,7 +11,12 @@ import { isJobAnalysisPayload } from "../models/job";
 import type { Tier } from "../models/user";
 import { resolveModelConfig } from "./modelConfig";
 import { fingerprintForRequest, resolveScoringProfile } from "./profileFingerprint";
-import { dealbreakerLinesFromPrompt } from "../../../shared/types/profile";
+import {
+  SPONSORSHIP_LINE,
+  dealbreakerLinesFromPrompt,
+  preferenceLines,
+} from "../../../shared/types/profile";
+import { applyPreferences } from "./applyPreferences";
 
 /** Model output violated the schema even after the repair retry → HTTP 502. */
 export class JobSchemaError extends Error {}
@@ -178,8 +183,19 @@ function profileWithoutDealbreakers(req: AnalyzeJobRequest): string | undefined 
   return at === -1 ? full : full.slice(0, at);
 }
 
+/**
+ * What the judge checks: the dealbreakers plus the preferences only the model
+ * can read (locations, sponsorship; research R11). They are numbered like any
+ * dealbreaker, so a violation maps back to the profile's own line.
+ */
 function dealbreakerLinesFor(req: AnalyzeJobRequest): string[] {
-  return req.profileData?.dealbreakers ?? dealbreakerLinesFromPrompt(req.profile ?? "");
+  const dealbreakers =
+    req.profileData?.dealbreakers ?? dealbreakerLinesFromPrompt(req.profile ?? "");
+  const preferences = req.profileData?.preferences;
+  const judged = preferenceLines(preferences).filter(
+    (line) => line.startsWith("Locations or timezones:") || line === SPONSORSHIP_LINE
+  );
+  return [...dealbreakers, ...judged];
 }
 
 function buildUserMessage(req: AnalyzeJobRequest): string {
@@ -384,6 +400,7 @@ const DEALBREAKER_PROMPT = [
   "- Arrangement (\"Remote only\", \"No fully on-site roles\"): decided only by how the role or the company works (remote, hybrid, office days, on-site), including a company-wide work policy anywhere on the page. A conditional line (\"if the posting is specified as Onsite…\"), a home area, relocation, job location, travel or occasional meetups do not decide it. Mind negations: only a fully on-site role violates \"No fully on-site roles\"; hybrid or remote is compatible.",
   "- Minimum salary: compare only pay in the same currency and period, violated only if every stated range tops out below it; otherwise not stated.",
   "- Location or time zone (\"EU timezones only\"): violated if the role's own location or allowed candidate region is outside it (a US city, \"US only\"); compatible if inside it (UK, London, CET ±2h are European) or that region may apply (\"US and Europe\"). Site menus, search filters and office lists do not count.",
+  "- Work authorization (\"needs visa sponsorship\"): violated only if the posting states it cannot or will not sponsor visas, or requires existing work authorization or residency (\"US citizens only\", \"must be authorized to work without sponsorship\"); compatible if it offers sponsorship or relocation support; otherwise not stated.",
   "- The job description text wins over JSON-LD and page headers.",
 ].join("\n");
 
@@ -582,6 +599,7 @@ export async function orchestrateJobAnalysis(
       },
     };
   }
+  payload = applyPreferences(payload, req.profileData?.preferences);
   const profileFingerprint = fingerprintForRequest(req);
   if (payload.fit && profileFingerprint) {
     payload = { ...payload, fit: { ...payload.fit, profileFingerprint } };

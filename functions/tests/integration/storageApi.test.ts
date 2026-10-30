@@ -196,6 +196,73 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
       expect(res.jsonBody).toMatchObject({ error: { code: "INVALID_REQUEST" } });
     });
 
+    describe("preferences validation (data-model.md §3)", () => {
+      const invalid: [string, unknown][] = [
+        ["empty arrangements", { arrangements: [] }],
+        ["unknown arrangement", { arrangements: ["moon"] }],
+        ["zero salary amount", { minSalary: { amount: 0, currency: "USD", period: "year" } }],
+        ["bad currency format", { minSalary: { amount: 1, currency: "dollars", period: "year" } }],
+        ["bad salary period", { minSalary: { amount: 1, currency: "USD", period: "week" } }],
+        ["min above max seniority", { seniority: { min: "staff", max: "junior" } }],
+        ["unknown seniority", { seniority: { min: "wizard" } }],
+        ["fractional office days", { maxOfficeDays: 2.5 }],
+        ["office days above 5", { maxOfficeDays: 6 }],
+        ["negative office days", { maxOfficeDays: -1 }],
+        ["sponsorship false", { needsSponsorship: false }],
+        ["non-string location", { locations: [3] }],
+      ];
+
+      it.each(invalid)("rejects %s with 400", async (_name, preferences) => {
+        const user = makeTestUser();
+        const res = await profile(
+          makeRequest({
+            method: "PUT",
+            token: user.token,
+            body: { text: "CV", dealbreakers: [], preferences },
+          }),
+          makeContext()
+        );
+        expect(res.status).toBe(400);
+        expect(res.jsonBody).toMatchObject({ error: { code: "INVALID_REQUEST" } });
+      });
+
+      it("stores valid preferences, returns them, and keeps them on an old-shape PUT", async () => {
+        const user = makeTestUser();
+        const preferences = {
+          arrangements: ["remote", "hybrid"],
+          maxOfficeDays: 2,
+          minSalary: { amount: 120000, currency: "USD", period: "year" },
+          seniority: { min: "senior", max: "staff" },
+          locations: ["EU timezones only"],
+          needsSponsorship: true,
+        };
+        const put = await profile(
+          makeRequest({
+            method: "PUT",
+            token: user.token,
+            body: { text: "CV", dealbreakers: [], preferences },
+          }),
+          makeContext()
+        );
+        expect(put.status).toBe(200);
+        expect(put.jsonBody).toMatchObject({ preferences });
+
+        await profile(
+          makeRequest({
+            method: "PUT",
+            token: user.token,
+            body: { text: "CV v2", dealbreakers: ["No crypto"] },
+          }),
+          makeContext()
+        );
+        const get = await profile(
+          makeRequest({ method: "GET", token: user.token }),
+          makeContext()
+        );
+        expect(get.jsonBody).toMatchObject({ text: "CV v2", preferences });
+      });
+    });
+
     it("DELETE returns 204 and is idempotent", async () => {
       const user = makeTestUser();
       await profile(

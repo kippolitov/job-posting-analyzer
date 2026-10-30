@@ -305,6 +305,26 @@ describe("Paste text option (T059, FR-027)", () => {
     expect(api.calls["analyze-document"]).toBe(0);
   });
 
+  it("sends the stored preferences inside profileData (T111)", async () => {
+    const formSet = vi.spyOn(FormData.prototype, "set");
+    seedSession();
+    const preferences = { arrangements: ["remote" as const], maxOfficeDays: 2 };
+    api.setProfile({ ...PROFILE, preferences });
+    api.setDocumentResult(await resultFor("doc:prefs", "document"));
+    window.history.pushState({}, "", "/upload");
+    render(<App />);
+
+    const input = await screen.findByLabelText(/upload a document/i);
+    await waitFor(() => expect(input).toBeEnabled());
+    await userEvent.upload(input, makeFile("job.pdf", "application/pdf"));
+    await waitFor(() => expect(api.calls["analyze-document"]).toBe(1));
+
+    const profileData = { text: PROFILE.text, dealbreakers: PROFILE.dealbreakers, preferences };
+    expect(formSet).toHaveBeenCalledWith("profileData", JSON.stringify(profileData));
+    expect(formSet).toHaveBeenCalledWith("profile", profileToPromptText(profileData));
+    formSet.mockRestore();
+  });
+
   it("sends a text part, no file part and profileData; the header reads 'From pasted text'; Save sends the paste fields", async () => {
     const formSet = vi.spyOn(FormData.prototype, "set");
     seedSession();

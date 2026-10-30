@@ -253,6 +253,19 @@ describe("profileData on every flow (FR-001, SC-006)", () => {
     }
   });
 
+  it("send the stored preferences inside profileData (T111)", async () => {
+    const preferences = { arrangements: ["remote" as const], maxOfficeDays: 2 };
+    await setProfile({ ...PROFILE, preferences });
+    await runAll();
+    const calls = vi.mocked(postJobAnalysis).mock.calls;
+    expect(calls).toHaveLength(3);
+    for (const [request] of calls) {
+      expect(request.profileData).toEqual({ ...PROFILE, preferences });
+      expect(request.profile).toBe(profileToPromptText(request.profileData!));
+      expect(request.profile).toContain("Office days: at most 2 per week");
+    }
+  });
+
   it("they still analyze, and flag profileUnavailable, when the profile fetch fails", async () => {
     failProfile();
     const out: ExtensionMessage[] = [];
