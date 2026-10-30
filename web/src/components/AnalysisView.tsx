@@ -1,5 +1,6 @@
-import type { JobAnalysisResponse } from "shared/types/job";
-import { scoredByLabel } from "shared/fitView";
+import { useState } from "react";
+import type { Fit, JobAnalysisResponse } from "shared/types/job";
+import { evidenceFor, scoredByLabel } from "shared/fitView";
 import { VerdictBadge } from "@/components/VerdictBadge";
 
 function formatSalary(analysis: JobAnalysisResponse): string | null {
@@ -14,16 +15,66 @@ function formatSalary(analysis: JobAnalysisResponse): string | null {
   return `${currency}${range}${period}`;
 }
 
-function FitList({ title, items }: { title: string; items: string[] | undefined }) {
+function FitList({
+  title,
+  items,
+  fit,
+  list,
+}: {
+  title: string;
+  items: string[] | undefined;
+  fit?: Fit;
+  list?: "matching" | "missing" | "desired";
+}) {
+  const [openLabel, setOpenLabel] = useState<string | null>(null);
   if (!items || items.length === 0) return null;
   return (
     <div>
       <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h4>
       <ul className="list-inside list-disc text-sm text-gray-600 dark:text-gray-300">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
+        {items.map((item) => {
+          const evidence = list ? evidenceFor(fit, list, item) : null;
+          if (!evidence || !(evidence.postingQuote || evidence.profileQuote)) {
+            return <li key={item}>{item}</li>;
+          }
+          const open = openLabel === item;
+          const regionId = `evidence-${list}-${item.replace(/\W+/g, "-")}`;
+          return (
+            <li key={item}>
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={open ? regionId : undefined}
+                onClick={() => setOpenLabel(open ? null : item)}
+                className="underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-white"
+              >
+                {item}
+              </button>
+              {open && (
+                <div id={regionId} className="mt-1 mb-2 flex flex-col gap-1.5">
+                  {evidence.postingQuote && (
+                    <EvidenceQuote source="From the posting" quote={evidence.postingQuote} />
+                  )}
+                  {evidence.profileQuote && (
+                    <EvidenceQuote source="From your profile" quote={evidence.profileQuote} />
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
+    </div>
+  );
+}
+
+function EvidenceQuote({ source, quote }: { source: string; quote: string }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase text-gray-500">{source}</p>
+      <blockquote className="border-l-2 border-gray-300 pl-3 text-sm italic text-gray-600 dark:border-gray-700 dark:text-gray-300">
+        {quote}
+      </blockquote>
     </div>
   );
 }
@@ -122,9 +173,9 @@ export function AnalysisView({ analysis }: { analysis: JobAnalysisResponse }) {
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{analysis.fit.rationale}</p>
           <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{scoredByLabel(analysis)}</p>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FitList title="Matching" items={analysis.fit.matching} />
-            <FitList title="Missing" items={analysis.fit.missing} />
-            <FitList title="Desired" items={analysis.fit.desired} />
+            <FitList title="Matching" items={analysis.fit.matching} fit={analysis.fit} list="matching" />
+            <FitList title="Missing" items={analysis.fit.missing} fit={analysis.fit} list="missing" />
+            <FitList title="Desired" items={analysis.fit.desired} fit={analysis.fit} list="desired" />
             <FitList title="Strengths" items={analysis.fit.strengths} />
             <FitList title="Weaknesses" items={analysis.fit.weaknesses} />
           </div>

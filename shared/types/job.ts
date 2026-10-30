@@ -78,6 +78,11 @@ export interface Fit {
    * (research R5). Absent means version-unknown, so no verdict is shown.
    */
   profileFingerprint?: string;
+  /**
+   * Verbatim quotes behind the `matching`, `missing` and `desired` labels
+   * (research R9). Absent on fits scored before PR3.
+   */
+  evidence?: FitEvidence;
 }
 
 /** One verbatim quote backing a fit chip (PR3, data-model.md §1). */

@@ -1,4 +1,4 @@
-import type { Fit, FitEvidence } from "./types/job";
+import type { EvidenceItem, Fit, FitEvidence } from "./types/job";
 
 /**
  * The single source of fit display logic (contracts/fit-view.md, research
@@ -40,7 +40,6 @@ export interface NormalizedFit {
 /** Never throws on legacy input: pre-breakdown and 005-era fits both normalize. */
 export function normalizeFit(fit: Fit | null | undefined): NormalizedFit | null {
   if (!fit) return null;
-  const evidence = (fit as Fit & { evidence?: FitEvidence }).evidence;
   return {
     score: fit.score,
     rationale: fit.rationale,
@@ -50,9 +49,18 @@ export function normalizeFit(fit: Fit | null | undefined): NormalizedFit | null 
     strengths: fit.strengths ?? [],
     weaknesses: fit.weaknesses ?? [],
     dealbreakersViolated: fit.dealbreakersViolated ?? [],
-    evidence: evidence ?? {},
+    evidence: fit.evidence ?? {},
     profileFingerprint: fit.profileFingerprint,
   };
+}
+
+/** PR3: the quotes behind one chip, or `null` for a legacy fit or an unknown label. */
+export function evidenceFor(
+  fit: Fit | null | undefined,
+  list: keyof FitEvidence,
+  label: string
+): EvidenceItem | null {
+  return fit?.evidence?.[list]?.find((item) => item.label === label) ?? null;
 }
 
 /**
@@ -169,7 +177,7 @@ export function scoreTone(fit: NormalizedFit): Verdict {
 
 /** Accessible name for the score: the verdict word, not the "Unrated — …" prompt. */
 export function ariaFitLabel(fit: Fit | NormalizedFit): string {
-  const normalized = "evidence" in fit ? fit : normalizeFit(fit)!;
+  const normalized = normalizeFit(fit)!;
   const verdict = verdictFor(normalized);
   const word = verdict === "unrated" ? "Unrated" : VERDICT_LABELS[verdict];
   return `${word}, fit ${normalized.score} out of 100`;

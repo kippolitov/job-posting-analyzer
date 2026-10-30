@@ -2,6 +2,7 @@ import type { Fit } from "../../types/job";
 import { useState } from "react";
 import {
   ariaFitLabel,
+  evidenceFor,
   normalizeFit,
   previewMissing,
   scoreTone,
@@ -256,11 +257,13 @@ export function FitScore({
               label="Missing (required)"
               items={expanded ? fit.missing : shown}
               tone="red"
+              fit={fit}
+              list="missing"
             />
             {expanded && (
               <div id="fit-full-breakdown" className="space-y-3">
-                <ChipSection label="Matching skills" items={fit.matching} tone="green" />
-                <ChipSection label="Nice to have" items={fit.desired} tone="amber" />
+                <ChipSection label="Matching skills" items={fit.matching} tone="green" fit={fit} list="matching" />
+                <ChipSection label="Nice to have" items={fit.desired} tone="amber" fit={fit} list="desired" />
                 <BulletSection
                   label="Strengths of this role for you"
                   items={fit.strengths}
@@ -298,11 +301,16 @@ function ChipSection({
   label,
   items,
   tone,
+  fit,
+  list,
 }: {
   label: string;
   items: string[] | undefined;
   tone: Tone;
+  fit: Fit;
+  list: "matching" | "missing" | "desired";
 }) {
+  const [openLabel, setOpenLabel] = useState<string | null>(null);
   if (!items || items.length === 0) return null;
   return (
     <div>
@@ -310,15 +318,57 @@ function ChipSection({
         {label}
       </h4>
       <ul aria-label={label} className="flex flex-wrap gap-1">
-        {items.map((item) => (
-          <li
-            key={item}
-            className={`rounded-md px-1.5 py-0.5 text-xs ${CHIP_TONES[tone]}`}
-          >
-            {item}
-          </li>
-        ))}
+        {items.map((item) => {
+          const evidence = evidenceFor(fit, list, item);
+          const hasQuote = Boolean(evidence?.postingQuote || evidence?.profileQuote);
+          const chip = `rounded-md px-1.5 py-0.5 text-xs ${CHIP_TONES[tone]}`;
+          if (!evidence || !hasQuote) {
+            return (
+              <li key={item} className={chip}>
+                {item}
+              </li>
+            );
+          }
+          const open = openLabel === item;
+          const regionId = `evidence-${list}-${item.replace(/\W+/g, "-")}`;
+          return (
+            <li key={item} className={open ? "w-full" : undefined}>
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={open ? regionId : undefined}
+                onClick={() => setOpenLabel(open ? null : item)}
+                className={`${chip} underline decoration-dotted underline-offset-2`}
+              >
+                {item}
+              </button>
+              {open && (
+                <div id={regionId} className="mt-1 space-y-1">
+                  {evidence.postingQuote && (
+                    <EvidenceQuote source="From the posting" quote={evidence.postingQuote} />
+                  )}
+                  {evidence.profileQuote && (
+                    <EvidenceQuote source="From your profile" quote={evidence.profileQuote} />
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
+    </div>
+  );
+}
+
+function EvidenceQuote({ source, quote }: { source: string; quote: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+        {source}
+      </p>
+      <blockquote className="border-l-2 border-gray-300 pl-2 text-xs italic text-gray-600 dark:border-gray-700 dark:text-gray-300">
+        {quote}
+      </blockquote>
     </div>
   );
 }
