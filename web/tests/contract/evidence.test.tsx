@@ -56,6 +56,16 @@ describe("evidence disclosure on the web (006 FR-011/FR-013)", () => {
     );
   });
 
+  it("marks a chip with evidence with a decorative caret that turns when open", async () => {
+    render(<AnalysisView analysis={analysis(evidenceFit)} />);
+    const button = screen.getByRole("button", { name: "C# / .NET services" });
+    const caret = button.querySelector("svg");
+    expect(caret).toHaveAttribute("aria-hidden", "true");
+    expect(caret).not.toHaveClass("rotate-180");
+    await userEvent.click(button);
+    expect(button.querySelector("svg")).toHaveClass("rotate-180");
+  });
+
   it("adds no evidence region to the DOM until an item is expanded", () => {
     render(<AnalysisView analysis={analysis(evidenceFit)} />);
     expect(screen.queryByText("build backend services in C# and .NET 8")).not.toBeInTheDocument();
