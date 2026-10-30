@@ -45,6 +45,8 @@
 | 2026-10-29 | Prod `AZURE_OPENAI_JOB_TEMPERATURE=0` and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0` on `job-posting-analyzer-func` (T021, approved) | Inert on the deployed code; keeps temperature 0 on both tiers once PR1 deploys (research R1, trap 4). Free still resolves its deployment from `AZURE_OPENAI_DEPLOYMENT`. | Delete both settings |
 | 2026-10-29 | Raised deployment `gpt-6-luna` 20K → 100K TPM (approved) | GlobalStandard, model version 2026-09-22, for the free tier. Quota is free; only tokens are billed. | Set capacity back to 20 |
 | 2026-10-29 | Created deployment `gpt-6-luna-premium` (approved) | Model version 2026-09-22, **DataZoneStandard** (US data zone, as `gpt-5.4-mini` today), 50K TPM, for Premium only so free spikes can't throttle it. Probe with `reasoning_effort: low` returned 200. | Delete the deployment |
+| 2026-10-30 | Raised deployment `gpt-6-luna-premium` 50K → 100K TPM (approved) | DataZoneStandard, `eastus2`; DataZone quota now 100 of 100 used. Cut Premium p95 per analysis from 20.3 s to 12.2 s ("Premium at 100K TPM"). | Set capacity back to 50 |
+| 2026-10-30 | Prod `AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM`: `low` → `none` on `job-posting-analyzer-func` (approved, run by the product owner) | `low` gave no accuracy or stability gain and cost about 32% more (spec.md Clarifications, 2026-10-30) | Set it back to `low` |
 | 2026-10-29 | Prod settings switch on `job-posting-analyzer-func` (T026, approved), after PR1 deployed (`ab18a2d`) | Set `AZURE_OPENAI_JOB_DEPLOYMENT=gpt-6-luna`, `AZURE_OPENAI_JOB_REASONING_EFFORT=none`, `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-6-luna-premium`, `AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM=low`; deleted both temperature settings. `AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini` kept as the free fallback. Verified: Premium analysis at 16:31 UTC logged `model.usage` on `gpt-6-luna-premium`, 6.8 s, `finishReason: stop`. | Set `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-5.4-mini`, `AZURE_OPENAI_JOB_TEMPERATURE=0`, `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0`; delete `AZURE_OPENAI_JOB_DEPLOYMENT` and both `…_REASONING_EFFORT` settings |
 
 ## API version probe (T014, quickstart P1-2)
@@ -173,7 +175,7 @@ sit on 50K TPM deployments.
 | Tier | Settings | Rollback |
 |---|---|---|
 | Free | `AZURE_OPENAI_JOB_DEPLOYMENT=gpt-6-luna`, `AZURE_OPENAI_JOB_REASONING_EFFORT=none`, delete `AZURE_OPENAI_JOB_TEMPERATURE` | Delete those two, set `AZURE_OPENAI_JOB_TEMPERATURE=0` (free falls back to `AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini`) |
-| Premium | `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-6-luna-premium` (DataZoneStandard), `AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM=low`, delete `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM` | Set the deployment back to `gpt-5.4-mini` (or `gpt-5.4-nano`) and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0`, delete the effort |
+| Premium | `AZURE_OPENAI_JOB_DEPLOYMENT_PREMIUM=gpt-6-luna-premium` (DataZoneStandard), `AZURE_OPENAI_JOB_REASONING_EFFORT_PREMIUM=low` (changed to `none` on 2026-10-30, see below), delete `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM` | Set the deployment back to `gpt-5.4-mini` (or `gpt-5.4-nano`) and `AZURE_OPENAI_JOB_TEMPERATURE_PREMIUM=0`, delete the effort |
 
 - Applied by T026 after PR1 deploys. The deployed code before PR1 sends
   `temperature: 0`, which luna rejects.
@@ -472,6 +474,47 @@ verbatim quote, fixed false dealbreakers a different way, and since then
 `low` and `none` are equal on accuracy and stability within noise. Reasoning
 adds cost (about +32%) and 1–3 s at the median, and it does not cause
 Premium's p95: `low` and `none` have the same p95 on the same deployment.
+
+### Premium at 100K TPM (2026-10-30): the tail was throttling
+
+After the DataZone latency analysis above, `gpt-6-luna-premium` was raised from
+50K to 100K TPM (DataZoneStandard, eastus2; quota went from 50 to 100 of 100
+used; rollback is capacity 50) and `premium-luna-none` was re-run at
+`--runs=5`. Raw output:
+[`eval-runs/pr3-premium-none-100k.json`](./eval-runs/pr3-premium-none-100k.json).
+
+| Per model call | Free (Global, 100K) | Premium DataZone 50K | **Premium DataZone 100K** |
+|---|---|---|---|
+| p50 / p90 / p95 | 4.2 / 7.6 / 8.4 s | 4.6 / 13.7 / 16.5 s | **3.8 / 7.9 / 9.9 s** |
+| p99 / longest | 14.3 / 29.8 s | 25.9 / 94.5 s | **15.9 / 18.2 s** |
+| Calls over 15 s | 2 of 266 | 31 of 418 | **6 of 440** |
+| Per analysis p50 / p95 (harness) | 5.0 / 9.5 s | 5.9 / 20.3 s | **4.5 / 12.2 s** |
+
+**The Premium tail was capacity, not DataZone.** Doubling TPM took p95 per
+analysis from 20.3 s to 12.2 s and the longest call from 94.5 s to 18.2 s,
+and per-call speed now matches the Global deployment. US-only processing costs
+about 10% more in price and no measurable latency, so there is no case for
+moving Premium to Global.
+
+Other metrics for this run, with real DataZone prices (all quality metrics are
+unchanged by capacity and differ only by judge noise):
+
+| Metric | `none`, 50K (5 runs) | `none`, 100K (5 runs) |
+|---|---|---|
+| Median / p95 cost per analysis | not computed / not computed | $0.000476 / $0.001333 |
+| Recall (≥ 75%) | 76.7% | 88.3% |
+| Verdict stability (≥ 90%) | 91.4% | 95.9% |
+| Misread stated facts (≤ 2% of checks) | 1.4% (3 of 220) | **2.3% (5 of 220)** |
+| Trap false dealbreakers (0) | 0 | 0 |
+| Evidence verbatim (≥ 95%) | 100% | 99.9% (2 dropped of 2,383) |
+
+**This run fails SC-008's stated-misread target by 0.3 points** (gate: FAIL).
+All five are `ashby-linear × data-ml`, "EU timezones only" against "Open to
+candidates based in the US and Europe", the known labelling ambiguity listed
+under PR2's remaining errors; it was 3 of 5 runs in the 50K run and 4 of 5 for
+free. Across both Premium `none` runs the rate is 8 of 440 (1.8%). The target
+is within the judge's run-to-run noise, as the PR2 final run already warned. It
+is not caused by capacity or the setting, and it stays a known limitation.
 
 ## Sign-off
 
