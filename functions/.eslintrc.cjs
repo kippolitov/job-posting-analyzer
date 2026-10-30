@@ -23,6 +23,7 @@ module.exports = {
   ignorePatterns: [
     "node_modules/",
     "dist/",
+    "coverage/",
     "*.config.ts",
     "*.config.cjs",
     "devServer.ts",
