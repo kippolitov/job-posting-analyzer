@@ -558,13 +558,13 @@ These are silent failures, not crashes. They were found in existing code during 
   - spy on `ensureTable` and on `meteringService` and assert neither is called (R12);
   - assert that no `context.log`, `context.warn` or `context.error` argument contains the extracted text;
   - text above 20,000 characters is returned whole.
-- [ ] T100 [P] [US4] Extend `functions/tests/unit/profileSerialization.test.ts`:
+- [X] T100 [P] [US4] Extend `functions/tests/unit/profileSerialization.test.ts`:
   - the Preferences section renders exactly as in [data-model.md §3](./data-model.md) for each preference;
   - it includes the "Office days: at most N per week" and "Work authorization: needs visa sponsorship" lines when set;
   - it is omitted when `preferences` is absent or empty;
   - **the T030 invariant snapshot cases are still byte-identical**;
   - the fingerprint of a profile without preferences is unchanged from PR2.
-- [ ] T101 [P] [US4] Write `functions/tests/unit/applyPreferences.test.ts` for the pure `applyPreferences(payload, preferences)`, covering every row of [research R11's table](./research.md#r11--structured-preferences-pr4-fr-015fr-016):
+- [X] T101 [P] [US4] Write `functions/tests/unit/applyPreferences.test.ts` for the pure `applyPreferences(payload, preferences)`, covering every row of [research R11's table](./research.md#r11--structured-preferences-pr4-fr-015fr-016):
   - an on-site posting with explicit evidence against "remote only" is a violation labelled "Arrangement: remote only", with the score unchanged;
   - an `unspecified` arrangement gives no violation and an "Unverified: arrangement not stated" weakness;
   - an on-site posting with `arrangementConfidence: "none"` gives no violation;
@@ -578,13 +578,13 @@ These are silent failures, not crashes. They were found in existing code during 
   - visa sponsorship is never checked in code, and a model-reported "Work authorization: needs visa sponsorship" violation is kept as-is and is the banner text;
   - unverified notes are prepended and `weaknesses` stays at 5 or fewer;
   - with no preferences, the payload is unchanged.
-- [ ] T102 [P] [US4] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts`:
+- [X] T102 [P] [US4] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts`:
   - preferences validate per data-model §3 (empty `arrangements`, `amount <= 0`, an unknown currency format, `min > max`, `maxOfficeDays` that is not an integer from 0 to 5, and `needsSponsorship` other than `true` all return 400);
   - `schemaVersion` becomes 2 on write;
   - a version-1 row reads as having no preferences;
   - an old-shape PUT keeps preferences (trap 2, repeated now that the field exists).
-- [ ] T103 [P] [US4] Extend `extension/tests/unit/apiClient.test.ts`: `apiFetch` with `rawBody: FormData` sends it untouched and sets no JSON content type, while JSON `body` behaviour is unchanged.
-- [ ] T104 [P] [US4] Extend `extension/tests/unit/OptionsApp.test.tsx` and create `web/tests/contract/profile-import.test.tsx`:
+- [X] T103 [P] [US4] Extend `extension/tests/unit/apiClient.test.ts`: `apiFetch` with `rawBody: FormData` sends it untouched and sets no JSON content type, while JSON `body` behaviour is unchanged.
+- [X] T104 [P] [US4] Extend `extension/tests/unit/OptionsApp.test.tsx` and create `web/tests/contract/profile-import.test.tsx`:
   - choosing a `.pdf` calls the import endpoint, fills the editor with the returned text, and does **not** save until Save is clicked;
   - the import error message matches the job-upload copy;
   - text over 20,000 characters shows the existing over-limit message;
@@ -594,13 +594,13 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Implementation for User Story 4
 
-- [ ] T105 [US4] Implement `POST /api/profile/import` in `functions/src/profile/index.ts`, as a new `app.http("profile-import")` with `route: "profile/import"`, `withRateLimit("analyze", withAuth(...))`, and a preflight route mirroring `profile-preflight`. Reuse `extractDocument` and the `REJECTION_STATUS` map. Move that map to `functions/src/services/documentExtraction.ts` and import it in both handlers, to avoid duplicating it. This makes T099 pass.
-- [ ] T106 [US4] Add `Preferences` to `shared/types/profile.ts` and the Preferences section to `profileToPromptText`. This makes T100 pass.
-- [ ] T107 [US4] Add preferences validation and `schemaVersion: 2` to `functions/src/models/user.ts` and `functions/src/services/profileRepository.ts`, to make T102 pass.
-- [ ] T108 [US4] Implement `applyPreferences` in a new file, `functions/src/services/applyPreferences.ts`, to make T101 pass. Call it from `orchestrateJobAnalysis` after the dealbreaker check (`violatedLines`, research R8 "Superseded"), with `req.profileData?.preferences`. Merge its violations into `fit.dealbreakersViolated`. Never change `score`.
-- [ ] T109 [US4] Add a `rawBody` option to `extension/services/api/apiClient.ts`, mirroring `web/src/api/apiClient.ts`. Add `importResume(file)` to `extension/services/profileStorage.ts`. This makes T103 pass.
-- [ ] T110 [US4] Add the import control and preference fields to `extension/entrypoints/options/OptionsApp.tsx`, and add the same to `web/src/pages/Profile.tsx` with `importResume` in `web/src/api/endpoints.ts`. Organize both editors into the headed sections from FR-015. Show a progress indicator during import (Principle III, over 300 ms). This makes T104 pass.
-- [ ] T111 [US4] Ensure every analyze flow sends `profileData.preferences`. In `extension/services/jobFlow.ts` and `web/src/pages/Upload.tsx`, build `profileData` with `toScoringProfile`. Extend the FR-001 contract tests (T055) to include a profile with preferences.
+- [X] T105 [US4] Implement `POST /api/profile/import` in `functions/src/profile/index.ts`, as a new `app.http("profile-import")` with `route: "profile/import"`, `withRateLimit("analyze", withAuth(...))`, and a preflight route mirroring `profile-preflight`. Reuse `extractDocument` and the `REJECTION_STATUS` map. Move that map to `functions/src/services/documentExtraction.ts` and import it in both handlers, to avoid duplicating it. This makes T099 pass.
+- [X] T106 [US4] Add `Preferences` to `shared/types/profile.ts` and the Preferences section to `profileToPromptText`. This makes T100 pass.
+- [X] T107 [US4] Add preferences validation and `schemaVersion: 2` to `functions/src/models/user.ts` and `functions/src/services/profileRepository.ts`, to make T102 pass.
+- [X] T108 [US4] Implement `applyPreferences` in a new file, `functions/src/services/applyPreferences.ts`, to make T101 pass. Call it from `orchestrateJobAnalysis` after the dealbreaker check (`violatedLines`, research R8 "Superseded"), with `req.profileData?.preferences`. Merge its violations into `fit.dealbreakersViolated`. Never change `score`.
+- [X] T109 [US4] Add a `rawBody` option to `extension/services/api/apiClient.ts`, mirroring `web/src/api/apiClient.ts`. Add `importResume(file)` to `extension/services/profileStorage.ts`. This makes T103 pass.
+- [X] T110 [US4] Add the import control and preference fields to `extension/entrypoints/options/OptionsApp.tsx`, and add the same to `web/src/pages/Profile.tsx` with `importResume` in `web/src/api/endpoints.ts`. Organize both editors into the headed sections from FR-015. Show a progress indicator during import (Principle III, over 300 ms). This makes T104 pass.
+- [X] T111 [US4] Ensure every analyze flow sends `profileData.preferences`. In `extension/services/jobFlow.ts` and `web/src/pages/Upload.tsx`, build `profileData` with `toScoringProfile`. Extend the FR-001 contract tests (T055) to include a profile with preferences.
 - [ ] T112 [US4] Run the live checks from quickstart P4-5 (location preference) **(live)**. Then time SC-005 by hand: a first-time user with `valid.pdf` must reach a first fit score in under 2 minutes from opening the editor. Record both in the PR description.
 - [ ] T113 [US4] Run the PR4 gate: lint, tests, coverage on `applyPreferences.ts`, `profileRepository.ts`, `profile/index.ts`, `apiClient.ts`, `OptionsApp.tsx` and `Profile.tsx`, `perf.test.ts`, and the compatibility smoke. Rule 3 here includes an old-extension profile save after setting preferences on the web. Request QG-3 review of the import flow and preference fields, then open PR4.
 
