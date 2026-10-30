@@ -1,3 +1,4 @@
+import { sortByFit } from "shared/fitView";
 import { describe, it, expect } from "vitest";
 import { applyLibraryQuery, activeFilterSummary, DEFAULT_LIBRARY_QUERY } from "@/lib/libraryQuery";
 import type { SavedJobPayload } from "@/api/types";
@@ -121,6 +122,19 @@ describe("libraryQuery (data-model.md §4, FR-010/FR-011/FR-012)", () => {
     const jobs = [job({ fit: 40 }), job({ fit: 90 }), job({ fit: 10 })];
     const result = applyLibraryQuery(jobs, { ...DEFAULT_LIBRARY_QUERY, sort: "fit-desc" });
     expect(result.map((j) => j.analysis.fit?.score)).toEqual([90, 40, 10]);
+  });
+
+  it("fit sorting matches sortByFit: unscored last in both directions, verdict filter skips unrated", () => {
+    const jobs = [job({ fit: 40 }), job({}), job({ fit: 90 }), job({ fit: 10 })];
+    for (const [sort, direction] of [
+      ["fit-desc", "highest"],
+      ["fit-asc", "lowest"],
+    ] as const) {
+      const result = applyLibraryQuery(jobs, { ...DEFAULT_LIBRARY_QUERY, sort });
+      expect(result).toEqual(sortByFit(jobs, direction));
+      expect(result[result.length - 1].analysis.fit ?? null).toBeNull();
+    }
+    expect(applyLibraryQuery(jobs, { ...DEFAULT_LIBRARY_QUERY, verdict: "strong" })).toEqual([]);
   });
 
   it("sorts by saved date descending by default", () => {
