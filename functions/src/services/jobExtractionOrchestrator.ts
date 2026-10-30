@@ -235,18 +235,20 @@ function enforceConsistency(
 const DEALBREAKER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["violations"],
+  required: ["checks"],
   properties: {
-    violations: {
+    checks: {
       type: "array",
       maxItems: 10,
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["dealbreaker", "quote"],
+        // Quote before verdict, so the verdict is grounded in what was quoted.
+        required: ["number", "postingSays", "verdict"],
         properties: {
-          dealbreaker: { type: "string" },
-          quote: { type: "string" },
+          number: { type: "integer" },
+          postingSays: { type: "string" },
+          verdict: { enum: ["violated", "compatible", "not stated"] },
         },
       },
     },
@@ -254,10 +256,16 @@ const DEALBREAKER_SCHEMA = {
 } as const;
 
 const DEALBREAKER_PROMPT = [
-  "You check a job posting against a candidate's dealbreakers. You do not score fit.",
-  "Go through the numbered dealbreakers one at a time. A dealbreaker is violated ONLY when the posting states something that directly contradicts it (for example the dealbreaker says \"Remote only\" and the posting says the team is hybrid or on-site; or it sets a minimum salary and the posting states a range whose maximum is below it, in the same currency).",
-  "Silence, vagueness, a different currency, or a requirement the posting merely does not mention is NOT a violation.",
-  "For each violated dealbreaker return it copied exactly as written, and a VERBATIM substring of the posting that contradicts it. If you cannot quote such a passage, it is not violated. Return an empty list when none is violated.",
+  "You check a job posting against a candidate's numbered dealbreakers. You do not score fit.",
+  "Return exactly one check per dealbreaker, in order. For each, first copy into postingSays the passage of the posting that bears on that dealbreaker, as a VERBATIM substring of the posting (\"\" when the posting says nothing about it). Then give the verdict:",
+  "- \"violated\": the posting states a fact that directly contradicts the dealbreaker;",
+  "- \"compatible\": the posting states a fact that satisfies it;",
+  "- \"not stated\": the posting is silent or vague about it, or deciding would mean guessing. Silence is never a violation.",
+  "How to read common dealbreakers:",
+  "- Work arrangement (e.g. \"Remote only\", \"No fully on-site roles\"): only a statement of how the role or the company works (remote, hybrid, in the office some days, fully on-site) decides it. A required home area, relocation, a job location, travel, or occasional in-person meetups do not state the arrangement.",
+  "- Minimum salary: compare only with pay stated in the same currency and pay period. It is violated only when the top of every stated range is below the minimum. Pay in another currency, or no pay, is \"not stated\".",
+  "- Location or time zone (e.g. \"EU timezones only\"): violated when the posting places the role, or limits candidates, in a location outside it (e.g. a US city, or \"US only\"); compatible when the location is inside it (the UK, London, and CET ±2 hours are European time zones) or candidates there may apply, even alongside other regions (e.g. \"open to the US and Europe\"). The role's own location (for example a Location line beside the job title) places it; site menus, search filters and lists of other offices do not.",
+  "- When the page states a fact more than one way, the job description text wins over structured data (JSON-LD) and page headers.",
 ].join("\n");
 
 function postingHaystack(req: AnalyzeJobRequest): string {
@@ -266,38 +274,34 @@ function postingHaystack(req: AnalyzeJobRequest): string {
   ).toLowerCase();
 }
 
-function normalizeDealbreaker(text: string): string {
-  return normalizeWhitespace(text).toLowerCase();
-}
-
 /**
- * Maps each model-reported violation onto the user's own dealbreaker line
- * (research R8, FR-005): normalized equality first, then normalized
- * containment in either direction. An unmatched entry is kept with a
- * warning, since dropping it could hide a real violation. Never reads or
- * writes `score`.
+ * The profile lines the judge's checks report as violated (research R8,
+ * FR-005). A check names its dealbreaker by number, so the reported line is
+ * the user's exact wording. A violation counts only with a verbatim posting
+ * quote. Never reads or writes `score`.
  */
-export function resolveDealbreakers(
-  payload: JobAnalysisPayload,
-  dealbreakerLines: string[],
+export function violatedLines(
+  checks: { number?: number; postingSays?: string; verdict?: string }[],
+  lines: string[],
+  haystack: string,
   warn: (message: string) => void
-): JobAnalysisPayload {
-  if (!payload.fit) return payload;
-  const lines = dealbreakerLines.map((line) => ({ line, key: normalizeDealbreaker(line) }));
-  const resolved: string[] = [];
-  for (const entry of payload.fit.dealbreakersViolated ?? []) {
-    const key = normalizeDealbreaker(entry);
-    if (key.length === 0) continue;
-    const match =
-      lines.find((l) => l.key === key) ??
-      lines.find((l) => l.key.includes(key) || key.includes(l.key));
-    if (!match) {
-      warn(`dealbreakersViolated entry "${entry}" matches no profile dealbreaker; keeping it`);
+): string[] {
+  const violated: string[] = [];
+  for (const check of checks) {
+    if (check.verdict !== "violated") continue;
+    const line = Number.isInteger(check.number) ? lines[check.number! - 1] : undefined;
+    if (line === undefined) {
+      warn(`dealbreaker ${check.number} is not in the profile; dropping it`);
+      continue;
     }
-    const value = match ? match.line : entry;
-    if (!resolved.includes(value)) resolved.push(value);
+    const quote = normalizeWhitespace(check.postingSays ?? "").toLowerCase();
+    if (quote.length === 0 || !haystack.includes(quote)) {
+      warn(`dealbreaker "${line}" has no verbatim posting quote; dropping it`);
+      continue;
+    }
+    if (!violated.includes(line)) violated.push(line);
   }
-  return { ...payload, fit: { ...payload.fit, dealbreakersViolated: resolved } };
+  return violated;
 }
 
 export async function orchestrateJobAnalysis(
@@ -391,7 +395,7 @@ export async function orchestrateJobAnalysis(
           { role: "system" as const, content: DEALBREAKER_PROMPT },
           {
             role: "user" as const,
-            content: `Dealbreakers:\n${lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n\n${buildUserMessage({ ...req, profile: undefined, profileData: undefined })}`,
+            content: `${buildUserMessage({ ...req, profile: undefined, profileData: undefined })}\n\nDealbreakers:\n${lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}`,
           },
         ],
         response_format: {
@@ -417,19 +421,9 @@ export async function orchestrateJobAnalysis(
         finishReason: completion.choices[0]?.finish_reason ?? null,
       });
       const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "") as {
-        violations?: { dealbreaker?: string; quote?: string }[];
+        checks?: { number?: number; postingSays?: string; verdict?: string }[];
       };
-      const haystack = postingHaystack(req);
-      const kept: string[] = [];
-      for (const v of parsed.violations ?? []) {
-        const quote = normalizeWhitespace(v.quote ?? "").toLowerCase();
-        if (quote.length > 0 && haystack.includes(quote) && v.dealbreaker) {
-          kept.push(v.dealbreaker);
-        } else {
-          warn(`dealbreaker "${v.dealbreaker}" has no verbatim posting quote; dropping it`);
-        }
-      }
-      return kept;
+      return violatedLines(parsed.checks ?? [], lines, postingHaystack(req), warn);
     } catch (error) {
       warn(`dealbreaker check failed (${error instanceof Error ? error.message : "unknown"}); reporting none`);
       return [];
@@ -456,7 +450,6 @@ export async function orchestrateJobAnalysis(
   if (payload.fit) {
     payload = { ...payload, fit: { ...payload.fit, dealbreakersViolated: violated } };
   }
-  payload = resolveDealbreakers(payload, lines, warn);
   const profileFingerprint = fingerprintForRequest(req);
   if (payload.fit && profileFingerprint) {
     payload = { ...payload, fit: { ...payload.fit, profileFingerprint } };
