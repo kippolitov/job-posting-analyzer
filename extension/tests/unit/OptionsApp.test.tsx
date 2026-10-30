@@ -165,7 +165,9 @@ describe("OptionsApp", () => {
 
       cleanup();
       render(<OptionsApp />);
-      expect(await screen.findByRole("checkbox", { name: "Remote" })).toBeChecked();
+      // The fields render before the profile loads, so wait for the loaded values.
+      await waitFor(() => expect(screen.getByLabelText(/Your background/)).toHaveValue("Engineer"));
+      expect(screen.getByRole("checkbox", { name: "Remote" })).toBeChecked();
       expect(screen.getByRole("checkbox", { name: "Hybrid" })).toBeChecked();
       expect(screen.getByRole("checkbox", { name: "On-site" })).not.toBeChecked();
       expect(screen.getByLabelText("Maximum office days")).toHaveValue("2");
@@ -206,7 +208,8 @@ describe("OptionsApp", () => {
         preferences: { arrangements: ["remote"] },
       });
       render(<OptionsApp />);
-      await userEvent.click(await screen.findByRole("checkbox", { name: "Remote" }));
+      await waitFor(() => expect(screen.getByLabelText(/Your background/)).toHaveValue("Engineer"));
+      await userEvent.click(screen.getByRole("checkbox", { name: "Remote" }));
       await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
       await screen.findByText("Profile saved.");
       expect(api.getProfile()?.preferences).toBeUndefined();
