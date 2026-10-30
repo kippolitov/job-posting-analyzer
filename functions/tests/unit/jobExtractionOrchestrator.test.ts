@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "fs";
 import path from "path";
 import {
+  fitCallMessages,
   orchestrateJobAnalysis,
   JobSchemaError,
   type ModelUsage,
@@ -706,6 +707,20 @@ describe("jobExtractionOrchestrator", () => {
       expect(checkUser.indexOf("Page content:")).toBeLessThan(
         checkUser.indexOf("1. No fully on-site roles")
       );
+    });
+
+    it("builds the same fit-call messages with and without dealbreakers (SC-002)", () => {
+      const without = fitCallMessages(onsiteRequest({ profile: "Senior .NET engineer" }));
+      expect(
+        fitCallMessages(
+          onsiteRequest({ profile: "Senior .NET engineer\n\nDealbreakers:\n- No on-site work" })
+        )
+      ).toEqual(without);
+      expect(
+        fitCallMessages(
+          onsiteRequest({ profileData: { text: "Senior .NET engineer", dealbreakers: ["Remote only"] } })
+        )
+      ).toEqual(without);
     });
 
     it("makes one call when the profile has no dealbreakers", async () => {

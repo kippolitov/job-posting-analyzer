@@ -3,6 +3,8 @@ import {
   bandFor,
   costPerAnalysis,
   falseDealbreakers,
+  fitInputIndependence,
+  identicalVerdictShare,
   median,
   missedDealbreakers,
   p95,
@@ -53,9 +55,32 @@ describe("bandFor (FR-009 bands)", () => {
 });
 
 describe("verdictStability (SC-004)", () => {
-  it("is the share of pairs whose band is identical across runs", () => {
+  it("is the share of runs that give their pair's most common verdict", () => {
     expect(
       verdictStability({
+        a: ["strong", "strong", "strong"],
+        b: ["stretch", "stretch", "worth-a-shot"],
+        c: ["dealbreaker", "dealbreaker"],
+        d: ["long-shot"],
+        e: [],
+      })
+    ).toBe(8 / 9);
+  });
+
+  it("counts one tied verdict as the most common", () => {
+    expect(verdictStability({ a: ["stretch", "long-shot"] })).toBe(0.5);
+  });
+
+  it("is NaN with no runs, so a gate can never pass vacuously", () => {
+    expect(verdictStability({})).toBeNaN();
+    expect(verdictStability({ a: [] })).toBeNaN();
+  });
+});
+
+describe("identicalVerdictShare (reported, not gated)", () => {
+  it("is the share of pairs whose band is identical across runs", () => {
+    expect(
+      identicalVerdictShare({
         a: ["strong", "strong", "strong"],
         b: ["stretch", "stretch", "worth-a-shot"],
         c: ["dealbreaker", "dealbreaker"],
@@ -63,9 +88,20 @@ describe("verdictStability (SC-004)", () => {
       })
     ).toBe(0.75);
   });
+});
 
-  it("is NaN with no pairs, so a gate can never pass vacuously", () => {
-    expect(verdictStability({})).toBeNaN();
+describe("fitInputIndependence (SC-002)", () => {
+  it("is the share of pairs whose fit input is identical with and without dealbreakers", () => {
+    expect(
+      fitInputIndependence([
+        { pair: "a", withDealbreakers: "same", withoutDealbreakers: "same" },
+        { pair: "b", withDealbreakers: "x\nDealbreakers:", withoutDealbreakers: "x" },
+      ])
+    ).toBe(0.5);
+  });
+
+  it("is NaN with no pairs", () => {
+    expect(fitInputIndependence([])).toBeNaN();
   });
 });
 
@@ -239,14 +275,15 @@ describe("scoreIndependence (SC-002)", () => {
   const key = pairKey("onsite", "backend");
   const other = pairKey("onsite", "frontend");
 
-  it("is the share of violating pairs whose score-only band matches with and without dealbreakers", () => {
+  it("is the share of violating pairs whose median scores are within 5 points with and without dealbreakers", () => {
+    // 62/67 cross a band edge but are 5 apart; 15/25 share a band but are 10 apart.
     const withDealbreakers = [
-      { pair: key, score: 72 },
+      { pair: key, score: 62 },
       { pair: other, score: 15 },
     ];
     const withoutDealbreakers = [
-      { pair: key, score: 70 },
-      { pair: other, score: 68 },
+      { pair: key, score: 67 },
+      { pair: other, score: 25 },
     ];
     expect(scoreIndependence(withDealbreakers, withoutDealbreakers)).toBe(0.5);
   });
