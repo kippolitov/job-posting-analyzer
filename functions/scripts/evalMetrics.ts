@@ -150,7 +150,7 @@ export function reportedViolations(result: ScoredResult): {
 function tally(
   results: ScoredResult[],
   pairs: PairLabel[],
-  pick: (reported: string[], labelled: string[]) => string[]
+  pick: (reported: string[], labelled: string[], label: PairLabel) => string[]
 ): DealbreakerTally {
   const labels = new Map(pairs.map((p) => [pairKey(p.posting, p.profile), p]));
   const methods = new Set<DetectionMethod>();
@@ -160,7 +160,7 @@ function tally(
     if (!label) continue;
     const { violations, method } = reportedViolations(result);
     methods.add(method);
-    for (const line of pick(violations, label.violations)) {
+    for (const line of pick(violations, label.violations, label)) {
       details.push(`${pairKey(result.posting, result.profile)}: ${line}`);
     }
   }
@@ -178,9 +178,55 @@ export function falseDealbreakers(results: ScoredResult[], pairs: PairLabel[]): 
   return tally(results, pairs, (reported, labelled) => missingFrom(reported, labelled));
 }
 
-/** Labelled violations not reported (SC-002, target 0). */
+/** Labelled violations not reported (SC-002 reports them; `dealbreakerRecall` gates). */
 export function missedDealbreakers(results: ScoredResult[], pairs: PairLabel[]): DealbreakerTally {
   return tally(results, pairs, (reported, labelled) => missingFrom(labelled, reported));
+}
+
+/**
+ * Splits false dealbreakers (approved 2026-10-29). A **trap** is claimed for a
+ * fact the posting does not state: the line's fact (`facts`, from pairs.json
+ * `dealbreakerFacts`) is in the pair's `unstatedFacts`. SC-008 allows none. A
+ * line with no known fact counts as a trap, the stricter reading. The rest
+ * misread a fact the posting does state.
+ */
+export function splitFalseDealbreakers(
+  results: ScoredResult[],
+  pairs: PairLabel[],
+  facts: Record<string, string>
+): { trap: DealbreakerTally; stated: DealbreakerTally } {
+  const factOf = new Map(Object.entries(facts).map(([line, fact]) => [normalize(line), fact]));
+  const isTrap = (line: string, label: PairLabel) => {
+    const fact = factOf.get(normalize(line));
+    return fact === undefined || label.unstatedFacts.includes(fact);
+  };
+  return {
+    trap: tally(results, pairs, (reported, labelled, label) =>
+      missingFrom(reported, labelled).filter((line) => isTrap(line, label))
+    ),
+    stated: tally(results, pairs, (reported, labelled, label) =>
+      missingFrom(reported, labelled).filter((line) => !isTrap(line, label))
+    ),
+  };
+}
+
+/** Dealbreaker lines judged: one per line, per scored result with a labelled pair. */
+export function dealbreakerChecks(results: ScoredResult[], pairs: PairLabel[]): number {
+  const labelled = new Set(pairs.map((p) => pairKey(p.posting, p.profile)));
+  return results
+    .filter((r) => r.fit && labelled.has(pairKey(r.posting, r.profile)))
+    .reduce((sum, r) => sum + r.dealbreakers.length, 0);
+}
+
+/** SC-002 (≥ 75%, approved 2026-10-29): share of labelled violations reported, over every run. NaN when none. */
+export function dealbreakerRecall(results: ScoredResult[], pairs: PairLabel[]): number {
+  const labels = new Map(pairs.map((p) => [pairKey(p.posting, p.profile), p]));
+  const expected = results.reduce(
+    (sum, r) => sum + (labels.get(pairKey(r.posting, r.profile))?.violations.length ?? 0),
+    0
+  );
+  if (expected === 0) return NaN;
+  return (expected - missedDealbreakers(results, pairs).count) / expected;
 }
 
 function medianScoreByPair(samples: ScoreSample[]): Map<string, number> {

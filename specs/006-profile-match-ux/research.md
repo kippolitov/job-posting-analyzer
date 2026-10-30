@@ -693,6 +693,11 @@ above changed in three steps:
 3. SC-002's independence is now gated on the fit call getting identical input
    with and without dealbreakers (`fitCallMessages`). SC-004 counts runs that
    agree with their pair's most common verdict. See spec.md Clarifications.
+4. After the final run, the dealbreaker targets were relaxed. SC-008 allows no
+   trap false dealbreakers (claimed for a fact the posting doesn't state), and
+   misreadings of stated facts up to 2% of checks. SC-002 requires at least 75%
+   recall. `splitFalseDealbreakers` uses pairs.json `dealbreakerFacts` to tell
+   the two kinds apart.
 
 ---
 

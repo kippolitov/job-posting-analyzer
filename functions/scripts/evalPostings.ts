@@ -40,6 +40,8 @@ import {
   fitInputIndependence,
   identicalVerdictShare,
   costPerAnalysis,
+  dealbreakerChecks,
+  dealbreakerRecall,
   falseDealbreakers,
   median,
   missedDealbreakers,
@@ -47,6 +49,7 @@ import {
   pairKey,
   reportedViolations,
   scoreIndependence,
+  splitFalseDealbreakers,
   truncations,
   verdictStability,
   type Band,
@@ -381,7 +384,12 @@ interface ConfigReport {
     pairs: number;
     runs: number;
     falseDealbreakers: number;
+    trapFalseDealbreakers: number;
+    statedFalseDealbreakers: number;
+    dealbreakerChecks: number;
+    statedFalsePct: number;
     missedDealbreakers: number;
+    dealbreakerRecallPct: number;
     fitInputIdenticalPct: number;
     scoreIndependencePct: number;
     verdictStabilityPct: number;
@@ -404,7 +412,8 @@ function buildReport(
   pairs: PairLabel[],
   profiles: Map<string, FixtureProfile>,
   postings: Posting[],
-  priceEntry: PriceEntry | undefined
+  priceEntry: PriceEntry | undefined,
+  dealbreakerFacts: Record<string, string>
 ): ConfigReport {
   const ok = results.filter((r) => r.error === undefined);
   const scored = ok.filter((r) => !r.stripped);
@@ -440,6 +449,12 @@ function buildReport(
   const scoredResults = scored.map(toScored);
   const falseTally = falseDealbreakers(scoredResults, pairs);
   const missedTally = missedDealbreakers(scoredResults, pairs);
+  const { trap: trapTally, stated: statedTally } = splitFalseDealbreakers(
+    scoredResults,
+    pairs,
+    dealbreakerFacts
+  );
+  const checks = dealbreakerChecks(scoredResults, pairs);
 
   const bandsByPair: Record<string, Band[]> = {};
   for (const result of scoredResults) {
@@ -498,7 +513,12 @@ function buildReport(
       pairs: new Set(scored.map((r) => pairKey(r.posting, r.profile))).size,
       runs: Math.max(0, ...scored.map((r) => r.run + 1)),
       falseDealbreakers: falseTally.count,
+      trapFalseDealbreakers: trapTally.count,
+      statedFalseDealbreakers: statedTally.count,
+      dealbreakerChecks: checks,
+      statedFalsePct: checks > 0 ? (statedTally.count / checks) * 100 : NaN,
       missedDealbreakers: missedTally.count,
+      dealbreakerRecallPct: dealbreakerRecall(scoredResults, pairs) * 100,
       fitInputIdenticalPct: fitInputIndependence(fitInputs) * 100,
       scoreIndependencePct: independence * 100,
       verdictStabilityPct: stability * 100,
@@ -534,8 +554,13 @@ function buildReport(
     [report.errors.length === 0, `errors ${report.errors.length} (target 0)`],
     [report.arrangement.accuracyPct === 100, "arrangement accuracy < 100%"],
     [report.arrangement.contradictions === 0, "stated-arrangement contradictions > 0"],
-    [report.fit.falseDealbreakers === 0, `false dealbreakers ${report.fit.falseDealbreakers} (SC-008)`],
-    [report.fit.missedDealbreakers === 0, `missed dealbreakers ${report.fit.missedDealbreakers} (SC-002)`],
+    // Dealbreaker targets approved 2026-10-29 (spec.md SC-002, SC-008).
+    [
+      report.fit.trapFalseDealbreakers === 0,
+      `trap false dealbreakers ${report.fit.trapFalseDealbreakers} (SC-008, target 0)`,
+    ],
+    [report.fit.statedFalsePct <= 2, "misread stated facts > 2% of checks (SC-008)"],
+    [report.fit.dealbreakerRecallPct >= 75, "dealbreaker recall < 75% (SC-002)"],
     [report.fit.verdictStabilityPct >= 90, "verdict stability < 90% (SC-004)"],
     [report.latency.p95Ms <= 30_000, "p95 latency > 30 s (SC-009)"],
   ];
@@ -568,8 +593,12 @@ function printReport(report: ConfigReport): void {
       `stated contradictions ${arrangement.contradictions}, hybrid days ${arrangement.hybridDays}`
   );
   console.log(
-    `fit:          pairs ${fit.pairs}, runs ${fit.runs}, falseDealbreakers ${fit.falseDealbreakers} (SC-008, target 0), ` +
-      `missedDealbreakers ${fit.missedDealbreakers} (SC-002, target 0)`
+    `fit:          pairs ${fit.pairs}, runs ${fit.runs}, falseDealbreakers ${fit.falseDealbreakers}: ` +
+      `trap ${fit.trapFalseDealbreakers} (SC-008, 0), stated ${fit.statedFalseDealbreakers} = ` +
+      `${pct(fit.statedFalsePct)} of ${fit.dealbreakerChecks} checks (SC-008, ≤ 2)`
+  );
+  console.log(
+    `              missedDealbreakers ${fit.missedDealbreakers}, recall ${pct(fit.dealbreakerRecallPct)} (SC-002, ≥ 75)`
   );
   console.log(
     `              fitInputIdentical ${pct(fit.fitInputIdenticalPct)} (SC-002, 100, PR2+), ` +
@@ -615,6 +644,7 @@ interface EvalContext {
   postings: Posting[];
   profiles: Map<string, FixtureProfile>;
   pairs: PairLabel[];
+  dealbreakerFacts: Record<string, string>;
   prices: Record<string, PriceEntry>;
 }
 
@@ -622,13 +652,15 @@ function loadContext(only: string | undefined): EvalContext {
   const postings = loadPostings(only);
   if (postings.length === 0) throw new Error(`--only=${only} matches no posting`);
   const postingIds = new Set(postings.map((p) => p.id));
-  const pairs = readJson<{ pairs: PairLabel[] }>(
+  const labelling = readJson<{ pairs: PairLabel[]; dealbreakerFacts: Record<string, string> }>(
     path.join(fixturesDir, "profiles", "pairs.json")
-  ).pairs.filter((p) => postingIds.has(p.posting));
+  );
+  const pairs = labelling.pairs.filter((p) => postingIds.has(p.posting));
   return {
     postings,
     profiles: loadProfiles(),
     pairs,
+    dealbreakerFacts: labelling.dealbreakerFacts,
     prices: readJson<Record<string, PriceEntry>>(path.join(__dirname, "modelPrices.json")),
   };
 }
@@ -656,7 +688,7 @@ async function runConfigEval(argv: string[], configsFile: string): Promise<void>
   const concurrency = positiveInt(argv, "concurrency", 2);
   const only = flag(argv, "only");
   const out = flag(argv, "out");
-  const { postings, profiles, pairs, prices } = loadContext(only);
+  const { postings, profiles, pairs, prices, dealbreakerFacts } = loadContext(only);
   const postingById = new Map(postings.map((p) => [p.id, p]));
 
   const tasks: Task[] = [];
@@ -679,7 +711,7 @@ async function runConfigEval(argv: string[], configsFile: string): Promise<void>
     const price = prices[config.deployment];
     const results = await runPool(tasks, concurrency, (task) => runTask(task, config, price));
     rawResults[config.label] = results;
-    const report = buildReport(config, results, pairs, profiles, postings, price);
+    const report = buildReport(config, results, pairs, profiles, postings, price, dealbreakerFacts);
     reports.push(report);
     printReport(report);
   }
@@ -698,7 +730,7 @@ async function runConfigEval(argv: string[], configsFile: string): Promise<void>
 
 function runSavedReport(argv: string[], file: string): void {
   const saved = readJson<SavedRun>(path.resolve(file));
-  const { postings, profiles, pairs, prices } = loadContext(undefined);
+  const { postings, profiles, pairs, prices, dealbreakerFacts } = loadContext(undefined);
   const reports = saved.reports.map(({ config }) => {
     const report = buildReport(
       config,
@@ -706,7 +738,8 @@ function runSavedReport(argv: string[], file: string): void {
       pairs,
       profiles,
       postings,
-      prices[config.deployment]
+      prices[config.deployment],
+      dealbreakerFacts
     );
     printReport(report);
     return report;

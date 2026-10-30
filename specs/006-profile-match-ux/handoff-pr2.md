@@ -1,5 +1,7 @@
 # PR2 handoff: where implementation stopped
 
+> **Update 2026-10-29 (T087 done, gate PASSES)**: after attempt 3 the judge was reworked (per-dealbreaker checks by number, three-way verdict, reading rules), and the product owner approved new metrics: SC-004 per-run agreement; SC-002 identical fit input plus ≥ 75% recall; SC-008 0 trap false plus ≤ 2% misreadings. The final run (`eval-runs/pr2.json`) passes on both configurations; see the eval-models.md "Final run" section and spec.md Clarifications. Left: T088 (lint/tests/coverage, perf, compatibility smoke, QG-3 review, PR; ask before pushing or opening the PR). Section 6 below is history.
+
 > **Update 2026-10-29 (T087 eval, gate FAILED)**: T060/T078 are done and every free gate
 > check passes (lint, tests, coverage, perf). T087 ran three times and SC-004 (verdict
 > stability >= 90%) and SC-002 score independence (>= 90%) still fail; SC-008 (0 false

@@ -270,9 +270,19 @@ Run 2026-10-29, `--runs=5`, 44 pairs, `detectionMethod: "field"`. Raw output:
   - SC-002's independence is gated on identical fit input with and without
     dealbreakers.
 
-**Verdict stability and independence pass on both configurations. False and
-missed dealbreakers are still nonzero, so the gate fails on SC-008 and on
-SC-002's detection half.**
+**Gate passes on both configurations** under the dealbreaker targets the
+product owner approved after this run (spec.md Clarifications, 2026-10-29):
+
+| Configuration | Trap false (SC-008, 0) | Misread stated facts (SC-008, ≤ 2% of checks) | Recall (SC-002, ≥ 75%) | Fit input identical (SC-002, 100%) | Verdict stability, runs (SC-004, ≥ 90%) |
+|---|---|---|---|---|---|
+| free `gpt-6-luna`, `none` | **0** | 4 of 220 = **1.8%** | 50 of 60 = **83.3%** | **100%** | **95.5%** |
+| Premium `gpt-6-luna-premium`, `low` | **0** | 3 of 220 = **1.4%** | 46 of 60 = **76.7%** | **100%** | **90.9%** |
+
+Free misreadings (1.8%) and Premium recall (76.7%) and stability (90.9%) are
+close to their limits, so a re-run can fail on noise alone.
+
+Before those targets (zero false, zero missed), the run failed on SC-008 and
+on SC-002's detection half. Its counts are below.
 
 | Configuration (final) | False dealbreakers (SC-008, 0) | Missed (SC-002, 0) | Fit input identical (SC-002, 100%) | Median score within 5 pts (reported) | Verdict stability, runs (SC-004, ≥ 90%) | Pairs with 5 identical verdicts (reported) | Arrangement accuracy | Median $/analysis | p50 / p95 latency |
 |---|---|---|---|---|---|---|---|---|---|

@@ -40,8 +40,11 @@ For each configuration:
 ```text
 config, deployment, settings
 arrangement: accuracy %, stated contradictions, hybrid days n/m          (existing)
-fit: pairs, runs, falseDealbreakers (SC-008, target 0),
-     missedDealbreakers (SC-002, target 0),
+fit: pairs, runs, falseDealbreakers split into
+       trap (SC-008, target 0): the line's fact (pairs.json dealbreakerFacts) is in the
+         pair's unstatedFacts, or the line has no known fact,
+       stated (SC-008, ≤ 2% of dealbreaker checks): misreads a fact the posting states,
+     missedDealbreakers (reported) and dealbreaker recall (SC-002, ≥ 75%) over every run,
      fitInputIdentical % (SC-002, 100, PR2+): violating pairs whose fit-call messages
        are identical with and without dealbreakers, rebuilt offline from the fixtures,
      scoreIndependence % (reported): violating pairs whose median score is within

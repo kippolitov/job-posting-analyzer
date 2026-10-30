@@ -1,5 +1,12 @@
 {
   "_labelling": "One entry per (posting x profile). Posting ids are the postings/*.txt file stems and the postings/full/*.json slugs; thin-posting-control is excluded because it is never scored for fit. A dealbreaker counts as violated ONLY when the posting states the contradicting fact; inference from silence is never a violation. `violations` holds the profile's dealbreaker lines exactly as written. `unstatedFacts` lists, for the facts this profile's dealbreakers depend on, the ones the posting is silent about; these pairs are SC-008's false-dealbreaker traps. Judgement calls: (1) hybrid-2-days-inferred states that the team gathers in the London studio on Tuesdays and Thursdays, which the arrangement manifest labels hybrid, so it violates 'Remote only'. (2) A salary in another currency (GBP, EUR) is not a violation of a USD minimum (quickstart P4-4). (3) onsite-explicit's 'Columbus plant' and every US city count as outside EU timezones; London and 'US and Europe' (ashby-linear, body text over its US-only JSON-LD) do not. (4) greenhouse-discord requires Bay Area residence but states no work arrangement, so it does not violate 'Remote only' or 'No fully on-site roles'. (5) phenom-intuit and lever-palantir state hybrid working, so they violate 'Remote only'.",
+  "_dealbreakerFacts": "The fact each fixture dealbreaker line depends on, in unstatedFacts' terms. A false dealbreaker whose fact is in the pair's unstatedFacts is an SC-008 trap; any other false dealbreaker misreads a stated fact (spec.md SC-008, approved 2026-10-29).",
+  "dealbreakerFacts": {
+    "No fully on-site roles": "arrangement",
+    "Remote only": "arrangement",
+    "Minimum salary 120000 USD per year": "salary",
+    "EU timezones only": "location"
+  },
   "pairs": [
     {
       "posting": "hybrid-2-days-inferred",

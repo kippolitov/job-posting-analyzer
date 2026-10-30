@@ -26,7 +26,12 @@
         "pairs": 44,
         "runs": 5,
         "falseDealbreakers": 4,
+        "trapFalseDealbreakers": 0,
+        "statedFalseDealbreakers": 4,
+        "dealbreakerChecks": 220,
+        "statedFalsePct": 1.8181818181818181,
         "missedDealbreakers": 10,
+        "dealbreakerRecallPct": 83.33333333333334,
         "fitInputIdenticalPct": 100,
         "scoreIndependencePct": 83.33333333333334,
         "verdictStabilityPct": 95.45454545454545,
@@ -78,10 +83,7 @@
         "truncations": 0
       },
       "errors": [],
-      "failedTargets": [
-        "false dealbreakers 4 (SC-008)",
-        "missed dealbreakers 10 (SC-002)"
-      ]
+      "failedTargets": []
     },
     {
       "config": {
@@ -101,7 +103,12 @@
         "pairs": 44,
         "runs": 5,
         "falseDealbreakers": 3,
+        "trapFalseDealbreakers": 0,
+        "statedFalseDealbreakers": 3,
+        "dealbreakerChecks": 220,
+        "statedFalsePct": 1.3636363636363635,
         "missedDealbreakers": 14,
+        "dealbreakerRecallPct": 76.66666666666667,
         "fitInputIdenticalPct": 100,
         "scoreIndependencePct": 91.66666666666666,
         "verdictStabilityPct": 90.9090909090909,
@@ -163,10 +170,7 @@
         "truncations": 0
       },
       "errors": [],
-      "failedTargets": [
-        "false dealbreakers 3 (SC-008)",
-        "missed dealbreakers 14 (SC-002)"
-      ]
+      "failedTargets": []
     }
   ],
   "results": {
