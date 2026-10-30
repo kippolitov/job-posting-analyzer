@@ -1,5 +1,11 @@
 # PR2 handoff: where implementation stopped
 
+> **Update 2026-10-29 (T087 eval, gate FAILED)**: T060/T078 are done and every free gate
+> check passes (lint, tests, coverage, perf). T087 ran three times and SC-004 (verdict
+> stability >= 90%) and SC-002 score independence (>= 90%) still fail; SC-008 (0 false
+> dealbreakers) and SC-002 (0 missed) are also nonzero. Nothing is pushed and there is no PR.
+> Read the "T087 failed gate" section at the end of this file before doing anything else.
+
 > **Update 2026-10-29 (T060/T078 done)**: the extension E2E `profileFreshness.spec.ts` now passes against a local Functions host (`REQUIRE_AUTH=false func start` + Azurite). `regionScoping.test.ts` fails on `main` too (pre-existing). Left: T087 (live eval, ask first) and T088 (gate, QG-3, PR, ask first). Earlier note follows.
 >
 > **Update 2026-10-29 (later session)**: everything below marked ⏳ is now implemented
@@ -223,3 +229,46 @@ as a new one."; `?mode=paste` radio group; heading "Analyze a posting"; nav
   then opens the PR. Ask the user before both.
 - After PR2 merges: PR3–PR6 each get their own branch from `main`
   (`006-evidence`, `006-profile-setup`, `006-confirm-skills`, `006-triage-compare`).
+
+
+## 6. T087 failed gate: what was tried and what is open
+
+Branch `006-freshness-verdict`, last commit `a4092e0`. Eval: `cd functions && npm run eval:postings --
+--configs=scripts/evalConfigs.chosen.json --runs=5 --out=../specs/006-profile-match-ux/eval-runs/<name>.json`
+(live, ~$ cents, about 25 min for both configs; free = `gpt-6-luna`/`none`, Premium =
+`gpt-6-luna-premium`/`low`). Tables are in `eval-models.md` ("PR2 — rubric and dealbreakers…").
+Raw runs: `eval-runs/pr2-attempt1.json`, `pr2-attempt2.json`, `pr2.json` (attempt 3).
+
+| Attempt | Change | Free: false / missed / indep / stability | Premium: false / missed / indep / stability |
+|---|---|---|---|
+| 1 | single call, model lists `dealbreakersViolated` | 31 / 5 / 66.7 / 77.3 | 9 / 7 / 66.7 / 75.0 |
+| 2 | + required verbatim quote per violation, server drops unquoted | 26 / 18 / 75.0 / 63.6 | 2 / 16 / 66.7 / 72.7 |
+| 3 | fit call never sees dealbreakers; separate parallel judge call with quotes (R8 fallback) | 18 / 11 / 83.3 / 79.5 | 10 / 20 / 75.0 / 63.6 |
+
+Findings:
+- In attempt 3 the with/without-dealbreakers pair gets **identical** input to the fit call, so the
+  remaining score-independence gap is pure run-to-run score noise near band edges (85/65/40). The
+  same noise caps verdict stability. Prompt wording cannot fix it; `gpt-6-luna` takes no
+  temperature (reasoning-effort models), so the score can't be pinned that way.
+- Dealbreaker detection itself is still unreliable (tens of false/missed cases). Worst offenders
+  (free): "Minimum salary 120000 USD" and "Remote only" flagged where the posting is silent or
+  uses another currency; "EU timezones only" missed on `phenom-intuit`. See the labelling notes in
+  `functions/tests/fixtures/profiles/pairs.json` (`_labelling`), which defines ground truth.
+- Premium cost shows $0 because `functions/scripts/modelPrices.json` has no `gpt-6-luna-premium`.
+- Code state: the orchestrator (`functions/src/services/jobExtractionOrchestrator.ts`) runs the
+  judge call only when the profile has dealbreaker lines; judge failure returns none + warning.
+
+Ideas not yet tried, roughly by promise:
+1. Make the **metric** match the product: band edges make a hard-band stability target very strict.
+   Candidates: score-median per pair across runs, a tolerance (adjacent band counts as stable),
+   or measuring the score spread (e.g. stdev <= 5 points). Needs the user's sign-off (spec change).
+2. Reduce score noise: a deployment that accepts `temperature: 0` (earlier eval had
+   `premium-5.4-mini-t0`, `free-4o-mini-t0` in `evalConfigs.json`), a seed, averaging 2-3 fit calls,
+   or asking for sub-scores (skills/seniority/level) that the server sums and rounds deterministically.
+3. Deterministic checks for the structured dealbreakers (salary min vs extracted `salary`
+   min/max/currency; remote-only vs `arrangement`), model judge only for free-text ones.
+4. Judge with a stronger model/effort only for dealbreakers; or per-dealbreaker calls.
+
+Do not open the PR until the user decides; they previously approved opening it, but the task
+(T087) says stop and report when SC-004 or independence is below 90%. The recommended fallback if
+the metric can't be met: open PR2 as not-ready-to-merge, ship US1 (freshness/rescore) separately.
