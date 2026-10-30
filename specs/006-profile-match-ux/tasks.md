@@ -640,7 +640,8 @@ These are silent failures, not crashes. They were found in existing code during 
 - [X] T119 [US5] Add `confirmSkill(label)` to `extension/services/profileStorage.ts`, which calls `POST /api/profile/confirmed-skills` and updates the `profile:fingerprint` session key from the response. Add the "I have this" control and the post-save rescore offer to `extension/components/JobPanel/FitScore.tsx` and `extension/components/JobPanel/ThisPageTab.tsx`. This makes the extension part of T116 pass.
 - [X] T120 [US5] Add the same control to `web/src/components/AnalysisView.tsx` and `web/src/pages/PostingDetail.tsx`, using a new `confirmSkill(label)` in `web/src/api/endpoints.ts` that calls `POST /api/profile/confirmed-skills`, and showing `rescoreAction` afterwards. This makes the web part of T116 pass.
 - [X] T121 [US5] Add the removable confirmed-skills list to `extension/entrypoints/options/OptionsApp.tsx` and `web/src/pages/Profile.tsx`, to make T117 pass.
-- [ ] T122 [US5] Check SC-007 by hand: from "Missing: X", count clicks to a rescored result, which must be 2 or fewer. Then run the PR5 gate (lint, tests, coverage, perf and the compatibility smoke) and open PR5.
+- [X] T122 [US5] Check SC-007 by hand: from "Missing: X", count clicks to a rescored result, which must be 2 or fewer. Then run the PR5 gate (lint, tests, coverage, perf and the compatibility smoke) and open PR5.
+  - 2026-10-30: SC-007 is 2 clicks ("I have this", then Rescore), asserted in ThisPageTab tests. Compat smoke: published v0.0.36 against this backend passed (`compat-smoke/pr2-old-extension.spec.ts` plus 8 other E2E); `regionScoping` fails on `main` too. Web half of the smoke and a manual click-through were not run.
 
 **Checkpoint**: users can fix a wrong "missing" verdict in place.
 
