@@ -31,6 +31,8 @@ export interface FakeStorageApi {
   setImportResponse(response: { status: number; body: unknown }): void;
   /** Number of POST /api/profile/import calls received. */
   importCalls(): number;
+  /** Labels received by POST /api/profile/confirmed-skills, in order. */
+  confirmCalls: string[];
   reset(): void;
   seededKey(canonicalUrl: string): Promise<string>;
 }
@@ -80,6 +82,7 @@ export function createFakeStorageApi(): FakeStorageApi {
   const DEFAULT_IMPORT = { status: 200, body: { text: "Imported resume text", charCount: 20 } };
   let importResponse: { status: number; body: unknown } = DEFAULT_IMPORT;
   let importCalls = 0;
+  const confirmCalls: string[] = [];
 
   function takeForcedFailure(): HttpResponse | null {
     if (!forcedFailure) return null;
@@ -113,6 +116,7 @@ export function createFakeStorageApi(): FakeStorageApi {
         text?: unknown;
         dealbreakers?: unknown;
         preferences?: Preferences | null;
+        confirmedSkills?: string[];
       };
       if (typeof body?.text !== "string" || !Array.isArray(body.dealbreakers)) {
         return HttpResponse.json(
@@ -129,6 +133,27 @@ export function createFakeStorageApi(): FakeStorageApi {
         // Merge semantics (contracts/profile-api.md §2): omitted keeps, null clears.
         ...mergedPreferences(profile?.preferences, body.preferences),
       };
+      const skills = body.confirmedSkills ?? profile.confirmedSkills;
+      if (skills && skills.length > 0) profile.confirmedSkills = skills;
+      else delete profile.confirmedSkills;
+      return HttpResponse.json({ ...profile, fingerprint: await fakeFingerprint(profile) });
+    }),
+
+    http.post(`${base}/profile/confirmed-skills`, async ({ request }) => {
+      const failure = takeForcedFailure();
+      if (failure) return failure;
+      const { label } = (await request.json()) as { label: string };
+      confirmCalls.push(label);
+      if (!profile) {
+        return HttpResponse.json(
+          { error: { code: "PROFILE_NOT_FOUND", message: "none" } },
+          { status: 404 }
+        );
+      }
+      const skills = profile.confirmedSkills ?? [];
+      if (!skills.some((s) => s.toLowerCase() === label.trim().toLowerCase())) {
+        profile = { ...profile, confirmedSkills: [...skills, label.trim()] };
+      }
       return HttpResponse.json({ ...profile, fingerprint: await fakeFingerprint(profile) });
     }),
 
@@ -328,6 +353,7 @@ export function createFakeStorageApi(): FakeStorageApi {
   return {
     server,
     jobs,
+    confirmCalls,
     getProfile: () => profile,
     setProfile: (p) => {
       profile = p;
@@ -362,6 +388,7 @@ export function createFakeStorageApi(): FakeStorageApi {
       accountTier = "free";
       accountUsage = {};
       forcedFailure = null;
+      confirmCalls.length = 0;
       importResponse = DEFAULT_IMPORT;
       importCalls = 0;
     },

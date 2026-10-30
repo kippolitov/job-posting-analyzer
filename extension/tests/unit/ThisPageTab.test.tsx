@@ -5,10 +5,17 @@ import { ThisPageTab } from "../../components/JobPanel/ThisPageTab";
 import type { JobView } from "../../components/JobPanel/ThisPageTab";
 import type { JobAnalysis } from "../../types/job";
 import { fetchAccount } from "../../services/accountService";
+import { confirmSkill } from "../../services/profileStorage";
+import { ApiError } from "../../services/api/apiClient";
 
 vi.mock("../../services/accountService", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../services/accountService")>()),
   fetchAccount: vi.fn(),
+}));
+
+vi.mock("../../services/profileStorage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/profileStorage")>()),
+  confirmSkill: vi.fn(),
 }));
 
 const analysis: JobAnalysis = {
@@ -555,5 +562,90 @@ describe("ThisPageTab — profile freshness (006)", () => {
     expect(
       screen.queryByRole("button", { name: "Configure profile" })
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ThisPageTab I have this (006 US5)", () => {
+  const CURRENT = "c".repeat(64);
+  const NEXT = "n".repeat(64);
+  const view: JobView = {
+    ...baseView,
+    analysis: {
+      ...analysis,
+      fit: { score: 55, rationale: "r", missing: ["Terraform"], profileFingerprint: CURRENT },
+    },
+    currentProfileFingerprint: CURRENT,
+  };
+
+  beforeEach(() => {
+    vi.mocked(confirmSkill).mockReset();
+    vi.mocked(fetchAccount).mockReset().mockResolvedValue({
+      email: "a@b.c",
+      tier: "free",
+      usage: { count: 12, limit: 50, resetsAt: "2026-11-01T00:00:00Z", rescoresUsed: 3, rescoresLimit: 10 },
+      subscription: null,
+    });
+  });
+
+  function renderWith(handlers: { onAnalyze?: () => void; onRescore?: (p: string | null) => void }) {
+    return render(
+      <ThisPageTab
+        tabId={1}
+        view={view}
+        onAnalyze={handlers.onAnalyze ?? noop}
+        onCancel={noop}
+        onForceAnalyze={noop}
+        onRescore={handlers.onRescore ?? noop}
+      />
+    );
+  }
+
+  it("marks the fit out of date and offers Rescore with its cost, without rescoring", async () => {
+    vi.mocked(confirmSkill).mockResolvedValue({
+      text: "t",
+      dealbreakers: [],
+      updatedAt: "now",
+      fingerprint: NEXT,
+      confirmedSkills: ["Terraform"],
+    });
+    const onAnalyze = vi.fn();
+    const onRescore = vi.fn();
+    renderWith({ onAnalyze, onRescore });
+    expect(screen.queryByText("Scored against an older profile")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "I have Terraform" }));
+
+    expect(confirmSkill).toHaveBeenCalledWith("Terraform");
+    expect(await screen.findByText("Scored against an older profile")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rescore" })).toBeInTheDocument();
+    expect(
+      await screen.findByText("Free — 7 of 10 free rescores left this month")
+    ).toBeInTheDocument();
+    expect(onRescore).not.toHaveBeenCalled();
+    expect(onAnalyze).not.toHaveBeenCalled();
+  });
+
+  it("on failure leaves the chip, shows the error and offers no rescore", async () => {
+    vi.mocked(confirmSkill).mockRejectedValue(
+      new ApiError(0, "NETWORK_ERROR", "Can't reach the server. Check your connection.", true)
+    );
+    renderWith({});
+    await userEvent.click(screen.getByRole("button", { name: "I have Terraform" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Can't reach the server");
+    expect(screen.getByRole("button", { name: "I have Terraform" })).toBeEnabled();
+    expect(screen.queryByText("Scored against an older profile")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rescore" })).not.toBeInTheDocument();
+  });
+
+  it("shows the over-limit message at the cap", async () => {
+    vi.mocked(confirmSkill).mockRejectedValue(
+      new ApiError(400, "SERVICE_ERROR", "Profile text must be 20,000 characters or fewer.", false)
+    );
+    renderWith({});
+    await userEvent.click(screen.getByRole("button", { name: "I have Terraform" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Profile text must be 20,000 characters or fewer."
+    );
   });
 });

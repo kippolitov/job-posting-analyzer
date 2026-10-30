@@ -46,6 +46,8 @@ export interface CandidateProfile {
   fingerprint?: string;
   /** Structured preferences (006 PR4). Absent when none are set. */
   preferences?: Preferences;
+  /** Skills the user added with "I have this" (006 PR5). Absent when none. */
+  confirmedSkills?: string[];
 }
 
 export type JobErrorCode =

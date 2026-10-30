@@ -76,6 +76,52 @@ describe("OptionsApp", () => {
     }
   });
 
+  describe("confirmed skills (US5)", () => {
+    it("lists confirmed skills under their own heading, each with a Remove button", async () => {
+      await setProfile({
+        text: "Engineer",
+        dealbreakers: [],
+        confirmedSkills: ["Terraform", "Kubernetes"],
+      });
+      render(<OptionsApp />);
+      const region = await screen.findByRole("region", { name: "Confirmed skills" });
+      expect(within(region).getByText("Terraform")).toBeInTheDocument();
+      expect(within(region).getByRole("button", { name: "Remove Terraform" })).toBeInTheDocument();
+      expect(within(region).getByRole("button", { name: "Remove Kubernetes" })).toBeInTheDocument();
+    });
+
+    it("removing one saves the profile without it", async () => {
+      await setProfile({
+        text: "Engineer",
+        dealbreakers: [],
+        confirmedSkills: ["Terraform", "Kubernetes"],
+      });
+      render(<OptionsApp />);
+      await userEvent.click(await screen.findByRole("button", { name: "Remove Terraform" }));
+
+      await waitFor(() => expect(api.getProfile()?.confirmedSkills).toEqual(["Kubernetes"]));
+      expect(screen.queryByRole("button", { name: "Remove Terraform" })).not.toBeInTheDocument();
+    });
+
+    it("removing the last one clears the list and hides the section", async () => {
+      await setProfile({ text: "Engineer", dealbreakers: [], confirmedSkills: ["Terraform"] });
+      render(<OptionsApp />);
+      await userEvent.click(await screen.findByRole("button", { name: "Remove Terraform" }));
+
+      await waitFor(() => expect(api.getProfile()?.confirmedSkills).toBeUndefined());
+      expect(screen.queryByRole("region", { name: "Confirmed skills" })).not.toBeInTheDocument();
+    });
+
+    it("a normal save keeps the confirmed skills", async () => {
+      await setProfile({ text: "Engineer", dealbreakers: [], confirmedSkills: ["Terraform"] });
+      render(<OptionsApp />);
+      await userEvent.type(await screen.findByLabelText(/Your background/), " v2");
+      await userEvent.click(screen.getByRole("button", { name: "Save profile" }));
+      await screen.findByText("Profile saved.");
+      expect(api.getProfile()?.confirmedSkills).toEqual(["Terraform"]);
+    });
+  });
+
   describe("résumé import (US4)", () => {
     const pdf = () => new File([new Uint8Array(100)], "cv.pdf", { type: "application/pdf" });
 
