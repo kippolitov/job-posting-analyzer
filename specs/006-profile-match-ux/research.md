@@ -698,6 +698,13 @@ above changed in three steps:
    misreadings of stated facts up to 2% of checks. SC-002 requires at least 75%
    recall. `splitFalseDealbreakers` uses pairs.json `dealbreakerFacts` to tell
    the two kinds apart.
+5. The compatibility smoke (2026-10-30) showed that the published extension
+   ignores `dealbreakersViolated`. Step 1 means the rationale no longer names
+   the violation, so that extension showed an on-site posting as a 100 score
+   with no mention of the user's dealbreaker. For requests without
+   `profileData`, the server now appends "Violates your dealbreaker(s): …" to
+   the rationale. The score is unchanged (FR-005), and clients that send
+   `profileData` show the banner instead.
 
 ---
 

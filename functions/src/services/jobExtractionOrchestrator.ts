@@ -314,6 +314,18 @@ export function violatedLines(
   return violated;
 }
 
+/**
+ * Extensions from before PR2 send no `profileData` and ignore
+ * `dealbreakersViolated`, so the violation is named in the rationale they do
+ * render. The score is untouched (FR-005). Clients that send `profileData`
+ * show the banner instead.
+ */
+function withLegacyDealbreakerNote(rationale: string, violated: string[]): string {
+  if (violated.length === 0) return rationale;
+  const noun = violated.length === 1 ? "dealbreaker" : "dealbreakers";
+  return `${rationale} Violates your ${noun}: ${violated.join("; ")}.`;
+}
+
 export async function orchestrateJobAnalysis(
   req: AnalyzeJobRequest,
   tier: Tier = "free",
@@ -449,7 +461,16 @@ export async function orchestrateJobAnalysis(
   payload = enforceConsistency(payload, req);
   const violated = await judged;
   if (payload.fit) {
-    payload = { ...payload, fit: { ...payload.fit, dealbreakersViolated: violated } };
+    payload = {
+      ...payload,
+      fit: {
+        ...payload.fit,
+        rationale: req.profileData
+          ? payload.fit.rationale
+          : withLegacyDealbreakerNote(payload.fit.rationale, violated),
+        dealbreakersViolated: violated,
+      },
+    };
   }
   const profileFingerprint = fingerprintForRequest(req);
   if (payload.fit && profileFingerprint) {
