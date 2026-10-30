@@ -182,6 +182,20 @@ function buildUserMessage(req: AnalyzeJobRequest): string {
   return parts.join("\n\n");
 }
 
+/**
+ * The fit call's messages. The eval compares them with and without the
+ * profile's dealbreakers to show the score cannot depend on them (SC-002).
+ */
+export function fitCallMessages(req: AnalyzeJobRequest): { role: "system" | "user"; content: string }[] {
+  return [
+    {
+      role: "system",
+      content: buildSystemPrompt(Boolean(resolveScoringProfile(req)), Boolean(req.assumeJobPosting)),
+    },
+    { role: "user", content: buildUserMessage(req) },
+  ];
+}
+
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -256,16 +270,12 @@ const DEALBREAKER_SCHEMA = {
 } as const;
 
 const DEALBREAKER_PROMPT = [
-  "You check a job posting against a candidate's numbered dealbreakers. You do not score fit.",
-  "Return exactly one check per dealbreaker, in order. For each, first copy into postingSays the passage of the posting that bears on that dealbreaker, as a VERBATIM substring of the posting (\"\" when the posting says nothing about it). Then give the verdict:",
-  "- \"violated\": the posting states a fact that directly contradicts the dealbreaker;",
-  "- \"compatible\": the posting states a fact that satisfies it;",
-  "- \"not stated\": the posting is silent or vague about it, or deciding would mean guessing. Silence is never a violation.",
-  "How to read common dealbreakers:",
-  "- Work arrangement (e.g. \"Remote only\", \"No fully on-site roles\"): only a statement of how the role or the company works (remote, hybrid, in the office some days, fully on-site) decides it. A required home area, relocation, a job location, travel, or occasional in-person meetups do not state the arrangement.",
-  "- Minimum salary: compare only with pay stated in the same currency and pay period. It is violated only when the top of every stated range is below the minimum. Pay in another currency, or no pay, is \"not stated\".",
-  "- Location or time zone (e.g. \"EU timezones only\"): violated when the posting places the role, or limits candidates, in a location outside it (e.g. a US city, or \"US only\"); compatible when the location is inside it (the UK, London, and CET ±2 hours are European time zones) or candidates there may apply, even alongside other regions (e.g. \"open to the US and Europe\"). The role's own location (for example a Location line beside the job title) places it; site menus, search filters and lists of other offices do not.",
-  "- When the page states a fact more than one way, the job description text wins over structured data (JSON-LD) and page headers.",
+  "Check a job posting against the candidate's numbered dealbreakers. Do not score fit.",
+  "Return one check per dealbreaker, in order: postingSays is the shortest VERBATIM substring of the posting that decides it (\"\" if none), then the verdict: violated (the posting states a fact contradicting it), compatible (it states a fact satisfying it), or not stated (silent, vague, or a guess). Silence is never a violation.",
+  "- Arrangement (\"Remote only\", \"No fully on-site roles\"): decided only by how the role or the company works (remote, hybrid, office days, on-site), including a company-wide work policy anywhere on the page. A conditional line (\"if the posting is specified as Onsite…\"), a home area, relocation, job location, travel or occasional meetups do not decide it. Mind negations: only a fully on-site role violates \"No fully on-site roles\"; hybrid or remote is compatible.",
+  "- Minimum salary: compare only pay in the same currency and period, violated only if every stated range tops out below it; otherwise not stated.",
+  "- Location or time zone (\"EU timezones only\"): violated if the role's own location or allowed candidate region is outside it (a US city, \"US only\"); compatible if inside it (UK, London, CET ±2h are European) or that region may apply (\"US and Europe\"). Site menus, search filters and office lists do not count.",
+  "- The job description text wins over JSON-LD and page headers.",
 ].join("\n");
 
 function postingHaystack(req: AnalyzeJobRequest): string {
@@ -320,16 +330,7 @@ export async function orchestrateJobAnalysis(
 
   const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion });
 
-  const messages = [
-    {
-      role: "system" as const,
-      content: buildSystemPrompt(
-        Boolean(resolveScoringProfile(req)),
-        Boolean(req.assumeJobPosting)
-      ),
-    },
-    { role: "user" as const, content: buildUserMessage(req) },
-  ];
+  const messages = fitCallMessages(req);
 
   const complete = async (
     attempt: 1 | 2,
