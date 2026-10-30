@@ -41,8 +41,7 @@ export interface Preferences {
  * The structured profile a client sends as `profileData` (contracts/
  * analyze-api.md §1). The server serializes it with profileToPromptText, so
  * every surface scores against the same prompt (research R5, SC-006).
- * `preferences` arrived in PR4; `confirmedSkills` arrives in PR5 and is opaque
- * here until then.
+ * `preferences` arrived in PR4 and `confirmedSkills` in PR5.
  */
 export interface ScoringProfile {
   text: string;
@@ -63,6 +62,7 @@ export function toScoringProfile(profile: ScoringProfile): ScoringProfile {
 
 const DEALBREAKERS_HEADING = "Dealbreakers:";
 const PREFERENCES_HEADING = "Preferences:";
+const CONFIRMED_SKILLS_HEADING = "Confirmed skills:";
 /** Judged by the model, so the banner shows exactly this text (research R11). */
 export const SPONSORSHIP_LINE = "Work authorization: needs visa sponsorship";
 
@@ -85,7 +85,37 @@ export function profileToPromptText<P extends ScoringProfile>(profile: P): strin
   if (preferences.length > 0) {
     sections.push(`${PREFERENCES_HEADING}\n${preferences.map((l) => `- ${l}`).join("\n")}`);
   }
+  const section = confirmedSkillsSection(profile.confirmedSkills);
+  if (section) sections.push(section);
   return sections.join("\n\n");
+}
+
+function confirmedSkillsSection(skills: string[] | undefined): string {
+  if (!skills || skills.length === 0) return "";
+  return `${CONFIRMED_SKILLS_HEADING}\n${skills.map((s) => `- ${s}`).join("\n")}`;
+}
+
+/**
+ * Length counted against the 20,000-character profile cap: the résumé text
+ * plus the serialized Confirmed skills section (data-model.md §3).
+ */
+export function profileCapLength(text: string, confirmedSkills: string[] | undefined): number {
+  const section = confirmedSkillsSection(confirmedSkills);
+  return text.length + (section ? section.length + 2 : 0);
+}
+
+/** Trim, drop empties and dedupe case-insensitively, keeping the first spelling. */
+export function normalizeConfirmedSkills(skills: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of skills) {
+    const skill = raw.trim();
+    const key = skill.toLowerCase();
+    if (!skill || seen.has(key)) continue;
+    seen.add(key);
+    result.push(skill);
+  }
+  return result;
 }
 
 /** Seniority range as the user reads it: "senior to staff", "senior or above". */
