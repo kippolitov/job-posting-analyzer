@@ -707,8 +707,8 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T135 [P] Update `README.md`'s feature list and any user-facing docs under `docs/` that describe fit scoring, so they match the spec's vocabulary (verdicts, Rescore, out of date). Per the constitution, public API documentation ships in the same PR that changes it, which the `contracts/` files already cover. This task covers prose docs only.
-- [ ] T136 [P] Check whether `store-submission/` listing text or screenshots describe the old fit UI ("Fit score" number only). If they do, list the needed changes in the final PR description. Do **not** submit to the Chrome Web Store, because that is an outward-facing action needing the user's approval.
+- [X] T135 [P] Update `README.md`'s feature list and any user-facing docs under `docs/` that describe fit scoring, so they match the spec's vocabulary (verdicts, Rescore, out of date). Per the constitution, public API documentation ships in the same PR that changes it, which the `contracts/` files already cover. This task covers prose docs only.
+- [X] T136 [P] Check whether `store-submission/` listing text or screenshots describe the old fit UI ("Fit score" number only). If they do, list the needed changes in the final PR description. Do **not** submit to the Chrome Web Store, because that is an outward-facing action needing the user's approval.
 - [ ] T137 Run every section of `specs/006-profile-match-ux/quickstart.md` end to end against local Azurite. Tick each step, and record any deviation as a GitHub issue labelled `needs-triage`.
 - [ ] T138 Verify SC-001 by hand on the web library and the extension Saved tab with a mixed library (current, out-of-date, version-unknown, deleted-profile and unscored entries). Every visible fit is either current or carries a marker.
 - [ ] T139 Run `/speckit-analyze` for cross-artifact consistency, and fix any spec, plan or tasks drift it reports in `specs/006-profile-match-ux/`.
