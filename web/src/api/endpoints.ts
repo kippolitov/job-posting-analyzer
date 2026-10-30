@@ -31,8 +31,20 @@ export async function saveProfile(payload: {
   dealbreakers: string[];
   /** Omitted keeps the stored preferences, `null` clears them (merge PUT). */
   preferences?: Preferences | null;
+  /** Omitted keeps the stored skills, `[]` clears them (merge PUT). */
+  confirmedSkills?: string[];
 }): Promise<ProfilePayload> {
   const res = await apiFetch("/profile", { method: "PUT", body: payload });
+  return (await res.json()) as ProfilePayload;
+}
+
+/**
+ * POST /api/profile/confirmed-skills ("I have this"): the server appends
+ * atomically and answers with the updated profile, including its new
+ * fingerprint.
+ */
+export async function confirmSkill(label: string): Promise<ProfilePayload> {
+  const res = await apiFetch("/profile/confirmed-skills", { method: "POST", body: { label } });
   return (await res.json()) as ProfilePayload;
 }
 

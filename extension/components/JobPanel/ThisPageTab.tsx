@@ -7,6 +7,7 @@ import type { ExtractionStrategy, JobAnalysis, JobPanelError, SavedJob } from ".
 import { ArrangementBadge } from "./ArrangementBadge";
 import { FitScore } from "./FitScore";
 import { useLiveFingerprint, useRescoreCostLine } from "./useFreshness";
+import { confirmSkill } from "../../services/profileStorage";
 import { freshness, rescoreAction, scoredByLabel } from "../../../shared/fitView";
 import { UsageExhausted } from "../UsageExhausted";
 
@@ -78,7 +79,18 @@ export function ThisPageTab({
   const regionButtonRef = useRef<HTMLButtonElement>(null);
   const noAccess = view.status === "error" && view.error?.code === "no-access";
 
-  const currentFingerprint = useLiveFingerprint(view.currentProfileFingerprint);
+  const liveFingerprint = useLiveFingerprint(view.currentProfileFingerprint);
+  // "I have this" changes the profile here, so the new fingerprint applies at
+  // once rather than waiting on the session-storage event. A later profile
+  // edit elsewhere replaces it.
+  const [confirmedFingerprint, setConfirmedFingerprint] = useState<{
+    base: string | null | undefined;
+    value: string | null;
+  } | null>(null);
+  const currentFingerprint =
+    confirmedFingerprint && confirmedFingerprint.base === liveFingerprint
+      ? confirmedFingerprint.value
+      : liveFingerprint;
   const fit = view.analysis?.fit ?? null;
   const fitFreshness = freshness(fit, currentFingerprint);
   const unavailable = Boolean(
@@ -385,6 +397,13 @@ export function ThisPageTab({
           unavailable={unavailable}
           profileUnavailable={view.profileUnavailable}
           scoredBy={scoredByLabel(view.analysis)}
+          onConfirmSkill={async (label) => {
+            const saved = await confirmSkill(label);
+            setConfirmedFingerprint({
+              base: liveFingerprint,
+              value: saved.fingerprint ?? null,
+            });
+          }}
         />
         <AnalysisFields analysis={view.analysis} />
       </div>

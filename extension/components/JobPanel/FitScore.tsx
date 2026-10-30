@@ -28,6 +28,8 @@ interface FitScoreProps {
   profileUnavailable?: boolean;
   /** `scoredByLabel(analysis)`, shown in the fit details. */
   scoredBy?: string;
+  /** "I have this" (FR-018): resolves once the skill is saved, rejects with a user-facing message. */
+  onConfirmSkill?: (label: string) => Promise<unknown>;
 }
 
 const FRESHNESS_LABELS: Partial<Record<Freshness, string>> = {
@@ -135,8 +137,10 @@ export function FitScore({
   unavailable,
   profileUnavailable,
   scoredBy,
+  onConfirmSkill,
 }: FitScoreProps) {
   const [expanded, setExpanded] = useState(false);
+  const confirm = useConfirmSkill(onConfirmSkill);
   if (!fit && profileUnavailable) {
     return (
       <div className="rounded-xl border border-gray-200/70 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
@@ -259,11 +263,12 @@ export function FitScore({
               tone="red"
               fit={fit}
               list="missing"
+              confirm={confirm}
             />
             {expanded && (
               <div id="fit-full-breakdown" className="space-y-3">
                 <ChipSection label="Matching skills" items={fit.matching} tone="green" fit={fit} list="matching" />
-                <ChipSection label="Nice to have" items={fit.desired} tone="amber" fit={fit} list="desired" />
+                <ChipSection label="Nice to have" items={fit.desired} tone="amber" fit={fit} list="desired" confirm={confirm} />
                 <BulletSection
                   label="Strengths of this role for you"
                   items={fit.strengths}
@@ -278,6 +283,11 @@ export function FitScore({
                   <p className="text-[10px] text-gray-400 dark:text-gray-500">{scoredBy}</p>
                 )}
               </div>
+            )}
+            {confirm.error && (
+              <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+                {confirm.error}
+              </p>
             )}
             {hasMore && (
               <button
@@ -297,18 +307,54 @@ export function FitScore({
   );
 }
 
+interface ConfirmControl {
+  /** Absent when this surface can't confirm skills. */
+  confirm?: (label: string) => void;
+  confirmed: ReadonlySet<string>;
+  pending: string | null;
+  error: string | null;
+}
+
+function useConfirmSkill(onConfirmSkill: FitScoreProps["onConfirmSkill"]): ConfirmControl {
+  const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(new Set());
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!onConfirmSkill) return { confirmed, pending, error };
+  return {
+    confirmed,
+    pending,
+    error,
+    confirm: (label) => {
+      setPending(label);
+      setError(null);
+      onConfirmSkill(label).then(
+        () => {
+          setConfirmed((prev) => new Set(prev).add(label));
+          setPending(null);
+        },
+        (err: unknown) => {
+          setError(err instanceof Error ? err.message : "Couldn't save to your profile. Try again.");
+          setPending(null);
+        }
+      );
+    },
+  };
+}
+
 function ChipSection({
   label,
   items,
   tone,
   fit,
   list,
+  confirm,
 }: {
   label: string;
   items: string[] | undefined;
   tone: Tone;
   fit: Fit;
   list: "matching" | "missing" | "desired";
+  confirm?: ConfirmControl;
 }) {
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   if (!items || items.length === 0) return null;
@@ -322,10 +368,14 @@ function ChipSection({
           const evidence = evidenceFor(fit, list, item);
           const hasQuote = Boolean(evidence?.postingQuote || evidence?.profileQuote);
           const chip = `rounded-md px-1.5 py-0.5 text-xs ${CHIP_TONES[tone]}`;
+          const confirmButton = confirm?.confirm && list !== "matching" && (
+            <ConfirmButton item={item} confirm={confirm} />
+          );
           if (!evidence || !hasQuote) {
             return (
-              <li key={item} className={chip}>
-                {item}
+              <li key={item} className="inline-flex items-center gap-1">
+                <span className={chip}>{item}</span>
+                {confirmButton}
               </li>
             );
           }
@@ -333,6 +383,7 @@ function ChipSection({
           const regionId = `evidence-${list}-${item.replace(/\W+/g, "-")}`;
           return (
             <li key={item} className={open ? "w-full" : undefined}>
+              <div className="inline-flex items-center gap-1">
               <button
                 type="button"
                 aria-expanded={open}
@@ -357,6 +408,8 @@ function ChipSection({
                   <path d="m6 9 6 6 6-6" />
                 </svg>
               </button>
+              {confirmButton}
+              </div>
               {open && (
                 <div id={regionId} className="mt-1 space-y-1">
                   {evidence.postingQuote && (
@@ -372,6 +425,27 @@ function ChipSection({
         })}
       </ul>
     </div>
+  );
+}
+
+function ConfirmButton({ item, confirm }: { item: string; confirm: ConfirmControl }) {
+  if (confirm.confirmed.has(item)) {
+    return (
+      <span className="text-[10px] font-medium text-green-700 dark:text-green-400">
+        Added to your profile
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={`I have ${item}`}
+      disabled={confirm.pending !== null}
+      onClick={() => confirm.confirm?.(item)}
+      className="rounded-md border border-gray-300 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+    >
+      I have this
+    </button>
   );
 }
 

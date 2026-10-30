@@ -124,6 +124,7 @@ export function createFakeStorageApi(): FakeStorageApi {
           { status: 400 }
         );
       }
+      const storedSkills = profile?.confirmedSkills;
       profile = {
         text: body.text.slice(0, 20_000),
         dealbreakers: (body.dealbreakers as string[])
@@ -133,7 +134,7 @@ export function createFakeStorageApi(): FakeStorageApi {
         // Merge semantics (contracts/profile-api.md §2): omitted keeps, null clears.
         ...mergedPreferences(profile?.preferences, body.preferences),
       };
-      const skills = body.confirmedSkills ?? profile.confirmedSkills;
+      const skills = body.confirmedSkills ?? storedSkills;
       if (skills && skills.length > 0) profile.confirmedSkills = skills;
       else delete profile.confirmedSkills;
       return HttpResponse.json({ ...profile, fingerprint: await fakeFingerprint(profile) });

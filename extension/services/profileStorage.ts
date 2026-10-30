@@ -78,8 +78,27 @@ export async function setProfile(input: {
   dealbreakers: string[];
   /** Omitted keeps the stored preferences, `null` clears them (merge PUT). */
   preferences?: Preferences | null;
+  /** Omitted keeps the stored skills, `[]` clears them (merge PUT). */
+  confirmedSkills?: string[];
 }): Promise<CandidateProfile> {
   const response = await apiFetch("/profile", { method: "PUT", body: input });
+  if (!response.ok) await throwUnexpected(response);
+  const saved = (await response.json()) as CandidateProfile;
+  await writeCachedFingerprint(saved.fingerprint ?? null);
+  return saved;
+}
+
+/**
+ * POST /api/profile/confirmed-skills ("I have this"). The server appends
+ * atomically, so quick clicks on different skills can't overwrite each other.
+ * The new fingerprint goes into the session cache, which marks every score
+ * made against the old profile as out of date (FR-007).
+ */
+export async function confirmSkill(label: string): Promise<CandidateProfile> {
+  const response = await apiFetch("/profile/confirmed-skills", {
+    method: "POST",
+    body: { label },
+  });
   if (!response.ok) await throwUnexpected(response);
   const saved = (await response.json()) as CandidateProfile;
   await writeCachedFingerprint(saved.fingerprint ?? null);

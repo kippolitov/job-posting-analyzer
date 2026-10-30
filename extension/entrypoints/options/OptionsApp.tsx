@@ -109,6 +109,7 @@ function ProfileEditor() {
   const [loaded, setLoaded] = useState(false);
   const [preferences, setPreferences] = useState<PreferencesForm>(emptyPreferencesForm());
   const [importing, setImporting] = useState(false);
+  const [confirmedSkills, setConfirmedSkills] = useState<string[]>([]);
   // Server-backed profile: a failed load must show as a failure with Retry,
   // never as an empty form that looks like the profile is gone (FR-015).
   const [loadFailed, setLoadFailed] = useState(false);
@@ -121,6 +122,7 @@ function ProfileEditor() {
         setText(profile.text);
         setDealbreakers(profile.dealbreakers.join("\n"));
         setPreferences(formFromPreferences(profile.preferences));
+        setConfirmedSkills(profile.confirmedSkills ?? []);
       }
       setLoaded(true);
     } catch {
@@ -175,9 +177,28 @@ function ProfileEditor() {
     }
   };
 
+  const handleRemoveSkill = async (skill: string) => {
+    try {
+      const saved = await setProfile({
+        text,
+        dealbreakers: dealbreakers.split("\n"),
+        confirmedSkills: confirmedSkills.filter((s) => s !== skill),
+      });
+      setConfirmedSkills(saved.confirmedSkills ?? []);
+      setError(null);
+      setFeedback("Profile saved.");
+    } catch (err) {
+      setFeedback(null);
+      setError(
+        err instanceof Error ? err.message : "The profile could not be saved. Try again."
+      );
+    }
+  };
+
   const handleClear = async () => {
     try {
       await clearProfile();
+      setConfirmedSkills([]);
       setText("");
       setDealbreakers("");
       setPreferences(emptyPreferencesForm());
@@ -339,6 +360,35 @@ function ProfileEditor() {
             disabled={!loaded}
           />
         </section>
+
+        {confirmedSkills.length > 0 && (
+          <section aria-labelledby="profile-skills-heading" className={SECTION}>
+            <h2 id="profile-skills-heading" className={HEADING}>
+              Confirmed skills
+            </h2>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Skills you added with &ldquo;I have this&rdquo;. They count as part of your profile.
+            </p>
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {confirmedSkills.map((skill) => (
+                <li
+                  key={skill}
+                  className="inline-flex items-center gap-1 rounded-full bg-gray-100 py-1 pl-3 pr-1 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                >
+                  {skill}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${skill}`}
+                    onClick={() => void handleRemoveSkill(skill)}
+                    className="rounded-full px-2 text-gray-500 hover:bg-gray-200 hover:text-gray-800 dark:hover:bg-gray-700"
+                  >
+                    <span aria-hidden="true">×</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
 
       <div className="sticky bottom-0 mt-6 border-t border-gray-200/70 bg-gray-50 dark:border-gray-800 dark:bg-gray-950">
