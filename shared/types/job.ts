@@ -1,4 +1,4 @@
-import type { ScoringProfile } from "./profile";
+import { isPreferences, type ScoringProfile } from "./profile";
 
 export type Arrangement = "remote" | "hybrid" | "onsite" | "unspecified";
 export type ArrangementConfidence = "explicit" | "inferred" | "none";
@@ -215,8 +215,7 @@ function isStringArray(value: unknown): value is string[] {
 
 /**
  * Structural check for `profileData` (contracts/analyze-api.md §1). A
- * malformed optional field is rejected, never silently ignored. Detailed
- * preference validation lands with PR4.
+ * malformed optional field is rejected, never silently ignored.
  */
 export function isScoringProfile(value: unknown): value is ScoringProfile {
   if (typeof value !== "object" || value === null) return false;
@@ -224,9 +223,7 @@ export function isScoringProfile(value: unknown): value is ScoringProfile {
   return (
     typeof v.text === "string" &&
     isStringArray(v.dealbreakers) &&
-    (v.preferences === undefined ||
-      v.preferences === null ||
-      (typeof v.preferences === "object" && !Array.isArray(v.preferences))) &&
+    (v.preferences === undefined || v.preferences === null || isPreferences(v.preferences)) &&
     (v.confirmedSkills === undefined || isStringArray(v.confirmedSkills))
   );
 }

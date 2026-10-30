@@ -38,7 +38,9 @@ async function importFile(name: string, context = makeContext()) {
 }
 
 describe("POST /api/profile/import", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it.each(["valid.pdf", "valid.docx"])("returns the extracted text of %s", async (name) => {
     const res = await importFile(name);

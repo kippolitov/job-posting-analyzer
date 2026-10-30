@@ -1,4 +1,5 @@
 import { isJobAnalysisPayload } from "./job";
+import { isPreferences, type Preferences } from "../../../shared/types/profile";
 
 /** Freemium entitlement tier (data-model.md `Users.tier`). */
 export const TIERS = ["free", "premium"] as const;
@@ -201,11 +202,11 @@ export interface SavedJobAnalysis extends Record<string, unknown> {
 export interface ProfilePutBody {
   text: string;
   dealbreakers: string[];
-  preferences?: Record<string, unknown> | null;
+  preferences?: Preferences | null;
   confirmedSkills?: string[];
 }
 
-/** Structural only; detailed preference and skill validation lands with PR4/PR5. */
+/** Preferences are validated in full (PR4); skill validation lands with PR5. */
 export function isProfilePutBody(body: unknown): body is ProfilePutBody {
   if (typeof body !== "object" || body === null) return false;
   const v = body as Record<string, unknown>;
@@ -213,9 +214,7 @@ export function isProfilePutBody(body: unknown): body is ProfilePutBody {
     typeof v.text === "string" &&
     Array.isArray(v.dealbreakers) &&
     v.dealbreakers.every((d) => typeof d === "string") &&
-    (v.preferences === undefined ||
-      v.preferences === null ||
-      (typeof v.preferences === "object" && !Array.isArray(v.preferences))) &&
+    (v.preferences === undefined || v.preferences === null || isPreferences(v.preferences)) &&
     (v.confirmedSkills === undefined ||
       (Array.isArray(v.confirmedSkills) &&
         v.confirmedSkills.every((s) => typeof s === "string")))

@@ -22,6 +22,15 @@ export class DocumentRejectedError extends Error {
   }
 }
 
+/** HTTP status for each rejection, shared by every endpoint that extracts a file. */
+export const REJECTION_STATUS: Record<DocumentRejectionCode, number> = {
+  FILE_TOO_LARGE: 413,
+  UNSUPPORTED_FILE_TYPE: 415,
+  FILE_PASSWORD_PROTECTED: 422,
+  FILE_UNREADABLE: 422,
+  FILE_NO_TEXT: 422,
+};
+
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 type DocumentType = "pdf" | "docx";
