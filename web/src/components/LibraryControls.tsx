@@ -29,10 +29,10 @@ const VERDICTS: Exclude<Verdict, "unrated">[] = [
 ];
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
-  { value: "saved-desc", label: "Saved date (newest)" },
-  { value: "saved-asc", label: "Saved date (oldest)" },
-  { value: "fit-desc", label: "Fit score (highest)" },
-  { value: "fit-asc", label: "Fit score (lowest)" },
+  { value: "saved-desc", label: "Saved (newest)" },
+  { value: "saved-asc", label: "Saved (oldest)" },
+  { value: "fit-desc", label: "Fit (highest)" },
+  { value: "fit-asc", label: "Fit (lowest)" },
 ];
 
 /** Search + multi-criteria filter + sort controls (FR-010/FR-011/FR-012/FR-013). */

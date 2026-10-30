@@ -699,7 +699,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - in `web/src/pages/Library.tsx`, replace the list with `LibraryTimeline` and the Compare link with a button that opens `CompareDialog`, disabled below 2 selections;
   - delete `web/src/pages/Compare.tsx`, replace its route in `web/src/App.tsx` with `<Navigate to="/library" replace />`, and remove the Compare link from `web/src/components/AppShell.tsx`.
 - [X] T134 [US6] Run the PR6 gate (lint, tests, coverage, perf, compatibility smoke) and request QG-3 review of the timeline Library and the Compare dialog. Then open PR6.
-  - 2026-10-30: lint, unit/contract tests and coverage pass in `web/` (187 tests) and `extension/` (538 tests), and `npm run test:e2e` passes in `web/` (5 tests, including `libraryTimeline.spec.ts`). Compatibility smoke skipped (no `functions/` change in the original PR6 scope). QG-3 signed off by the user on 2026-10-30 after hands-on use. PR6 is #26. Review also found and fixed three PR5 defects: long "I have this" labels, no-profile message, and confirmed skills never reaching the scoring model.
+  - 2026-10-30: lint, unit/contract tests and coverage pass in `web/` (187 tests) and `extension/` (538 tests), and `npm run test:e2e` passes in `web/` (5 tests, including `libraryTimeline.spec.ts`). Compatibility smoke: see the run recorded below. QG-3 signed off by the user on 2026-10-30 after hands-on use. PR6 is #26. Review also found and fixed three PR5 defects: long "I have this" labels, no-profile message, and confirmed skills never reaching the scoring model.
 
 **Checkpoint**: all six user stories are delivered.
 
@@ -805,3 +805,18 @@ Each subsequent PR (PR3 to PR6) is independently deployable. The backend deploys
 - `[P]` means different files and no dependency on an incomplete task.
 - Live-model tasks (T002, T014, T023, T087, T097, T112) cost money and are on demand. Their outputs are committed so the numbers are reproducible.
 - Every `test:` commit precedes its `feat:` commit (Constitution II).
+
+---
+
+## FR traceability (requirements whose tasks do not cite the FR number)
+
+| FR | Delivered by |
+|---|---|
+| FR-002 | T031, T037, T039 (fingerprint recorded and exposed), T042 |
+| FR-003a | T045, T046, T047 (rescore only where the posting text is available) |
+| FR-011, FR-012 | T089–T091, T094, T095 (quotes carried and validated verbatim) |
+| FR-014 | T099, T103–T105, T109–T110 (résumé import) |
+| FR-016, FR-017 | T100, T101, T106, T108, T111 (preferences checked after the model, and sent to it) |
+| FR-018, FR-019 | T114–T121 and the 2026-10-30 review fixes: label shortening, no-profile message, and confirmed skills in the fit call's user message (`jobExtractionOrchestrator.test.ts`) |
+| FR-021, FR-022 | T123–T133 |
+| FR-M03, FR-M04 | T015, T016 (corpus), T004, T012, T020 (per-deployment settings) |

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-28
 
-**Status**: Draft — formalized 2026-10-28 from the first draft on `claude/profile-match-ux-o1w484`. Implementation identifiers moved out of the requirements into Technical Shape; the draft's four open questions are resolved as documented defaults (see Assumptions). Clarified the same day, and a prerequisite scoring-model switch (FR-M01 to FR-M05) was added after the free model's retirement was confirmed. Revised the same day: dealbreaker violations no longer lower the fit score (see Clarifications).
+**Status**: Implemented through US6 (PR2 to PR6) — formalized 2026-10-28 from the first draft on `claude/profile-match-ux-o1w484`. Implementation identifiers moved out of the requirements into Technical Shape; the draft's four open questions are resolved as documented defaults (see Assumptions). Clarified the same day, and a prerequisite scoring-model switch (FR-M01 to FR-M05) was added after the free model's retirement was confirmed. Revised the same day: dealbreaker violations no longer lower the fit score (see Clarifications).
 
 **Input**: User description: "Analyze the current state of the profile match process and suggest important improvements in the UX; fix what is broken and draft a spec for the rest."
 
@@ -225,8 +225,8 @@ The extension's Saved tab sorts and filters by fit and verdict, matching the web
 
 ### Functional Requirements — Correction Loop (Story 5)
 
-- **FR-018**: Missing and desired items MUST offer "I have this", which adds the item's label to the profile's confirmed skills and saves the profile.
-- **FR-019**: Both profile editors MUST list confirmed skills, each individually removable.
+- **FR-018**: Missing and desired items MUST offer "I have this", which adds the item's label to the profile's confirmed skills and saves the profile. A label longer than 100 characters is shortened at a word boundary and ends in "…" before it is saved. When the account has no profile, the control says to save a profile first (My profile) and saves nothing. The scoring model MUST receive the confirmed skills with the résumé text, and MUST treat each as evidence, so a requirement a confirmed skill covers is reported as matching.
+- **FR-019**: Both profile editors MUST list confirmed skills, each individually removable. The extension's Options page opens in its own browser tab so the editor can be resized.
 - **FR-020**: After a confirmation, the surface MUST offer a way to rescore (Rescore in the panel on the posting's page; otherwise the FR-003a alternatives) and MUST NOT rescore on its own.
 
 ### Functional Requirements — Triage and Compare (Story 6)

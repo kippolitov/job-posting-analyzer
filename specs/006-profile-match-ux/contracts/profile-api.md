@@ -78,7 +78,7 @@ multipart/form-data; one part "file" (.pdf or .docx, ≤ 10 MB)
 ## 4a. POST /api/profile/confirmed-skills (PR5, new)
 
 ```text
-body { "label": "Terraform" }            // 1..100 chars after trim
+body { "label": "Terraform" }            // 1..100 chars after trim; clients shorten longer labels first (spec FR-018)
 200  same shape as GET /api/profile      // includes the new fingerprint
 400  INVALID_REQUEST | PROFILE_TOO_LONG
 404  PROFILE_NOT_FOUND                   // no profile to add to
