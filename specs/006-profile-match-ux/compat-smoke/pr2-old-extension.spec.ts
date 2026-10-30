@@ -1,4 +1,4 @@
-// PR2 compatibility smoke (T088): the published v0.0.36 extension against the
+// PR2/PR3 compatibility smoke (T088, T098): the published v0.0.36 extension against the
 // PR2 backend on :7072 (REQUIRE_AUTH=false). Kept for reference, not part of any
 // suite: copy into a v0.0.36 checkout's extension/tests/e2e/ to run it (see
 // handoff-pr2.md, "T088 state").
@@ -123,6 +123,12 @@ test("old extension: profile save keeps PR2 fields; PR2-shaped saved fit renders
     console.log("stored fit keys:", Object.keys(fit), "violated:", fit.dealbreakersViolated, "score:", fit.score);
     expect(fit.profileFingerprint).toMatch(/^[0-9a-f]{64}$/);
     expect(Array.isArray(fit.dealbreakersViolated)).toBe(true);
+    // PR3: the lists stay plain label arrays for old clients; quotes live in fit.evidence.
+    for (const list of ["matching", "missing", "desired"] as const) {
+      expect((fit[list] as unknown[]).every((item) => typeof item === "string")).toBe(true);
+    }
+    expect(fit.evidence).toBeTruthy();
+    console.log("stored evidence lists:", Object.keys(fit.evidence as object));
 
     // 4. A fresh panel renders the saved PR2 fit from the backend.
     await panel.reload();

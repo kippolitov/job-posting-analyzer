@@ -15,6 +15,8 @@ import {
   scoreIndependence,
   splitFalseDealbreakers,
   truncations,
+  quoteStats,
+  verbatimRate,
   verdictStability,
   type PairLabel,
   type ScoredResult,
@@ -433,5 +435,35 @@ describe("truncations", () => {
         { finishReason: "length" },
       ])
     ).toBe(2);
+  });
+});
+
+describe("evidence quote metrics (SC-003)", () => {
+  const fit = (evidence: unknown) => ({ score: 70, rationale: "r", evidence }) as never;
+
+  it("counts the quotes that survived validation", () => {
+    const stats = quoteStats(
+      fit({
+        matching: [
+          { label: "a", postingQuote: "p", profileQuote: "q" },
+          { label: "b", postingQuote: null, profileQuote: "q" },
+        ],
+        missing: [{ label: "c", postingQuote: "p", profileQuote: null }],
+        desired: [],
+      }),
+      1
+    );
+    expect(stats).toEqual({ kept: 4, dropped: 1 });
+  });
+
+  it("counts nothing for a fit without evidence", () => {
+    expect(quoteStats(null, 0)).toEqual({ kept: 0, dropped: 0 });
+    expect(quoteStats({ score: 70, rationale: "r" }, 0)).toEqual({ kept: 0, dropped: 0 });
+  });
+
+  it("is kept over kept plus dropped, and NaN when nothing was quoted", () => {
+    expect(verbatimRate([{ kept: 19, dropped: 1 }, { kept: 20, dropped: 0 }])).toBeCloseTo(97.5);
+    expect(verbatimRate([{ kept: 0, dropped: 0 }])).toBeNaN();
+    expect(verbatimRate([])).toBeNaN();
   });
 });

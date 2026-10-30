@@ -28,5 +28,14 @@
     "source": "Azure Retail Prices API",
     "asOf": "2026-10-28",
     "note": "DataZoneStandard price of the live deployment (GlobalStandard is 0.75 / 4.50)."
+  },
+  "gpt-6-luna-premium": {
+    "inputPer1M": 0.11,
+    "cachedInputPer1M": 0.011,
+    "cacheWritePer1M": 0.1375,
+    "outputPer1M": 0.55,
+    "source": "Azure Retail Prices API",
+    "asOf": "2026-10-30",
+    "note": "DataZoneStandard price of the live deployment, eastus2 (GlobalStandard is 0.10 / 0.01 / 0.50)."
   }
 }

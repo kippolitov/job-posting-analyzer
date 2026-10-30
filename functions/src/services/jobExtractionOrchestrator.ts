@@ -1,6 +1,9 @@
 import { AzureOpenAI } from "openai";
 import type {
   AnalyzeJobRequest,
+  EvidenceItem,
+  Fit,
+  FitEvidence,
   JobAnalysisPayload,
   JobAnalysisResponse,
 } from "../models/job";
@@ -24,6 +27,19 @@ export interface ModelUsage {
   attempt: 1 | 2;
   finishReason: string | null;
 }
+
+// One fit-list entry as the model returns it: the label plus the quotes behind
+// it (research R9). The wire shape keeps plain label arrays; see splitEvidence.
+const EVIDENCE_ITEM_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["label", "postingQuote", "profileQuote"],
+  properties: {
+    label: { type: "string" },
+    postingQuote: { type: ["string", "null"] },
+    profileQuote: { type: ["string", "null"] },
+  },
+} as const;
 
 // Authoritative structured-output schema — specs/008-job-posting-analyzer/contracts/analyze-job.md
 const JOB_ANALYSIS_SCHEMA = {
@@ -100,9 +116,9 @@ const JOB_ANALYSIS_SCHEMA = {
       properties: {
         score: { type: "integer", minimum: 0, maximum: 100 },
         rationale: { type: "string", maxLength: 600 },
-        matching: { type: "array", items: { type: "string" }, maxItems: 10 },
-        missing: { type: "array", items: { type: "string" }, maxItems: 10 },
-        desired: { type: "array", items: { type: "string" }, maxItems: 10 },
+        matching: { type: "array", items: EVIDENCE_ITEM_SCHEMA, maxItems: 8 },
+        missing: { type: "array", items: EVIDENCE_ITEM_SCHEMA, maxItems: 8 },
+        desired: { type: "array", items: EVIDENCE_ITEM_SCHEMA, maxItems: 10 },
         strengths: { type: "array", items: { type: "string" }, maxItems: 5 },
         weaknesses: { type: "array", items: { type: "string" }, maxItems: 5 },
       },
@@ -134,11 +150,12 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
     lines.push(
       "Fit scoring (a candidate profile is provided):",
       "- fit.score is 0-100 and measures only how well the posting matches the candidate's skills, experience and seniority; dealbreakers are judged separately and never change the score. Score against this rubric: 85-100: all required skills covered and seniority aligned; 65-84: minor gaps; 40-64: significant gaps or a level mismatch; 0-39: major mismatch. fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
-      "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first).",
-      "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of.",
+      "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first, at most 8).",
+      "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of (at most 8).",
       "- fit.desired: nice-to-have / preferred qualifications from the posting that the profile does not cover.",
       "- fit.strengths: what makes this specific role a strong choice for this candidate (e.g. seniority alignment, domain overlap, growth direction).",
       "- fit.weaknesses: risks or downsides of this role for this candidate (e.g. skill gaps to close, seniority mismatch, unstated arrangement, below-preference salary).",
+      "- Every item in fit.matching, fit.missing and fit.desired has a label, a postingQuote and a profileQuote. postingQuote is the shortest verbatim span of the posting that states the requirement; profileQuote is the shortest verbatim span of the candidate profile that covers it. Copy both exactly, never paraphrase. profileQuote is null for fit.missing and fit.desired items, and either quote is null when no span supports the item.",
       "- Base every item on the posting and profile text only; never invent skills or requirements.",
       "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead."
     );
@@ -198,6 +215,98 @@ export function fitCallMessages(req: AnalyzeJobRequest): { role: "system" | "use
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+/** One fit-list entry as the model returns it (research R9). */
+interface ModelFitItem {
+  label: string;
+  postingQuote: string | null;
+  profileQuote: string | null;
+}
+
+/** The model-facing shape: only `fit`'s three lists differ from the wire `JobAnalysisPayload`. */
+type ModelFit = Omit<Fit, "matching" | "missing" | "desired" | "evidence"> & {
+  matching?: (ModelFitItem | string)[];
+  missing?: (ModelFitItem | string)[];
+  desired?: (ModelFitItem | string)[];
+};
+type ModelJobAnalysisPayload = Omit<JobAnalysisPayload, "fit"> & { fit: ModelFit | null };
+
+const QUOTE_CAP = 200;
+
+/**
+ * Anti-hallucination backstop for evidence quotes (research R9): a quote that
+ * is not a whitespace-normalized substring of its haystack becomes `null`, with
+ * one warning per drop. A valid quote is capped at 200 characters afterwards,
+ * because strict mode does not reliably enforce `maxLength`.
+ */
+function validateQuote(
+  quote: string | null | undefined,
+  haystack: string,
+  what: string,
+  warn: (message: string) => void
+): string | null {
+  const normalized = normalizeWhitespace(quote ?? "");
+  if (normalized.length === 0) return null;
+  if (!haystack.includes(normalized)) {
+    warn(`${what} quote is not a substring of the input; dropping it`);
+    return null;
+  }
+  return normalized.slice(0, QUOTE_CAP);
+}
+
+/**
+ * Turns the model's `{label, postingQuote, profileQuote}` lists into the wire
+ * shape: plain label arrays (old clients render these forever, research R4)
+ * plus `fit.evidence` with validated quotes. An item with a blank label is
+ * dropped from both. `profileQuote` is always null for `missing` and `desired`.
+ */
+function splitEvidence(
+  modelFit: ModelFit,
+  postingText: string,
+  profileText: string,
+  warn: (message: string) => void
+): Fit {
+  const evidence: FitEvidence = {};
+  const labels: Record<"matching" | "missing" | "desired", string[]> = {
+    matching: [],
+    missing: [],
+    desired: [],
+  };
+  for (const list of ["matching", "missing", "desired"] as const) {
+    const items: EvidenceItem[] = [];
+    for (const raw of modelFit[list] ?? []) {
+      const item: ModelFitItem =
+        typeof raw === "string" ? { label: raw, postingQuote: null, profileQuote: null } : raw;
+      const label = normalizeWhitespace(item.label ?? "");
+      if (label.length === 0) continue;
+      const postingQuote = validateQuote(item.postingQuote, postingText, `${list} "${label}" posting`, warn);
+      let profileQuote: string | null = null;
+      if (list === "matching") {
+        profileQuote = validateQuote(item.profileQuote, profileText, `${list} "${label}" profile`, warn);
+      } else if (normalizeWhitespace(item.profileQuote ?? "").length > 0) {
+        warn(`${list} "${label}" profile quote is not allowed on this list; dropping it`);
+      }
+      labels[list].push(label);
+      items.push({ label, postingQuote, profileQuote });
+    }
+    evidence[list] = items;
+  }
+  const { matching: _m, missing: _x, desired: _d, ...rest } = modelFit;
+  return { ...rest, ...labels, evidence };
+}
+
+function toWirePayload(
+  payload: ModelJobAnalysisPayload,
+  req: AnalyzeJobRequest,
+  warn: (message: string) => void
+): JobAnalysisPayload {
+  if (!payload.fit) return { ...payload, fit: null };
+  const postingText = normalizeWhitespace(
+    `${JSON.stringify(req.extract.jsonLd)} ${JSON.stringify(req.extract.structuredSources ?? [])} ${req.extract.title} ${req.extract.mainText}`
+  );
+  const profileText = normalizeWhitespace(profileWithoutDealbreakers(req) ?? "");
+  return { ...payload, fit: splitEvidence(payload.fit, postingText, profileText, warn) };
 }
 
 /** Anti-hallucination backstop: evidence must be a substring of the model input. */
@@ -347,7 +456,7 @@ export async function orchestrateJobAnalysis(
   const complete = async (
     attempt: 1 | 2,
     extraInstruction?: string
-  ): Promise<JobAnalysisPayload | null> => {
+  ): Promise<ModelJobAnalysisPayload | null> => {
     const startedAt = Date.now();
     const completion = await client.chat.completions.create({
       model: deployment,
@@ -366,8 +475,8 @@ export async function orchestrateJobAnalysis(
       // one is a settings change, not a code change (FR-M04).
       ...(temperature !== undefined ? { temperature } : {}),
       ...(reasoningEffort !== undefined ? { reasoning_effort: reasoningEffort } : {}),
-      // Sized for the full fit breakdown (matching/missing/desired lists) on
-      // top of the extraction fields. max_completion_tokens (not max_tokens)
+      // Sized for the full fit breakdown (matching/missing/desired lists with
+      // their evidence quotes) on top of the extraction fields. max_completion_tokens (not max_tokens)
       // — required by the gpt-5.x deployment generation, and accepted by
       // gpt-4o-mini too.
       max_completion_tokens: 3000,
@@ -392,7 +501,7 @@ export async function orchestrateJobAnalysis(
     } catch {
       return null;
     }
-    return isJobAnalysisPayload(parsed) ? parsed : null;
+    return isJobAnalysisPayload(parsed) ? (parsed as unknown as ModelJobAnalysisPayload) : null;
   };
 
   // Dealbreakers get their own call, run alongside the fit call (research R8
@@ -445,18 +554,19 @@ export async function orchestrateJobAnalysis(
   const firstAttempt = complete(1);
   const judged = judge();
 
-  let payload = await firstAttempt;
-  if (!payload) {
+  let modelPayload = await firstAttempt;
+  if (!modelPayload) {
     warn("job analysis output failed to parse; retrying with repair instruction");
-    payload = await complete(
+    modelPayload = await complete(
       2,
       "Your previous reply was not valid JSON for the required schema. Respond again with ONLY a valid JSON object matching the schema exactly."
     );
   }
-  if (!payload) {
+  if (!modelPayload) {
     throw new JobSchemaError("Model output did not match the job analysis schema.");
   }
 
+  let payload = toWirePayload(modelPayload, req, warn);
   payload = validateEvidence(payload, req, warn);
   payload = enforceConsistency(payload, req);
   const violated = await judged;

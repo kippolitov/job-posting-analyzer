@@ -164,8 +164,12 @@ describe("posting detail freshness (006 US1)", () => {
   });
 });
 
-/** The document and paste links wait for the saved key (sha256) to compute. */
+/**
+ * The document and paste links wait for the saved key (sha256) to compute. The
+ * href first renders with an empty `rescore=`, so waiting for the substring
+ * alone returns before the key exists and races on a slow runner.
+ */
 async function vi_waitForHref(link: HTMLElement): Promise<void> {
   const { waitFor } = await import("@testing-library/react");
-  await waitFor(() => expect(link.getAttribute("href") ?? "").toContain("rescore="));
+  await waitFor(() => expect(link.getAttribute("href") ?? "").toMatch(/rescore=[0-9a-f]{64}$/));
 }

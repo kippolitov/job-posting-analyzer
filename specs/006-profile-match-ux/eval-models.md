@@ -312,6 +312,167 @@ Five misses per configuration are the kept phenom-intuit label.
 - **Premium cost** is still not computed: `modelPrices.json` has no
   `gpt-6-luna-premium` entry.
 
+## PR3 — evidence (T097)
+
+Run 2026-10-30, `--runs=3`, 44 pairs, chosen configurations. Raw output:
+[`eval-runs/pr3.json`](./eval-runs/pr3.json). The prompt now asks for a
+verbatim `postingQuote` and `profileQuote` per matching, missing and desired
+item (research R9), and the schema returns `{label, postingQuote, profileQuote}`
+objects with `matching` and `missing` capped at 8. The dealbreaker call is
+unchanged. PR2 figures come from `pr2.json` (`--runs=5`).
+
+| Metric | Free `gpt-6-luna`, `none` | Premium `gpt-6-luna-premium`, `low` |
+|---|---|---|
+| Quotes kept / dropped | 1,471 / 0 | 1,276 / 0 |
+| **SC-003 verbatim rate** (target ≥ 95%) | **100%** | **100%** |
+| Truncations (`finish_reason: length`) | 0 | 0 |
+| Median prompt tokens (PR2 → PR3) | 2,170 → 2,364 (+8.9%) | 2,170 → 2,364 (+8.9%) |
+| Median completion tokens (PR2 → PR3) | 456 → 705 (+55%) | 653 → 895 (+37%) |
+| **Median cost per analysis** (PR2 → PR3) | **$0.000302 → $0.000439 (+45%)** | not computed: no `gpt-6-luna-premium` price entry |
+| Latency p50 (PR2 → PR3) | 4.1 s → 5.0 s (+22%) | 5.4 s → 6.6 s (+22%) |
+| **Latency p95** (PR2 → PR3) | **10.9 s → 9.5 s (−13%)** | **21.4 s → 20.1 s (−6%)** |
+
+- **Cost is a feature cost** (research R9, decided 2026-10-28), not an FR-M05
+  limit. The free increase is +45%, at the top of R9's +23% to +45% estimate:
+  about +$0.00014 per analysis, or about +$0.007 for a full 50-analysis month.
+  Premium output tokens rose less (+37%); if its price matches `gpt-6-luna`'s,
+  its cost rises by a similar share. It needs a price entry to be exact.
+- **QG-4 (p95 latency)**: no regression. The p95 values fell against PR2, so no
+  exception is needed. Premium's absolute p95 is 20.1 s against the 30 s limit.
+- **Other metrics under `--runs=3`** (not changed by PR3, noisy at 3 runs):
+
+| Metric | Free | Premium |
+|---|---|---|
+| Trap false dealbreakers (SC-008, 0) | 0 | 0 |
+| Misread stated facts (SC-008, ≤ 2%) | 1.5% | 0.0% |
+| Recall (SC-002, ≥ 75%) | 91.7% | **69.4%, below target** |
+| Fit input identical (SC-002, 100%) | 100% | 100% |
+| Verdict stability (SC-004, ≥ 90%) | 97.0% | 90.9% |
+
+  **Premium recall misses its target (11 of 36 labelled violations missed,
+  against 14 of 60 in PR2's five runs).** The dealbreaker call's prompt and
+  input are identical to PR2's, and PR3 changes only the fit call. Free recall
+  rose in the same run (83.3% to 91.7%), and the missed pairs are PR2's known
+  limitations (phenom-intuit, onsite-explicit, greenhouse-discord,
+  workday-nvidia and lever-palantir on Premium). That points to judge noise at
+  a small run count, not to evidence, but it is not proven. A Premium re-run at
+  `--runs=5` would compare like with like.
+
+### Premium at reasoning effort `none` (2026-10-30, `--runs=5`)
+
+Run after the Premium recall miss above, to test whether Premium needs
+reasoning at all. Same deployment (`gpt-6-luna-premium`, DataZoneStandard),
+`reasoning_effort` `none`, same prompt as PR3. Raw output:
+[`eval-runs/pr3-premium-none.json`](./eval-runs/pr3-premium-none.json).
+
+| Metric | Premium `low` (PR2, 5 runs) | Premium `low` (PR3, 3 runs) | **Premium `none` (PR3, 5 runs)** |
+|---|---|---|---|
+| Gate | pass | fail (recall) | **pass** |
+| Recall (≥ 75%) | 76.7% | 69.4% | **76.7%** |
+| Trap false dealbreakers (0) | 0 | 0 | **0** |
+| Misread stated facts (≤ 2%) | 1.4% | 0.0% | **1.4%** |
+| Verdict stability (≥ 90%) | 90.9% | 90.9% | **91.4%** |
+| Evidence verbatim (≥ 95%) | n/a | 100% | **100%** (2,398 quotes, 0 dropped) |
+| Median completion tokens | 653 | 895 | **685** (no reasoning tokens) |
+| Latency p50 / p95 | 5.4 / 21.4 s | 6.6 / 20.1 s | **5.9 / 20.3 s** |
+| Truncations | 0 | 0 | 0 |
+
+- Dropping reasoning changes no quality metric: recall and stability match
+  `low` within noise, and the recall miss at 3 runs does not repeat at 5. Output
+  tokens fall by about 23% against `low` (PR3 run), so cost falls with them.
+- **p95 stays near 20 s with or without reasoning.** The free tier's
+  `gpt-6-luna` (GlobalStandard) is at 9.5 s. The Premium latency comes from
+  the DataZoneStandard deployment, not the effort setting.
+- Free still scores a little higher on recall and stability (83–92% and
+  95–97% across its runs), which is within the spread seen between runs.
+
+## Prices, actual cost and the DataZone question (2026-10-30)
+
+### Prices
+
+Azure Retail Prices API, `eastus2`, per 1M tokens, context up to 32K:
+
+| | Input | Cached input | Cache write | Output |
+|---|---|---|---|---|
+| `gpt-6-luna` GlobalStandard (free) | $0.10 | $0.01 | $0.125 | $0.50 |
+| `gpt-6-luna` DataZoneStandard (Premium) | $0.11 | $0.011 | $0.1375 | $0.55 |
+| `gpt-6-luna` Global Flex | $0.05 | $0.005 | $0.0625 | $0.25 |
+
+DataZone is exactly 10% above Global. Flex is half price but is for
+batch-style work, not interactive analysis. `modelPrices.json` now has a
+`gpt-6-luna-premium` entry at the DataZone price.
+
+### Actual cost per analysis
+
+Recomputed from each saved run's token usage with the harness formula (uncached
+input billed at the cache-write rate, so these are upper bounds). The free
+figures match the harness's own.
+
+| Run | Median | Mean | p95 | Per month (mean × allowance) |
+|---|---|---|---|---|
+| Free, PR2 prompt (5 runs) | $0.000302 | $0.000344 | $0.000556 | |
+| Free, PR3 prompt (3 runs) | $0.000439 | $0.000584 | $0.001408 | $0.029 at 50 |
+| Premium `low`, PR2 (5 runs) | $0.000446 | $0.000498 | $0.000894 | |
+| Premium `low`, PR3 (3 runs) | $0.000596 | $0.000701 | $0.001704 | $0.21 at 300 |
+| Premium `none`, PR3 (5 runs) | $0.000452 | $0.000507 | $0.000816 | $0.15 at 300 |
+
+Premium `none` on the Global price would be about $0.000411 median, about
+$0.014 less per full month. A fully used Premium month is about 3% of $5
+revenue.
+
+### DataZone latency
+
+Same code, prompt and effort (`none`), per model call:
+
+| | Free (Global, 100K TPM) | Premium (DataZone, 50K TPM) |
+|---|---|---|
+| p50 / p90 / p95 | 4.2 / 7.6 / 8.4 s | 4.6 / 13.7 / 16.5 s |
+| Calls over 15 s | 2 of 266 | 31 of 418 |
+| Longest call | 29.8 s | 94.5 s |
+| Completion tokens per second | 137 | 118 |
+
+The median is close and the tail is not. The tail is concentrated on long
+postings (phenom-intuit median 7.3 s free against 14.8 s Premium;
+lever-palantir 4.5 s against 8.4 s), while short postings match. That fits TPM
+throttling: a long posting reserves about 13K tokens, the eval runs the fit and
+dealbreaker calls in parallel, and 429 backoff counts as latency. It is
+**consistent with, not proof of**, a capacity effect. Real users send one
+request at a time, so production tails should be milder than the eval's.
+
+**To separate capacity from DataZone**: raise `gpt-6-luna-premium` to 100K TPM
+(quota is free; 100 units were available in `eastus2` on 2026-10-29) and re-run
+`premium-luna-none`. If p95 falls to about 10 s, keep US-only processing. If it
+does not, the DataZone routing itself is the cost, and the choice is between 10%
+more and about 10 s of p95 for US-only processing against moving Premium to
+Global. The privacy policy makes no regional claim (it says only that Azure
+OpenAI processes content under Microsoft's enterprise data handling
+commitments), so Global would not contradict it. Both are product-owner
+decisions and neither is made.
+
+### Reasoning effort
+
+| | `none` | `low` | `medium` |
+|---|---|---|---|
+| **PR1 prompt, free deployment, 5 runs** | | | |
+| Trap + stated false dealbreakers | 33 | 19 | 13 |
+| Missed dealbreakers | 0 | 0 | 5 |
+| Verdict stability | 81.8% | 84.1% | 77.3% |
+| Median cost | $0.000241 | $0.000317 (+31%) | $0.000520 (+116%) |
+| Latency p50 (one run) | 4.0 s | 6.9 s | not measured |
+| **PR3 prompt, Premium deployment** | | | |
+| Recall | 76.7% (5 runs) | 76.7% (PR2, 5 runs) | |
+| Verdict stability | 91.4% | 90.9% | |
+| Median completion tokens | 685 | 653 (187 reasoning) | |
+| Median cost | $0.000452 | $0.000596 (+32%, 3 runs) | |
+| Latency p50 / p95 | 5.9 / 20.3 s | 6.6 / 20.1 s | |
+
+Under the PR1 prompt, reasoning mostly cut false dealbreakers (33, 19, 13) and
+did nothing for stability. PR2's separate dealbreaker call, which requires a
+verbatim quote, fixed false dealbreakers a different way, and since then
+`low` and `none` are equal on accuracy and stability within noise. Reasoning
+adds cost (about +32%) and 1–3 s at the median, and it does not cause
+Premium's p95: `low` and `none` have the same p95 on the same deployment.
+
 ## Sign-off
 
 - [X] Product owner: chosen settings approved (2026-10-29): free `gpt-6-luna`

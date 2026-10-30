@@ -8,6 +8,7 @@ import type {
   RescoreJob,
   RescoreSurface,
 } from "./fitView";
+import type { EvidenceItem } from "./types/job";
 
 /**
  * Shared test table for `shared/fitView.ts` (contracts/fit-view.md, research
@@ -287,4 +288,54 @@ export const SCORED_BY_CASES: [string, { tier?: "free" | "premium"; model: strin
   ["premium", { tier: "premium", model: "gpt-6-luna-premium" }, "Scored on Premium"],
   ["free", { tier: "free", model: "gpt-6-luna" }, "Scored on Free"],
   ["analysis saved before tier was recorded", { model: "gpt-4o-mini" }, "Scored by gpt-4o-mini"],
+];
+
+const EVIDENCE_ITEM: EvidenceItem = {
+  label: "Azure",
+  postingQuote: "on Azure and Kubernetes",
+  profileQuote: "Ten years of C# on Azure",
+};
+
+/** PR3: `evidenceFor(fit, list, label)`: [name, fit, list, label, expected]. */
+export const EVIDENCE_CASES: [
+  string,
+  Fit,
+  "matching" | "missing" | "desired",
+  string,
+  EvidenceItem | null,
+][] = [
+  [
+    "finds an item by label",
+    verdictFit(70, { matching: ["Azure"], evidence: { matching: [EVIDENCE_ITEM] } }),
+    "matching",
+    "Azure",
+    EVIDENCE_ITEM,
+  ],
+  [
+    "picks the right item among several",
+    verdictFit(70, {
+      matching: ["C#", "Azure"],
+      evidence: {
+        matching: [{ label: "C#", postingQuote: null, profileQuote: null }, EVIDENCE_ITEM],
+      },
+    }),
+    "matching",
+    "Azure",
+    EVIDENCE_ITEM,
+  ],
+  ["returns null for a legacy fit", { score: 70, rationale: "r", matching: ["Azure"] }, "matching", "Azure", null],
+  [
+    "returns null for an unknown label",
+    verdictFit(70, { matching: ["Azure"], evidence: { matching: [EVIDENCE_ITEM] } }),
+    "matching",
+    "Kafka",
+    null,
+  ],
+  [
+    "returns null when the label is in a different list",
+    verdictFit(70, { matching: ["Azure"], evidence: { matching: [EVIDENCE_ITEM] } }),
+    "missing",
+    "Azure",
+    null,
+  ],
 ];

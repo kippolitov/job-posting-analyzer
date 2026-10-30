@@ -50,7 +50,9 @@ import {
   reportedViolations,
   scoreIndependence,
   splitFalseDealbreakers,
+  quoteStats,
   truncations,
+  verbatimRate,
   verdictStability,
   type Band,
   type PairLabel,
@@ -259,6 +261,8 @@ interface TaskResult {
   daysInOffice?: number | null;
   fit?: JobAnalysisResponse["fit"];
   usages: ModelUsage[];
+  /** PR3: quotes the orchestrator nulled as not verbatim. */
+  droppedQuotes?: number;
   latencyMs?: number;
   costUsd?: number;
   error?: string;
@@ -332,10 +336,16 @@ async function runTask(task: Task, config: EvalConfig, price: Price | undefined)
 
   for (let attempt = 0; ; attempt++) {
     const usages: ModelUsage[] = [];
+    let droppedQuotes = 0;
     const startedAt = Date.now();
     try {
-      const result = await orchestrateJobAnalysis(request, config.tier, () => {}, (usage) =>
-        usages.push(usage)
+      const result = await orchestrateJobAnalysis(
+        request,
+        config.tier,
+        (message) => {
+          if (message.includes("quote is not a substring")) droppedQuotes++;
+        },
+        (usage) => usages.push(usage)
       );
       return {
         ...base,
@@ -344,6 +354,7 @@ async function runTask(task: Task, config: EvalConfig, price: Price | undefined)
         daysInOffice: result.daysInOffice,
         fit: result.fit,
         usages,
+        droppedQuotes,
         latencyMs: Date.now() - startedAt,
         costUsd: price
           ? usages.reduce((sum, usage) => sum + costPerAnalysis(usage, price), 0)
@@ -402,6 +413,8 @@ interface ConfigReport {
   tokens: { prompt: number; completion: number; reasoning: number; cached: number; overLongContext: number };
   cost: { medianUsd: number; p95Usd: number; priceSource: string };
   latency: { p50Ms: number; p95Ms: number; truncations: number };
+  /** PR3 (SC-003). `verbatimPct` is NaN until the prompt asks for quotes. */
+  evidence: { quotes: number; dropped: number; verbatimPct: number };
   errors: string[];
   failedTargets: string[];
 }
@@ -500,6 +513,7 @@ function buildReport(
     median(ok.map((r) => r.usages.reduce((sum, u) => sum + pick(u), 0)));
   const costs = ok.map((r) => r.costUsd).filter((c): c is number => c !== undefined);
   const latencies = ok.map((r) => r.latencyMs ?? 0);
+  const quoteTally = scored.map((r) => quoteStats(r.fit, r.droppedQuotes ?? 0));
 
   const report: ConfigReport = {
     config,
@@ -541,6 +555,11 @@ function buildReport(
       priceSource: priceEntry ? `${priceEntry.source}, ${priceEntry.asOf}` : "no price entry",
     },
     latency: { p50Ms: median(latencies), p95Ms: p95(latencies), truncations: truncations(usages) },
+    evidence: {
+      quotes: quoteTally.reduce((sum, q) => sum + q.kept, 0),
+      dropped: quoteTally.reduce((sum, q) => sum + q.dropped, 0),
+      verbatimPct: verbatimRate(quoteTally),
+    },
     errors: results
       .filter((r) => r.error !== undefined)
       .map((r) => `${pairKey(r.posting, r.profile)}#${r.run}${r.stripped ? " (stripped)" : ""}: ${r.error}`),
@@ -564,6 +583,10 @@ function buildReport(
     [report.fit.verdictStabilityPct >= 90, "verdict stability < 90% (SC-004)"],
     [report.latency.p95Ms <= 30_000, "p95 latency > 30 s (SC-009)"],
   ];
+  // SC-003 applies once the prompt asks for quotes (PR3+); older saved runs have none.
+  if (report.evidence.quotes + report.evidence.dropped > 0) {
+    targets.push([report.evidence.verbatimPct >= 95, "evidence verbatim rate < 95% (SC-003)"]);
+  }
   if (report.fit.detectionMethod === "field") {
     targets.push([
       report.fit.fitInputIdenticalPct === 100,
@@ -579,7 +602,7 @@ function pct(value: number): string {
 }
 
 function printReport(report: ConfigReport): void {
-  const { config, arrangement, fit, tokens, cost, latency } = report;
+  const { config, arrangement, fit, tokens, cost, latency, evidence } = report;
   const settings = [
     config.temperature !== undefined ? `temperature ${config.temperature}` : undefined,
     config.reasoningEffort !== undefined ? `reasoning_effort ${config.reasoningEffort}` : undefined,
@@ -620,6 +643,11 @@ function printReport(report: ConfigReport): void {
     `latency:      p50 ${(latency.p50Ms / 1000).toFixed(1)}s / p95 ${(latency.p95Ms / 1000).toFixed(1)}s (≤ 30 s), ` +
       `truncations ${latency.truncations}`
   );
+  if (evidence.quotes + evidence.dropped > 0) {
+    console.log(
+      `evidence:     ${evidence.quotes} quotes kept, ${evidence.dropped} dropped, verbatim ${pct(evidence.verbatimPct)} (SC-003, ≥ 95)`
+    );
+  }
   const lists: [string, string[]][] = [
     ["false dealbreakers", fit.falseDetails],
     ["missed dealbreakers", fit.missedDetails],
