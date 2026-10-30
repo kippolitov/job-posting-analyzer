@@ -17,6 +17,8 @@ import {
 } from "../services/documentExtraction";
 import { withRateLimit } from "../services/rateLimiter";
 import {
+  ProfileTooLongError,
+  addConfirmedSkill,
   deleteProfile,
   getProfile,
   putProfile,
@@ -65,7 +67,55 @@ export async function profileHandler(
         return errorResponse(405, "INVALID_REQUEST", "Method not allowed.", origin);
     }
   } catch (err) {
+    if (err instanceof ProfileTooLongError) {
+      return errorResponse(400, "PROFILE_TOO_LONG", err.message, origin);
+    }
     context.error("profile endpoint failed:", err);
+    return errorResponse(500, "SERVICE_ERROR", "Storage failed. Please try again.", origin);
+  }
+}
+
+const CONFIRMED_SKILL_MAX = 100;
+
+/** POST /api/profile/confirmed-skills (contracts/profile-api.md §4a). */
+export async function confirmedSkillsHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+  user: AuthenticatedUser
+): Promise<HttpResponseInit> {
+  const origin = requestOrigin(request);
+  if (request.method === "OPTIONS") return preflightResponse(origin);
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse(400, "INVALID_REQUEST", "Body must be valid JSON.", origin);
+  }
+  const label =
+    typeof body === "object" && body !== null && typeof (body as { label?: unknown }).label === "string"
+      ? (body as { label: string }).label.trim()
+      : "";
+  if (label.length === 0 || label.length > CONFIRMED_SKILL_MAX) {
+    return errorResponse(
+      400,
+      "INVALID_REQUEST",
+      `Expected { label: string } of 1 to ${CONFIRMED_SKILL_MAX} characters.`,
+      origin
+    );
+  }
+
+  try {
+    const profile = await addConfirmedSkill(user.sub, label);
+    if (!profile) {
+      return errorResponse(404, "PROFILE_NOT_FOUND", "No profile is stored.", origin);
+    }
+    return jsonResponse(200, profile, origin);
+  } catch (err) {
+    if (err instanceof ProfileTooLongError) {
+      return errorResponse(400, "PROFILE_TOO_LONG", err.message, origin);
+    }
+    context.error("confirmed-skills endpoint failed:", err);
     return errorResponse(500, "SERVICE_ERROR", "Storage failed. Please try again.", origin);
   }
 }
@@ -140,6 +190,23 @@ app.http("profile-import-preflight", {
   methods: ["OPTIONS"],
   authLevel: "anonymous",
   route: "profile/import",
+  handler: (request: HttpRequest) => ({
+    status: 204,
+    headers: corsHeaders(requestOrigin(request)),
+  }),
+});
+
+app.http("profile-confirmed-skills", {
+  methods: ["POST"],
+  authLevel: "anonymous", // withAuth is the real gate, as for /api/profile
+  route: "profile/confirmed-skills",
+  handler: withAuth(confirmedSkillsHandler),
+});
+
+app.http("profile-confirmed-skills-preflight", {
+  methods: ["OPTIONS"],
+  authLevel: "anonymous",
+  route: "profile/confirmed-skills",
   handler: (request: HttpRequest) => ({
     status: 204,
     headers: corsHeaders(requestOrigin(request)),

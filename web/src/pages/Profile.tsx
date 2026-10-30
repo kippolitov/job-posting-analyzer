@@ -25,6 +25,7 @@ export function Profile() {
   const [preferences, setPreferences] = useState<PreferencesForm>(emptyPreferencesForm());
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [confirmedSkills, setConfirmedSkills] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,6 +35,7 @@ export function Profile() {
         setText(result?.text ?? "");
         setDealbreakers(result?.dealbreakers.join("\n") ?? "");
         setPreferences(formFromPreferences(result?.preferences));
+        setConfirmedSkills(result?.confirmedSkills ?? []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -93,6 +95,24 @@ export function Profile() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRemoveSkill(skill: string) {
+    setSaveError(null);
+    setSaved(false);
+    try {
+      const updated = await saveProfile({
+        text,
+        dealbreakers: dealbreakers.split("\n"),
+        confirmedSkills: confirmedSkills.filter((s) => s !== skill),
+      });
+      setConfirmedSkills(updated.confirmedSkills ?? []);
+      setSaved(true);
+    } catch (err) {
+      setSaveError(
+        err instanceof ApiError ? err.message : "Couldn't save your profile. Try again."
+      );
     }
   }
 
@@ -208,6 +228,35 @@ export function Profile() {
           }}
         />
       </section>
+
+      {confirmedSkills.length > 0 && (
+        <section aria-labelledby="profile-skills-heading" className="flex flex-col gap-1">
+          <h3 id="profile-skills-heading" className="text-base font-semibold">
+            Confirmed skills
+          </h3>
+          <p className="text-xs text-gray-500">
+            Skills you added with &ldquo;I have this&rdquo;. They count as part of your profile.
+          </p>
+          <ul className="mt-1 flex flex-wrap gap-2">
+            {confirmedSkills.map((skill) => (
+              <li
+                key={skill}
+                className="inline-flex items-center gap-1 rounded-full bg-gray-100 py-1 pl-3 pr-1 text-sm dark:bg-gray-800"
+              >
+                {skill}
+                <button
+                  type="button"
+                  aria-label={`Remove ${skill}`}
+                  onClick={() => void handleRemoveSkill(skill)}
+                  className="rounded-full px-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {saveError && (
         <p role="alert" className="text-sm text-red-600">

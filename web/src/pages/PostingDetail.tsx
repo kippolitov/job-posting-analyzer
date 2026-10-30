@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { confirmSkill } from "@/api/endpoints";
 import { AnalysisView } from "@/components/AnalysisView";
 import { FreshnessMarker } from "@/components/FreshnessMarker";
 import { useCurrentFingerprint } from "@/lib/useCurrentFingerprint";
@@ -8,7 +10,10 @@ import { useLibrary } from "@/lib/useLibrary";
 export function PostingDetail() {
   const { key } = useParams<{ key: string }>();
   const state = useLibrary();
-  const currentFingerprint = useCurrentFingerprint();
+  const loadedFingerprint = useCurrentFingerprint();
+  // Confirming a skill changes the profile, so its new fingerprint applies at once.
+  const [confirmedFingerprint, setConfirmedFingerprint] = useState<string | null | undefined>();
+  const currentFingerprint = confirmedFingerprint !== undefined ? confirmedFingerprint : loadedFingerprint;
 
   if (state.status === "idle" || state.status === "loading") {
     return <div className="p-6 text-sm text-gray-500">Loading…</div>;
@@ -42,7 +47,13 @@ export function PostingDetail() {
         ← Back to library
       </Link>
       <FreshnessMarker job={job} currentFingerprint={currentFingerprint} />
-      <AnalysisView analysis={job.analysis} />
+      <AnalysisView
+        analysis={job.analysis}
+        onConfirmSkill={async (label) => {
+          const saved = await confirmSkill(label);
+          setConfirmedFingerprint(saved.fingerprint ?? null);
+        }}
+      />
       {job.notes && (
         <div>
           <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Notes</h4>

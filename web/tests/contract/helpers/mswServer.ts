@@ -23,6 +23,7 @@ type EndpointKey =
   | "jobs"
   | "profile"
   | "profile-import"
+  | "profile-confirm"
   | "account"
   | "analyze-document"
   | "jobs-item"
@@ -51,6 +52,8 @@ export interface FakeApi {
   setCheckoutResult(result: CheckoutResult): void;
   setPortalResult(result: PortalResult): void;
   failNext(endpoint: EndpointKey, failure: ForcedFailure): void;
+  /** Labels received by POST /api/profile/confirmed-skills, in order. */
+  confirmedLabels: string[];
   /** Every PATCH /api/jobs/:key received, in order (006 rescore-in-place). */
   patches: { key: string; body: Record<string, unknown> }[];
   reset(): void;
@@ -82,10 +85,12 @@ export function createFakeApi(): FakeApi {
   let portalResult: PortalResult = { ...DEFAULT_PORTAL_RESULT };
   const forced = new Map<EndpointKey, ForcedFailure>();
   const patches: { key: string; body: Record<string, unknown> }[] = [];
+  const confirmedLabels: string[] = [];
   const calls: Record<EndpointKey, number> = {
     jobs: 0,
     profile: 0,
     "profile-import": 0,
+    "profile-confirm": 0,
     account: 0,
     "analyze-document": 0,
     "jobs-item": 0,
@@ -125,8 +130,40 @@ export function createFakeApi(): FakeApi {
         text: string;
         dealbreakers: string[];
         preferences?: ProfilePayload["preferences"];
+        confirmedSkills?: string[];
       };
-      profile = { ...body, updatedAt: new Date().toISOString(), schemaVersion: 1 };
+      // Merge semantics (contracts/profile-api.md §2): omitted keeps, [] clears.
+      const skills = body.confirmedSkills ?? profile?.confirmedSkills;
+      profile = {
+        ...body,
+        ...(skills && skills.length > 0 ? { confirmedSkills: skills } : {}),
+        updatedAt: new Date().toISOString(),
+        schemaVersion: 1,
+      };
+      if (!(skills && skills.length > 0)) delete profile.confirmedSkills;
+      return HttpResponse.json(profile);
+    }),
+
+    http.post(`${TEST_API_BASE}/profile/confirmed-skills`, async ({ request }) => {
+      const failure = takeForced("profile-confirm");
+      if (failure) return failure;
+      const { label } = (await request.json()) as { label: string };
+      confirmedLabels.push(label);
+      if (!profile) {
+        return HttpResponse.json(
+          { error: { code: "PROFILE_NOT_FOUND", message: "No profile is stored." } },
+          { status: 404 }
+        );
+      }
+      const skills = profile.confirmedSkills ?? [];
+      if (!skills.some((s) => s.toLowerCase() === label.trim().toLowerCase())) {
+        // A new fingerprint, as the server derives one from the new serialization.
+        profile = {
+          ...profile,
+          confirmedSkills: [...skills, label.trim()],
+          fingerprint: String(skills.length + 1).padStart(64, "n"),
+        };
+      }
       return HttpResponse.json(profile);
     }),
 
@@ -192,6 +229,7 @@ export function createFakeApi(): FakeApi {
     server,
     calls,
     patches,
+    confirmedLabels,
     setJobs: (next) => {
       jobs = next;
     },
@@ -227,6 +265,7 @@ export function createFakeApi(): FakeApi {
       portalResult = { ...DEFAULT_PORTAL_RESULT };
       forced.clear();
       patches.length = 0;
+      confirmedLabels.length = 0;
       for (const key of Object.keys(calls) as EndpointKey[]) calls[key] = 0;
     },
   };

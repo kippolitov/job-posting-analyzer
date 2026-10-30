@@ -8,7 +8,7 @@ import {
   TEST_CLIENT_ID,
 } from "../helpers/testTokens";
 import { withAuth } from "../../src/services/auth";
-import { profileHandler } from "../../src/profile/index";
+import { profileHandler, confirmedSkillsHandler } from "../../src/profile/index";
 import {
   jobsCollectionHandler,
   jobsItemHandler,
@@ -18,6 +18,7 @@ import {
 import type { SavedJobPayload } from "../../src/models/user";
 
 const profile = withAuth(profileHandler);
+const confirmedSkills = withAuth(confirmedSkillsHandler);
 const jobsCollection = withAuth(jobsCollectionHandler);
 const jobsItem = withAuth(jobsItemHandler);
 const jobsExport = withAuth(jobsExportHandler);
@@ -184,6 +185,111 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
       expect(get.jsonBody).toHaveProperty("fingerprint");
       expect((get.jsonBody as { fingerprint: string }).fingerprint).not.toBe(fingerprint);
       expect(get.jsonBody).not.toHaveProperty("fingerprintHistory");
+    });
+
+    describe("confirmed skills (006 PR5)", () => {
+      async function put(user: TestUser, body: unknown) {
+        return profile(makeRequest({ method: "PUT", token: user.token, body }), makeContext());
+      }
+      async function add(user: TestUser, body: unknown) {
+        return confirmedSkills(makeRequest({ method: "POST", token: user.token, body }), makeContext());
+      }
+
+      it("PUT normalizes confirmedSkills and GET returns them", async () => {
+        const user = makeTestUser();
+        const res = await put(user, {
+          text: "t",
+          dealbreakers: [],
+          confirmedSkills: [" Terraform", "terraform", "Go"],
+        });
+        expect(res.status).toBe(200);
+        expect(res.jsonBody).toMatchObject({ confirmedSkills: ["Terraform", "Go"] });
+      });
+
+      it("PUT with confirmedSkills over the cap returns 400 PROFILE_TOO_LONG and stores nothing", async () => {
+        const user = makeTestUser();
+        await put(user, { text: "kept", dealbreakers: [] });
+        const res = await put(user, {
+          text: "x".repeat(19_995),
+          dealbreakers: [],
+          confirmedSkills: ["Terraform"],
+        });
+        expect(res.status).toBe(400);
+        expect(res.jsonBody).toMatchObject({
+          error: {
+            code: "PROFILE_TOO_LONG",
+            message: "Profile text must be 20,000 characters or fewer.",
+          },
+        });
+        const get = await profile(makeRequest({ method: "GET", token: user.token }), makeContext());
+        expect(get.jsonBody).toMatchObject({ text: "kept" });
+      });
+
+      it("a legacy PUT without confirmedSkills truncates and never returns PROFILE_TOO_LONG", async () => {
+        const user = makeTestUser();
+        const res = await put(user, { text: "x".repeat(21_000), dealbreakers: [] });
+        expect(res.status).toBe(200);
+        expect((res.jsonBody as { text: string }).text).toHaveLength(20_000);
+      });
+
+      it("an old-shape PUT keeps confirmedSkills", async () => {
+        const user = makeTestUser();
+        await put(user, { text: "t", dealbreakers: [], confirmedSkills: ["Terraform"] });
+        const res = await put(user, { text: "t2", dealbreakers: [] });
+        expect(res.jsonBody).toMatchObject({ confirmedSkills: ["Terraform"] });
+      });
+
+      it("POST appends, is idempotent ignoring case, and returns the GET shape with a fingerprint", async () => {
+        const user = makeTestUser();
+        const created = await put(user, { text: "t", dealbreakers: [] });
+        const first = await add(user, { label: "Terraform" });
+        expect(first.status).toBe(200);
+        expect(first.jsonBody).toMatchObject({ text: "t", confirmedSkills: ["Terraform"] });
+        expect((first.jsonBody as { fingerprint: string }).fingerprint).not.toBe(
+          (created.jsonBody as { fingerprint: string }).fingerprint
+        );
+        expect(first.jsonBody).not.toHaveProperty("fingerprintHistory");
+
+        const again = await add(user, { label: "terraform" });
+        expect(again.status).toBe(200);
+        expect(again.jsonBody).toEqual(first.jsonBody);
+      });
+
+      it("POST returns 404 PROFILE_NOT_FOUND with no profile", async () => {
+        const res = await add(makeTestUser(), { label: "Terraform" });
+        expect(res.status).toBe(404);
+        expect(res.jsonBody).toMatchObject({ error: { code: "PROFILE_NOT_FOUND" } });
+      });
+
+      it.each([
+        ["missing label", {}],
+        ["empty label", { label: "   " }],
+        ["non-string label", { label: 3 }],
+        ["101-character label", { label: "x".repeat(101) }],
+      ])("POST rejects %s with 400 INVALID_REQUEST", async (_name, body) => {
+        const user = makeTestUser();
+        await put(user, { text: "t", dealbreakers: [] });
+        const res = await add(user, body);
+        expect(res.status).toBe(400);
+        expect(res.jsonBody).toMatchObject({ error: { code: "INVALID_REQUEST" } });
+      });
+
+      it("POST past the cap returns 400 PROFILE_TOO_LONG", async () => {
+        const user = makeTestUser();
+        await put(user, { text: "x".repeat(19_995), dealbreakers: [] });
+        const res = await add(user, { label: "Terraform" });
+        expect(res.status).toBe(400);
+        expect(res.jsonBody).toMatchObject({ error: { code: "PROFILE_TOO_LONG" } });
+      });
+
+      it("two concurrent POSTs with different labels both persist", async () => {
+        const user = makeTestUser();
+        await put(user, { text: "t", dealbreakers: [] });
+        await Promise.all([add(user, { label: "Terraform" }), add(user, { label: "Kubernetes" })]);
+        const get = await profile(makeRequest({ method: "GET", token: user.token }), makeContext());
+        const skills = (get.jsonBody as { confirmedSkills: string[] }).confirmedSkills;
+        expect([...skills].sort()).toEqual(["Kubernetes", "Terraform"]);
+      });
     });
 
     it("PUT rejects malformed bodies with 400 INVALID_REQUEST", async () => {

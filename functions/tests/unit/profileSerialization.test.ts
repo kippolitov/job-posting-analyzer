@@ -122,3 +122,34 @@ describe("Preferences section (PR4, data-model.md §3)", () => {
     ).toContain("- Locations or timezones: Berlin; EU timezones");
   });
 });
+
+describe("Confirmed skills section (PR5)", () => {
+  const base = { text: "Senior engineer", dealbreakers: ["Remote only"] };
+
+  it("renders after Dealbreakers when there are no preferences", () => {
+    expect(profileToPromptText({ ...base, confirmedSkills: ["Terraform", "Kubernetes"] })).toBe(
+      "Senior engineer\n\nDealbreakers:\n- Remote only\n\nConfirmed skills:\n- Terraform\n- Kubernetes"
+    );
+  });
+
+  it("renders after Preferences", () => {
+    expect(
+      profileToPromptText({
+        ...base,
+        preferences: { maxOfficeDays: 2 },
+        confirmedSkills: ["Terraform"],
+      })
+    ).toBe(
+      "Senior engineer\n\nDealbreakers:\n- Remote only\n\nPreferences:\n- Office days: at most 2 per week\n\nConfirmed skills:\n- Terraform"
+    );
+  });
+
+  it("is omitted when empty or undefined", () => {
+    expect(profileToPromptText({ ...base, confirmedSkills: [] })).toBe(profileToPromptText(base));
+  });
+
+  it("does not disturb the dealbreaker inverse", () => {
+    const text = profileToPromptText({ ...base, confirmedSkills: ["Terraform"] });
+    expect(dealbreakerLinesFromPrompt(text)).toEqual(["Remote only"]);
+  });
+});

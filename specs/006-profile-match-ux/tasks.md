@@ -616,7 +616,7 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for User Story 5 (write first, must fail) ⚠️
 
-- [ ] T114 [P] [US5] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts`:
+- [X] T114 [P] [US5] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts`:
   - `confirmedSkills` are trimmed and deduplicated case-insensitively, keeping the first spelling;
   - `[]` clears them;
   - a PUT **with** `confirmedSkills` whose serialized length (text plus the Confirmed skills section) exceeds 20,000 returns 400 `PROFILE_TOO_LONG` with the existing over-limit wording, and nothing is truncated;
@@ -624,23 +624,24 @@ These are silent failures, not crashes. They were found in existing code during 
   - `POST /api/profile/confirmed-skills` (contracts/profile-api.md §4a) appends with case-insensitive deduplication, is idempotent for an existing label, returns 404 with no profile, and returns `PROFILE_TOO_LONG` past the cap;
   - two concurrent add-skill calls with different labels both persist (Azurite);
   - an old-shape PUT keeps `confirmedSkills`.
-- [ ] T115 [P] [US5] Extend `functions/tests/unit/profileSerialization.test.ts`: the Confirmed skills section renders after Preferences and is omitted when empty, and the T030 invariant cases are still byte-identical.
-- [ ] T116 [P] [US5] Extend `extension/tests/unit/FitScore.test.tsx`, `extension/tests/unit/ThisPageTab.test.tsx` and `web/tests/contract/posting-detail.test.tsx`:
+- [X] T115 [P] [US5] Extend `functions/tests/unit/profileSerialization.test.ts`: the Confirmed skills section renders after Preferences and is omitted when empty, and the T030 invariant cases are still byte-identical.
+- [X] T116 [P] [US5] Extend `extension/tests/unit/FitScore.test.tsx`, `extension/tests/unit/ThisPageTab.test.tsx` and `web/tests/contract/posting-detail.test.tsx`:
   - missing and desired chips show "I have this", with an accessible name of "I have <label>";
   - clicking it calls `POST /api/profile/confirmed-skills` with the label (no duplicate, ignoring case);
   - on success, the fit is marked out of date and "Rescore this posting" is offered with its cost line, and **no** analyze request is made;
   - on failure (offline or 5xx), the chip is unchanged, the existing save-error message shows, and no rescore is offered;
   - at the cap, the over-limit message shows;
   - on the web, the offer is the source-appropriate `rescoreAction` (FR-020).
-- [ ] T117 [P] [US5] Extend `extension/tests/unit/OptionsApp.test.tsx` and `web/tests/contract/profile-dealbreakers.test.tsx`: the confirmed skills are listed, each has a remove button labelled "Remove <skill>", and removing one saves.
+- [X] T117 [P] [US5] Extend `extension/tests/unit/OptionsApp.test.tsx` and `web/tests/contract/profile-dealbreakers.test.tsx`: the confirmed skills are listed, each has a remove button labelled "Remove <skill>", and removing one saves.
 
 ### Implementation for User Story 5
 
-- [ ] T118 [US5] Add `confirmedSkills` normalization and the serialized-length cap to `functions/src/services/profileRepository.ts` and `functions/src/models/user.ts`, returning `PROFILE_TOO_LONG` only for writes that include `confirmedSkills` (legacy text-only PUTs keep truncating). Add `POST /api/profile/confirmed-skills` to `functions/src/profile/index.ts`, with an ETag-conditional append and retry, plus a preflight route. Add the Confirmed skills section to `profileToPromptText` in `shared/types/profile.ts`. This makes T114 and T115 pass.
-- [ ] T119 [US5] Add `confirmSkill(label)` to `extension/services/profileStorage.ts`, which calls `POST /api/profile/confirmed-skills` and updates the `profile:fingerprint` session key from the response. Add the "I have this" control and the post-save rescore offer to `extension/components/JobPanel/FitScore.tsx` and `extension/components/JobPanel/ThisPageTab.tsx`. This makes the extension part of T116 pass.
-- [ ] T120 [US5] Add the same control to `web/src/components/AnalysisView.tsx` and `web/src/pages/PostingDetail.tsx`, using a new `confirmSkill(label)` in `web/src/api/endpoints.ts` that calls `POST /api/profile/confirmed-skills`, and showing `rescoreAction` afterwards. This makes the web part of T116 pass.
-- [ ] T121 [US5] Add the removable confirmed-skills list to `extension/entrypoints/options/OptionsApp.tsx` and `web/src/pages/Profile.tsx`, to make T117 pass.
-- [ ] T122 [US5] Check SC-007 by hand: from "Missing: X", count clicks to a rescored result, which must be 2 or fewer. Then run the PR5 gate (lint, tests, coverage, perf and the compatibility smoke) and open PR5.
+- [X] T118 [US5] Add `confirmedSkills` normalization and the serialized-length cap to `functions/src/services/profileRepository.ts` and `functions/src/models/user.ts`, returning `PROFILE_TOO_LONG` only for writes that include `confirmedSkills` (legacy text-only PUTs keep truncating). Add `POST /api/profile/confirmed-skills` to `functions/src/profile/index.ts`, with an ETag-conditional append and retry, plus a preflight route. Add the Confirmed skills section to `profileToPromptText` in `shared/types/profile.ts`. This makes T114 and T115 pass.
+- [X] T119 [US5] Add `confirmSkill(label)` to `extension/services/profileStorage.ts`, which calls `POST /api/profile/confirmed-skills` and updates the `profile:fingerprint` session key from the response. Add the "I have this" control and the post-save rescore offer to `extension/components/JobPanel/FitScore.tsx` and `extension/components/JobPanel/ThisPageTab.tsx`. This makes the extension part of T116 pass.
+- [X] T120 [US5] Add the same control to `web/src/components/AnalysisView.tsx` and `web/src/pages/PostingDetail.tsx`, using a new `confirmSkill(label)` in `web/src/api/endpoints.ts` that calls `POST /api/profile/confirmed-skills`, and showing `rescoreAction` afterwards. This makes the web part of T116 pass.
+- [X] T121 [US5] Add the removable confirmed-skills list to `extension/entrypoints/options/OptionsApp.tsx` and `web/src/pages/Profile.tsx`, to make T117 pass.
+- [X] T122 [US5] Check SC-007 by hand: from "Missing: X", count clicks to a rescored result, which must be 2 or fewer. Then run the PR5 gate (lint, tests, coverage, perf and the compatibility smoke) and open PR5.
+  - 2026-10-30: SC-007 is 2 clicks ("I have this", then Rescore), asserted in ThisPageTab tests. Compat smoke: published v0.0.36 against this backend passed (`compat-smoke/pr2-old-extension.spec.ts` plus 8 other E2E); `regionScoping` fails on `main` too. Web half of the smoke and a manual click-through were not run.
 
 **Checkpoint**: users can fix a wrong "missing" verdict in place.
 

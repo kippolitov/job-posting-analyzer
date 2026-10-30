@@ -359,4 +359,55 @@ describe("FitScore", () => {
       expect(screen.getByRole("list", { name: "Matching skills" })).toHaveTextContent("Azure");
     });
   });
+
+  describe("I have this (006 US5)", () => {
+    const fit = {
+      score: 60,
+      rationale: "r",
+      missing: ["Kubernetes operations", "Terraform"],
+      desired: ["Go"],
+      matching: ["Azure"],
+    };
+
+    it("offers I have <label> on missing chips, named for the skill", () => {
+      render(<FitScore fit={fit} onConfirmSkill={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "I have Kubernetes operations" })).toHaveTextContent(
+        "I have this"
+      );
+      expect(screen.getByRole("button", { name: "I have Terraform" })).toBeInTheDocument();
+    });
+
+    it("offers it on desired chips but not on matching chips", async () => {
+      render(<FitScore fit={fit} onConfirmSkill={vi.fn()} />);
+      await userEvent.click(screen.getByRole("button", { name: "Show full breakdown" }));
+      expect(screen.getByRole("button", { name: "I have Go" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "I have Azure" })).not.toBeInTheDocument();
+    });
+
+    it("offers nothing when the surface cannot confirm", () => {
+      render(<FitScore fit={fit} />);
+      expect(screen.queryByRole("button", { name: /^I have / })).not.toBeInTheDocument();
+    });
+
+    it("calls onConfirmSkill with the label and then replaces the button with a note", async () => {
+      const onConfirmSkill = vi.fn().mockResolvedValue(undefined);
+      render(<FitScore fit={fit} onConfirmSkill={onConfirmSkill} />);
+      await userEvent.click(screen.getByRole("button", { name: "I have Terraform" }));
+
+      expect(onConfirmSkill).toHaveBeenCalledWith("Terraform");
+      expect(await screen.findByText("Added to your profile")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "I have Terraform" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "I have Kubernetes operations" })).toBeInTheDocument();
+    });
+
+    it("leaves the chip unchanged and shows the save error when confirming fails", async () => {
+      const onConfirmSkill = vi.fn().mockRejectedValue(new Error("Storage failed. Please try again."));
+      render(<FitScore fit={fit} onConfirmSkill={onConfirmSkill} />);
+      await userEvent.click(screen.getByRole("button", { name: "I have Terraform" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Storage failed. Please try again.");
+      expect(screen.getByRole("button", { name: "I have Terraform" })).toBeEnabled();
+      expect(screen.queryByText("Added to your profile")).not.toBeInTheDocument();
+    });
+  });
 });

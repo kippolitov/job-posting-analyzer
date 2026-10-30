@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import {
   getProfile,
   putProfile,
+  addConfirmedSkill,
+  ProfileTooLongError,
   deleteProfile,
 } from "../../src/services/profileRepository";
 import { profileFingerprint } from "../../src/services/profileFingerprint";
@@ -238,6 +240,95 @@ describe("profileRepository", () => {
       const row = await readRow(sub);
       expect(row.text).toBe("v2");
       expect(JSON.parse(row.confirmedSkills as string)).toEqual(["Terraform"]);
+    });
+  });
+  describe("006 PR5 confirmed skills (contracts/profile-api.md §2, §4a)", () => {
+    it("trims and deduplicates case-insensitively, keeping the first spelling", async () => {
+      const saved = await putProfile(uniqueSub(), {
+        text: "t",
+        dealbreakers: [],
+        confirmedSkills: ["  Terraform ", "terraform", "", "Kubernetes", "KUBERNETES"],
+      });
+      expect(saved.confirmedSkills).toEqual(["Terraform", "Kubernetes"]);
+    });
+
+    it("confirmedSkills: [] clears them", async () => {
+      const sub = uniqueSub();
+      await putProfile(sub, { text: "t", dealbreakers: [], confirmedSkills: ["Terraform"] });
+      const cleared = await putProfile(sub, { text: "t", dealbreakers: [], confirmedSkills: [] });
+      expect(cleared.confirmedSkills).toBeUndefined();
+      expect((await getProfile(sub))?.confirmedSkills).toBeUndefined();
+    });
+
+    it("an old-shape PUT keeps confirmedSkills", async () => {
+      const sub = uniqueSub();
+      await putProfile(sub, { text: "t", dealbreakers: [], confirmedSkills: ["Terraform"] });
+      const saved = await putProfile(sub, { text: "t2", dealbreakers: ["no crypto"] });
+      expect(saved.confirmedSkills).toEqual(["Terraform"]);
+    });
+
+    it("confirmed skills change the fingerprint", async () => {
+      const sub = uniqueSub();
+      const before = await putProfile(sub, { text: "t", dealbreakers: [] });
+      const after = await putProfile(sub, { text: "t", dealbreakers: [], confirmedSkills: ["Terraform"] });
+      expect(after.fingerprint).not.toBe(before.fingerprint);
+      expect(after.fingerprint).toBe(
+        profileFingerprint(profileToPromptText({ text: "t", dealbreakers: [], confirmedSkills: ["Terraform"] }))
+      );
+    });
+
+    it("refuses a PUT with confirmedSkills when text plus the section exceeds 20,000, truncating nothing", async () => {
+      const sub = uniqueSub();
+      await putProfile(sub, { text: "original", dealbreakers: [] });
+      await expect(
+        putProfile(sub, {
+          text: "x".repeat(19_990),
+          dealbreakers: [],
+          confirmedSkills: ["Terraform"],
+        })
+      ).rejects.toBeInstanceOf(ProfileTooLongError);
+      expect((await getProfile(sub))?.text).toBe("original");
+    });
+
+    it("a legacy PUT without confirmedSkills truncates text and never fails the cap", async () => {
+      const sub = uniqueSub();
+      await putProfile(sub, { text: "t", dealbreakers: [], confirmedSkills: ["Terraform"] });
+      const saved = await putProfile(sub, { text: "x".repeat(21_000), dealbreakers: [] });
+      expect(saved.text).toHaveLength(20_000);
+      expect(saved.confirmedSkills).toEqual(["Terraform"]);
+    });
+
+    it("addConfirmedSkill appends, is idempotent ignoring case, and updates the fingerprint history", async () => {
+      const sub = uniqueSub();
+      const base = await putProfile(sub, { text: "t", dealbreakers: [] });
+      const first = await addConfirmedSkill(sub, "Terraform");
+      expect(first?.confirmedSkills).toEqual(["Terraform"]);
+      expect(first?.fingerprint).not.toBe(base.fingerprint);
+
+      const again = await addConfirmedSkill(sub, " terraform ");
+      expect(again).toEqual(first);
+
+      const { getFingerprintHistory } = await import("../../src/services/profileRepository");
+      expect(await getFingerprintHistory(sub)).toEqual([base.fingerprint]);
+    });
+
+    it("addConfirmedSkill returns null with no profile", async () => {
+      await expect(addConfirmedSkill(uniqueSub(), "Terraform")).resolves.toBeNull();
+    });
+
+    it("addConfirmedSkill past the cap throws and changes nothing", async () => {
+      const sub = uniqueSub();
+      await putProfile(sub, { text: "x".repeat(19_995), dealbreakers: [] });
+      await expect(addConfirmedSkill(sub, "Terraform")).rejects.toBeInstanceOf(ProfileTooLongError);
+      expect((await getProfile(sub))?.confirmedSkills).toBeUndefined();
+    });
+
+    it("two concurrent add-skill calls with different labels both persist", async () => {
+      const sub = uniqueSub();
+      await putProfile(sub, { text: "t", dealbreakers: [] });
+      await Promise.all([addConfirmedSkill(sub, "Terraform"), addConfirmedSkill(sub, "Kubernetes")]);
+      const skills = (await getProfile(sub))?.confirmedSkills ?? [];
+      expect([...skills].sort()).toEqual(["Kubernetes", "Terraform"]);
     });
   });
 });

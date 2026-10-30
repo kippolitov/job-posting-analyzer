@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "@/App";
 import { installFakeApi } from "./helpers/mswServer";
@@ -64,5 +64,45 @@ describe("profile dealbreakers on the web (parity with the extension)", () => {
       )
     );
     formSet.mockRestore();
+  });
+});
+
+describe("confirmed skills on the web profile (006 US5)", () => {
+  const api = installFakeApi();
+
+  function withSkills() {
+    seedSession();
+    api.setProfile({
+      text: "Backend engineer.",
+      dealbreakers: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      schemaVersion: 1,
+      confirmedSkills: ["Terraform", "Kubernetes"],
+    });
+    window.history.pushState({}, "", "/profile");
+    render(<App />);
+  }
+
+  it("lists confirmed skills in their own section with a Remove button each", async () => {
+    withSkills();
+    const section = await screen.findByRole("region", { name: "Confirmed skills" });
+    expect(within(section).getByText("Terraform")).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Remove Terraform" })).toBeInTheDocument();
+    expect(within(section).getByRole("button", { name: "Remove Kubernetes" })).toBeInTheDocument();
+  });
+
+  it("removing one saves the profile without it", async () => {
+    withSkills();
+    await userEvent.click(await screen.findByRole("button", { name: "Remove Terraform" }));
+    await waitFor(() => expect(api.getProfile()?.confirmedSkills).toEqual(["Kubernetes"]));
+    expect(screen.queryByRole("button", { name: "Remove Terraform" })).not.toBeInTheDocument();
+  });
+
+  it("a normal save keeps the confirmed skills", async () => {
+    withSkills();
+    await userEvent.type(await screen.findByRole("textbox", { name: /dealbreakers/i }), "no crypto");
+    await userEvent.click(screen.getByRole("button", { name: /^save/i }));
+    await screen.findByRole("status");
+    expect(api.getProfile()?.confirmedSkills).toEqual(["Terraform", "Kubernetes"]);
   });
 });

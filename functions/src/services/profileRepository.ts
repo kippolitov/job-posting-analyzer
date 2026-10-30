@@ -1,7 +1,12 @@
 import { RestError } from "@azure/data-tables";
 import type { ProfileEntity, ProfilePutBody } from "../models/user";
 import { PROFILE_TEXT_MAX } from "../models/user";
-import { profileToPromptText, type Preferences } from "../../../shared/types/profile";
+import {
+  normalizeConfirmedSkills,
+  profileCapLength,
+  profileToPromptText,
+  type Preferences,
+} from "../../../shared/types/profile";
 import { profileFingerprint } from "./profileFingerprint";
 import {
   decodeJsonProperty,
@@ -36,6 +41,14 @@ export interface StoredProfile {
   confirmedSkills?: string[];
 }
 
+/** A write that includes confirmed skills would pass the profile cap (contracts/profile-api.md §2). */
+export class ProfileTooLongError extends Error {
+  constructor() {
+    super(`Profile text must be ${PROFILE_TEXT_MAX.toLocaleString("en-US")} characters or fewer.`);
+    this.name = "ProfileTooLongError";
+  }
+}
+
 function isNotFound(err: unknown): boolean {
   return err instanceof RestError && err.statusCode === 404;
 }
@@ -51,17 +64,17 @@ function storedFromEntity(entity: ProfileEntity): StoredProfile {
     entity.preferences,
     null
   );
+  const confirmedSkills = decodeJsonProperty<string[]>(entity.confirmedSkills, []);
   const base = {
     text: entity.text,
     dealbreakers: decodeJsonProperty<string[]>(entity.dealbreakers, []),
     ...(preferences ? { preferences } : {}),
+    ...(confirmedSkills.length > 0 ? { confirmedSkills } : {}),
   };
-  const confirmedSkills = decodeJsonProperty<string[]>(entity.confirmedSkills, []);
   return {
     ...base,
     updatedAt: entity.updatedAt,
     fingerprint: profileFingerprint(profileToPromptText(base)),
-    ...(confirmedSkills.length > 0 ? { confirmedSkills } : {}),
   };
 }
 
@@ -105,6 +118,40 @@ export async function putProfile(
   }
 }
 
+/**
+ * Appends one confirmed skill ("I have this", contracts/profile-api.md §4a).
+ * Unlike PUT it never rewrites text or dealbreakers, so quick clicks on
+ * different skills cannot overwrite each other: the read-append-write is
+ * conditional on the ETag and retried. Returns null when no profile exists.
+ */
+export async function addConfirmedSkill(
+  sub: string,
+  label: string
+): Promise<StoredProfile | null> {
+  const client = await ensureTable(TABLE);
+  for (let attempt = 0; ; attempt++) {
+    const existing = await readEntity(sub);
+    if (!existing) return null;
+    const stored = storedFromEntity(existing);
+    const skills = stored.confirmedSkills ?? [];
+    const next = normalizeConfirmedSkills([...skills, label]);
+    if (next.length === skills.length) return stored;
+
+    const entity = mergeEntity(sub, existing, {
+      text: stored.text,
+      dealbreakers: stored.dealbreakers,
+      confirmedSkills: next,
+    });
+    try {
+      await client.updateEntity(entity, "Replace", { etag: existing.etag });
+      return storedFromEntity(entity);
+    } catch (err) {
+      if (isPreconditionFailed(err) && attempt < MAX_RETRIES) continue;
+      throw err;
+    }
+  }
+}
+
 /** Body fields replace stored ones; omitted optional fields keep their stored value. */
 function mergeEntity(
   sub: string,
@@ -130,12 +177,14 @@ function mergeEntity(
         : encodeJsonProperty(input.preferences);
   if (preferences) entity.preferences = preferences;
 
-  const confirmedSkills =
-    input.confirmedSkills === undefined
-      ? existing?.confirmedSkills
-      : input.confirmedSkills.length === 0
-        ? undefined
-        : encodeJsonProperty(input.confirmedSkills);
+  let confirmedSkills = existing?.confirmedSkills;
+  if (input.confirmedSkills !== undefined) {
+    const normalized = normalizeConfirmedSkills(input.confirmedSkills);
+    if (profileCapLength(input.text, normalized) > PROFILE_TEXT_MAX) {
+      throw new ProfileTooLongError();
+    }
+    confirmedSkills = normalized.length === 0 ? undefined : encodeJsonProperty(normalized);
+  }
   if (confirmedSkills) entity.confirmedSkills = confirmedSkills;
 
   let history = decodeJsonProperty<string[]>(existing?.fingerprintHistory, []);

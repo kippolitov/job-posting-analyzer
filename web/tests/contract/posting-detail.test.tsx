@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { App } from "@/App";
 import type { SavedJobPayload } from "@/api/types";
 import { installFakeApi } from "./helpers/mswServer";
@@ -173,3 +174,80 @@ async function vi_waitForHref(link: HTMLElement): Promise<void> {
   const { waitFor } = await import("@testing-library/react");
   await waitFor(() => expect(link.getAttribute("href") ?? "").toMatch(/rescore=[0-9a-f]{64}$/));
 }
+
+describe("I have this on the posting detail (006 US5)", () => {
+  const api = installFakeApi();
+
+  function open(fitFingerprint: string = CURRENT, overrides: Partial<SavedJobPayload> = {}) {
+    seedSession();
+    api.setProfile({
+      text: "Engineer",
+      dealbreakers: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      schemaVersion: 1,
+      fingerprint: CURRENT,
+    });
+    const posting = job(overrides, fitFingerprint);
+    posting.analysis.fit = {
+      score: 60,
+      rationale: "r",
+      profileFingerprint: fitFingerprint,
+      missing: ["Terraform"],
+      desired: ["Go"],
+      matching: ["Azure"],
+    };
+    api.setJobs([posting]);
+    window.history.pushState({}, "", `/library/${encodeURIComponent(posting.canonicalUrl)}`);
+    render(<App />);
+  }
+
+  it("offers I have <label> on missing and desired items only", async () => {
+    open();
+    expect(await screen.findByRole("button", { name: "I have Terraform" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "I have Go" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "I have Azure" })).not.toBeInTheDocument();
+  });
+
+  it("confirms the skill, marks the fit out of date and offers the source's rescore action", async () => {
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "I have Terraform" }));
+
+    await waitFor(() => expect(api.confirmedLabels).toEqual(["Terraform"]));
+    expect(await screen.findByText(/Scored against an older profile/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open posting to rescore" })).toHaveAttribute(
+      "href",
+      "https://example.com/jobs/1"
+    );
+    expect(api.getProfile()?.confirmedSkills).toEqual(["Terraform"]);
+    expect(api.patches).toHaveLength(0);
+  });
+
+  it("offers the upload route for a document posting", async () => {
+    open(CURRENT, { canonicalUrl: "doc:abc", sourceUrl: "", source: "document", filename: "j.pdf" });
+    await userEvent.click(await screen.findByRole("button", { name: "I have Terraform" }));
+    expect(await screen.findByRole("link", { name: "Upload again to rescore" })).toBeInTheDocument();
+  });
+
+  it("on failure leaves the chip, shows the error and offers no rescore", async () => {
+    open();
+    api.failNext("profile-confirm", { status: 500, code: "SERVICE_ERROR", message: "Storage failed. Please try again." });
+    await userEvent.click(await screen.findByRole("button", { name: "I have Terraform" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Storage failed. Please try again.");
+    expect(screen.getByRole("button", { name: "I have Terraform" })).toBeEnabled();
+    expect(screen.queryByText(/Scored against an older profile/)).not.toBeInTheDocument();
+  });
+
+  it("shows the over-limit message at the cap", async () => {
+    open();
+    api.failNext("profile-confirm", {
+      status: 400,
+      code: "PROFILE_TOO_LONG",
+      message: "Profile text must be 20,000 characters or fewer.",
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "I have Terraform" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Profile text must be 20,000 characters or fewer."
+    );
+  });
+});
