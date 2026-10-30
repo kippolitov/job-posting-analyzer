@@ -1,4 +1,5 @@
 import type { JobAnalysisResponse, JobStatus } from "shared/types/job";
+import type { Preferences } from "shared/types/profile";
 
 export type PostingSource = "url" | "document" | "paste";
 
@@ -25,6 +26,8 @@ export interface ProfilePayload {
   schemaVersion: number;
   /** Server-derived (006 R5). Optional on read so an older backend still type-checks. */
   fingerprint?: string;
+  /** Structured preferences (006 PR4). Absent when none are set. */
+  preferences?: Preferences;
 }
 
 export interface CheckoutResult {

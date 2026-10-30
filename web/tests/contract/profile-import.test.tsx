@@ -42,7 +42,7 @@ describe("profile setup on the web (US4, FR-014/FR-015)", () => {
       "Minimum seniority",
       "Maximum seniority",
     ]) {
-      expect(screen.getByRole("combobox", { name }) ?? screen.getByLabelText(name)).toBeTruthy();
+      expect(screen.getByLabelText(name)).toBeInTheDocument();
     }
     expect(screen.getByRole("checkbox", { name: "Remote" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Hybrid" })).toBeInTheDocument();

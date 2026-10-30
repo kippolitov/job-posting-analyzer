@@ -745,11 +745,12 @@ describe("jobExtractionOrchestrator", () => {
       });
 
       it("changes the profile fingerprint", async () => {
-        const plain = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
-        const withPrefs = await orchestrateJobAnalysis(
+        const { result: plain } = await calls(onsiteRequest({ profileData }), judged([]));
+        const { result: withPrefs } = await calls(
           onsiteRequest({
             profileData: { ...profileData, preferences: { arrangements: ["remote"] } },
-          })
+          }),
+          judged([])
         );
         expect(withPrefs.fit?.profileFingerprint).not.toBe(plain.fit?.profileFingerprint);
       });

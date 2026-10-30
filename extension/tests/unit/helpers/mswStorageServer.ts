@@ -134,7 +134,7 @@ export function createFakeStorageApi(): FakeStorageApi {
 
     http.post(`${base}/profile/import`, () => {
       importCalls += 1;
-      return HttpResponse.json(importResponse.body, { status: importResponse.status });
+      return HttpResponse.json(importResponse.body as Record<string, unknown>, { status: importResponse.status });
     }),
 
     http.delete(`${base}/profile`, () => {

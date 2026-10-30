@@ -51,6 +51,16 @@ export interface ScoringProfile {
   confirmedSkills?: string[];
 }
 
+/** The `profileData` an analysis request carries: the scoring fields only. */
+export function toScoringProfile(profile: ScoringProfile): ScoringProfile {
+  return {
+    text: profile.text,
+    dealbreakers: profile.dealbreakers,
+    ...(profile.preferences ? { preferences: profile.preferences } : {}),
+    ...(profile.confirmedSkills?.length ? { confirmedSkills: profile.confirmedSkills } : {}),
+  };
+}
+
 const DEALBREAKERS_HEADING = "Dealbreakers:";
 const PREFERENCES_HEADING = "Preferences:";
 /** Judged by the model, so the banner shows exactly this text (research R11). */

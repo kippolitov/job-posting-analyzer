@@ -5,8 +5,16 @@ import {
   getProfile,
   setProfile,
   clearProfile,
+  importResume,
   PROFILE_TEXT_MAX,
 } from "../../services/profileStorage";
+import { PreferencesFields } from "../../components/PreferencesFields";
+import {
+  emptyPreferencesForm,
+  formFromPreferences,
+  preferencesFromForm,
+  type PreferencesForm,
+} from "../../../shared/preferencesForm";
 import { learnedSelectors } from "../../services/learnedSelectors";
 import type { LearnedHostSelector } from "../../services/learnedSelectors";
 
@@ -99,6 +107,8 @@ function ProfileEditor() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [preferences, setPreferences] = useState<PreferencesForm>(emptyPreferencesForm());
+  const [importing, setImporting] = useState(false);
   // Server-backed profile: a failed load must show as a failure with Retry,
   // never as an empty form that looks like the profile is gone (FR-015).
   const [loadFailed, setLoadFailed] = useState(false);
@@ -110,6 +120,7 @@ function ProfileEditor() {
       if (profile) {
         setText(profile.text);
         setDealbreakers(profile.dealbreakers.join("\n"));
+        setPreferences(formFromPreferences(profile.preferences));
       }
       setLoaded(true);
     } catch {
@@ -122,11 +133,35 @@ function ProfileEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const overLimit = text.length > PROFILE_TEXT_MAX;
+
+  const handleImport = async (file: File) => {
+    setImporting(true);
+    setFeedback(null);
+    try {
+      setText(await importResume(file));
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "The file could not be imported. Try again."
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleSave = async () => {
+    const parsed = preferencesFromForm(preferences);
+    if (parsed.error) {
+      setFeedback(null);
+      setError(parsed.error);
+      return;
+    }
     try {
       await setProfile({
         text,
         dealbreakers: dealbreakers.split("\n"),
+        preferences: parsed.preferences,
       });
       setError(null);
       setFeedback("Profile saved.");
@@ -145,6 +180,7 @@ function ProfileEditor() {
       await clearProfile();
       setText("");
       setDealbreakers("");
+      setPreferences(emptyPreferencesForm());
       setError(null);
       setFeedback("Profile deleted.");
     } catch (err) {
@@ -181,14 +217,12 @@ function ProfileEditor() {
     );
   }
 
+  const SECTION = "mt-6 shrink-0";
+  const HEADING = "text-base font-semibold text-gray-800 dark:text-gray-100";
   return (
-    // Full-height column (inside AuthGate's flex body): the resume editor
-    // absorbs all spare height and scrolls internally, so the action buttons
-    // in the footer never leave the viewport no matter how long the pasted
-    // resume is.
     <main className="flex min-h-0 flex-1 flex-col bg-gray-50 dark:bg-gray-950">
-      <div className="mx-auto flex h-full w-full max-w-4xl min-h-0 flex-col px-8 py-6">
-        <div className="shrink-0">
+      <div className="mx-auto flex w-full max-w-4xl flex-col px-8 pt-6">
+        <div>
           <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">
             Candidate profile
           </h1>
@@ -198,32 +232,76 @@ function ProfileEditor() {
           </p>
         </div>
 
-        <label
-          htmlFor="profile-text"
-          className="mt-5 block shrink-0 text-sm font-medium text-gray-700 dark:text-gray-200"
-        >
-          Your background — paste your entire resume here
-        </label>
-        <textarea
-          id="profile-text"
-          value={text}
-          maxLength={PROFILE_TEXT_MAX}
-          onChange={(e) => {
-            setText(e.target.value);
-            setFeedback(null);
-          }}
-          placeholder="Paste your full resume, or describe your background: skills, seniority, domains, preferences."
-          className="mt-1 min-h-48 w-full flex-1 resize-none overflow-y-auto rounded-lg border border-gray-200 bg-white p-4 text-sm leading-relaxed text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
-          disabled={!loaded}
-        />
-        <p className="mt-1 shrink-0 text-right text-xs text-gray-400 dark:text-gray-500">
-          {text.length.toLocaleString()} / {PROFILE_TEXT_MAX.toLocaleString()}
-        </p>
+        <section aria-labelledby="profile-resume-heading" className={SECTION}>
+          <h2 id="profile-resume-heading" className={HEADING}>
+            Résumé
+          </h2>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <label
+              htmlFor="profile-import"
+              className="cursor-pointer rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+            >
+              Import a résumé (.pdf or .docx)
+            </label>
+            <input
+              id="profile-import"
+              type="file"
+              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="sr-only"
+              disabled={!loaded || importing}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void handleImport(file);
+              }}
+            />
+            {importing && (
+              <span role="status" className="text-sm text-gray-500 dark:text-gray-400">
+                Reading your file…
+              </span>
+            )}
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              The file is read and discarded. Nothing is saved until you save.
+            </span>
+          </div>
+          <label
+            htmlFor="profile-text"
+            className="mt-3 block text-sm font-medium text-gray-700 dark:text-gray-200"
+          >
+            Your background — paste your entire resume here
+          </label>
+          <textarea
+            id="profile-text"
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setFeedback(null);
+            }}
+            placeholder="Paste your full resume, or describe your background: skills, seniority, domains, preferences."
+            className="mt-1 h-64 w-full resize-y overflow-y-auto rounded-lg border border-gray-200 bg-white p-4 text-sm leading-relaxed text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+            disabled={!loaded}
+          />
+          <p
+            className={`mt-1 text-right text-xs ${
+              overLimit ? "text-red-600 dark:text-red-400" : "text-gray-400 dark:text-gray-500"
+            }`}
+          >
+            {text.length.toLocaleString()} / {PROFILE_TEXT_MAX.toLocaleString()}
+          </p>
+          {overLimit && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Profile text must be {PROFILE_TEXT_MAX.toLocaleString()} characters or fewer.
+            </p>
+          )}
+        </section>
 
-        <div className="shrink-0">
+        <section aria-labelledby="profile-dealbreakers-heading" className={SECTION}>
+          <h2 id="profile-dealbreakers-heading" className={HEADING}>
+            Dealbreakers
+          </h2>
           <label
             htmlFor="profile-dealbreakers"
-            className="mt-2 block text-sm font-medium text-gray-700 dark:text-gray-200"
+            className="mt-1 block text-sm font-medium text-gray-700 dark:text-gray-200"
           >
             Dealbreakers (one per line)
           </label>
@@ -242,12 +320,33 @@ function ProfileEditor() {
             className="mt-1 w-full resize-none rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
             disabled={!loaded}
           />
-        </div>
+        </section>
 
-        <div className="mt-4 flex shrink-0 items-center gap-3 border-t border-gray-200/70 pt-4 dark:border-gray-800">
+        <section aria-labelledby="profile-preferences-heading" className={SECTION}>
+          <h2 id="profile-preferences-heading" className={HEADING}>
+            Preferences
+          </h2>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Checked against each posting. A posting that doesn&apos;t match is flagged like a
+            dealbreaker, and the fit score is unchanged.
+          </p>
+          <PreferencesFields
+            form={preferences}
+            onChange={(next) => {
+              setPreferences(next);
+              setFeedback(null);
+            }}
+            disabled={!loaded}
+          />
+        </section>
+      </div>
+
+      <div className="sticky bottom-0 mt-6 border-t border-gray-200/70 bg-gray-50 dark:border-gray-800 dark:bg-gray-950">
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-3 px-8 py-4">
           <button
             onClick={() => void handleSave()}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+            disabled={overLimit}
+            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             Save profile
           </button>

@@ -1,4 +1,4 @@
-import { profileToPromptText, type ScoringProfile } from "shared/types/profile";
+import { profileToPromptText, type Preferences, type ScoringProfile } from "shared/types/profile";
 import type { JobAnalysisResponse, JobStatus } from "shared/types/job";
 import { ApiError, apiFetch } from "./apiClient";
 import type {
@@ -29,9 +29,22 @@ export async function fetchProfile(): Promise<ProfilePayload | null> {
 export async function saveProfile(payload: {
   text: string;
   dealbreakers: string[];
+  /** Omitted keeps the stored preferences, `null` clears them (merge PUT). */
+  preferences?: Preferences | null;
 }): Promise<ProfilePayload> {
   const res = await apiFetch("/profile", { method: "PUT", body: payload });
   return (await res.json()) as ProfilePayload;
+}
+
+/**
+ * POST /api/profile/import: the text of a .pdf or .docx résumé. The file is
+ * discarded server-side; nothing is stored until the user saves (FR-014).
+ */
+export async function importResume(file: File): Promise<string> {
+  const form = new FormData();
+  form.set("file", file);
+  const res = await apiFetch("/profile/import", { method: "POST", rawBody: form });
+  return ((await res.json()) as { text: string }).text;
 }
 
 export async function fetchAccount(): Promise<AccountPayload> {
