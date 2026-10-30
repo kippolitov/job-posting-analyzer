@@ -698,8 +698,8 @@ These are silent failures, not crashes. They were found in existing code during 
   - create `web/src/components/CompareDialog.tsx` around a native `<dialog>` opened with `showModal()`, labelled "Compare postings", with a Close button, rendering `CompareGrid`; on close it returns focus to the trigger;
   - in `web/src/pages/Library.tsx`, replace the list with `LibraryTimeline` and the Compare link with a button that opens `CompareDialog`, disabled below 2 selections;
   - delete `web/src/pages/Compare.tsx`, replace its route in `web/src/App.tsx` with `<Navigate to="/library" replace />`, and remove the Compare link from `web/src/components/AppShell.tsx`.
-- [ ] T134 [US6] Run the PR6 gate (lint, tests, coverage, perf, compatibility smoke) and request QG-3 review of the timeline Library and the Compare dialog. Then open PR6.
-  - 2026-10-30: lint, unit/contract tests and coverage pass in `web/` (187 tests) and `extension/` (538 tests), and `npm run test:e2e` passes in `web/` (5 tests, including `libraryTimeline.spec.ts`). Not yet done: compatibility smoke, QG-3 review, and opening PR6.
+- [X] T134 [US6] Run the PR6 gate (lint, tests, coverage, perf, compatibility smoke) and request QG-3 review of the timeline Library and the Compare dialog. Then open PR6.
+  - 2026-10-30: lint, unit/contract tests and coverage pass in `web/` (187 tests) and `extension/` (538 tests), and `npm run test:e2e` passes in `web/` (5 tests, including `libraryTimeline.spec.ts`). Compatibility smoke skipped (no `functions/` change in the original PR6 scope). QG-3 signed off by the user on 2026-10-30 after hands-on use. PR6 is #26. Review also found and fixed three PR5 defects: long "I have this" labels, no-profile message, and confirmed skills never reaching the scoring model.
 
 **Checkpoint**: all six user stories are delivered.
 
