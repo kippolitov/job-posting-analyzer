@@ -1,3 +1,4 @@
+import { verdictLabel, type Verdict } from "shared/fitView";
 import { ARRANGEMENTS, JOB_STATUSES } from "shared/types/job";
 import type { Arrangement, Seniority } from "shared/types/job";
 import {
@@ -17,6 +18,14 @@ const SENIORITIES: Seniority[] = [
   "director",
   "executive",
   "unspecified",
+];
+
+const VERDICTS: Exclude<Verdict, "unrated">[] = [
+  "strong",
+  "worth-a-shot",
+  "stretch",
+  "long-shot",
+  "dealbreaker",
 ];
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -110,6 +119,25 @@ export function LibraryControls({
             {SENIORITIES.map((seniority) => (
               <option key={seniority} value={seniority}>
                 {seniority}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col text-sm">
+          <span className="mb-1 text-gray-600 dark:text-gray-300">Verdict</span>
+          <select
+            aria-label="Verdict"
+            value={query.verdict ?? ""}
+            onChange={(e) =>
+              onChange({ ...query, verdict: (e.target.value || undefined) as LibraryQuery["verdict"] })
+            }
+            className="rounded-md border border-gray-300 px-3 py-1.5 dark:border-gray-700 dark:bg-gray-900"
+          >
+            <option value="">Any</option>
+            {VERDICTS.map((verdict) => (
+              <option key={verdict} value={verdict}>
+                {verdictLabel(verdict)}
               </option>
             ))}
           </select>

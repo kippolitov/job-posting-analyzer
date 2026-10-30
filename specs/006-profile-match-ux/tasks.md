@@ -655,27 +655,27 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for User Story 6 (write first, must fail) ⚠️
 
-- [ ] T123 [P] [US6] Add `SORT_CASES`, `FILTER_CASES` and `MERGE_CASES` to `shared/fitView.fixtures.ts` and iterate them in both suites:
+- [X] T123 [P] [US6] Add `SORT_CASES`, `FILTER_CASES` and `MERGE_CASES` to `shared/fitView.fixtures.ts` and iterate them in both suites:
   - `sortByFit` in both directions puts unscored jobs last in each, while out-of-date and unrated fits sort by number;
   - `filterByVerdict` never matches `unrated`;
   - `mergeRequirementRows` merges "Kubernetes" with "kubernetes " and " KUBERNETES";
   - cell states come from each posting's lists: matching is `matched`, missing is `missing`, desired is `nice-to-have`, and anything else is `not-asked`;
   - row order is by number of postings that ask, then alphabetical.
-- [ ] T124 [P] [US6] Extend `extension/tests/unit/SavedTab.test.tsx` with "Fit (highest)" and "Fit (lowest)" sort options, the verdict filter, unscored jobs last, and out-of-date markers kept.
-- [ ] T125 [P] [US6] Write `web/tests/unit/libraryTimeline.test.ts` for `web/src/lib/libraryTimeline.ts` per [data-model.md §9](./data-model.md):
+- [X] T124 [P] [US6] Extend `extension/tests/unit/SavedTab.test.tsx` with "Fit (highest)" and "Fit (lowest)" sort options, the verdict filter, unscored jobs last, and out-of-date markers kept.
+- [X] T125 [P] [US6] Write `web/tests/unit/libraryTimeline.test.ts` for `web/src/lib/libraryTimeline.ts` per [data-model.md §9](./data-model.md):
   - `groupByDay` with a fixed `now` and `timeZone: "America/Los_Angeles"`: postings saved today, yesterday, three days ago and last year get "Today", "Yesterday", the weekday and date, and the date with the year;
   - a posting saved at 23:30 local time lands on that local day, not the UTC day;
   - groups are newest first, entries inside a group are newest first, and no group is empty;
   - with `direction: "oldest"` for the "Saved (oldest)" sort, both groups and entries run oldest first under the same headings;
   - `summarizeJob` reads "Salary not stated" and "Arrangement not stated" when those are missing, formats a hybrid posting with 2 office days as "Hybrid · 2 days in office", omits null location and `unspecified` seniority, and gives the host name, file name or "Pasted" as the source label;
   - `formatSalary` from `web/src/lib/formatJob.ts` returns the same strings `AnalysisView` shows today for a range, a single bound, and a missing currency or period.
-- [ ] T126 [P] [US6] Extend `web/tests/contract/library-view.test.tsx` for the timeline (FR-029, FR-030):
+- [X] T126 [P] [US6] Extend `web/tests/contract/library-view.test.tsx` for the timeline (FR-029, FR-030):
   - with the default date sort, entries sit under day headings, each heading a level-3 heading;
   - each entry shows title, company, verdict and fit with the out-of-date marker, salary, arrangement, location, seniority, status and source;
   - sorting by fit removes the headings and shows each entry's save date;
   - a filter that empties a day hides that day's heading;
   - selecting postings still uses the per-entry checkbox, and the Compare button is disabled until two are selected.
-- [ ] T127 [P] [US6] Extend `web/tests/contract/compare.test.tsx`, which now renders the Library:
+- [X] T127 [P] [US6] Extend `web/tests/contract/compare.test.tsx`, which now renders the Library:
   - with fewer than 2 selected, Compare is disabled; with 2 to 4, clicking it opens a dialog named "Compare postings";
   - Escape and the Close button each close the dialog, return focus to Compare, and keep the selection;
   - the nav has no Compare entry, and rendering the router at `/compare` lands on the Library;
@@ -684,21 +684,22 @@ These are silent failures, not crashes. They were found in existing code during 
   - each column links to the full analysis, and following the link closes the dialog;
   - at a 375 px viewport, the dialog fills the viewport, the table container has `overflow-x: auto`, and the document does not scroll horizontally.
   Extend `web/tests/unit/libraryQuery.test.ts` so that its fit sorting matches `sortByFit`.
-- [ ] T128 [US6] Write the web E2E test `web/tests/e2e/libraryTimeline.spec.ts`, stubbing the backend with `page.route` as T061 does. Seed postings saved today, yesterday and last month. Assert the day headings and one entry's facts, select two postings, open Compare, check the dialog and the requirements table, press Escape, and confirm focus is back on Compare. Run with `npm run test:e2e` from `web/`.
+- [X] T128 [US6] Write the web E2E test `web/tests/e2e/libraryTimeline.spec.ts`, stubbing the backend with `page.route` as T061 does. Seed postings saved today, yesterday and last month. Assert the day headings and one entry's facts, select two postings, open Compare, check the dialog and the requirements table, press Escape, and confirm focus is back on Compare. Run with `npm run test:e2e` from `web/`.
 
 ### Implementation for User Story 6
 
-- [ ] T129 [US6] Add `sortByFit`, `filterByVerdict` and `mergeRequirementRows` to `shared/fitView.ts` to make T123 pass.
-- [ ] T130 [US6] Add the sort and verdict-filter controls to `extension/components/JobPanel/SavedTab.tsx` using the shared helpers, to make T124 pass.
-- [ ] T131 [US6] Create `web/src/lib/libraryTimeline.ts` with `groupByDay` and `summarizeJob`, and move `formatSalary` from `web/src/components/AnalysisView.tsx` to `web/src/lib/formatJob.ts`, importing it back into `AnalysisView`. Use `Intl.DateTimeFormat` with an explicit `timeZone` for grouping and headings. This makes T125 pass.
-- [ ] T132 [US6] Rewrite `web/src/components/CompareGrid.tsx` as the requirements table, with each column's freshness marker from `freshness` (FR-003), and make `web/src/lib/libraryQuery.ts` delegate fit sort and filter to `shared/fitView.ts`, removing its local `fitScore` sorting. Add a verdict filter to `web/src/components/LibraryControls.tsx`. This makes T127 pass.
-- [ ] T133 [US6] Build the timeline Library and the Compare dialog to make T126, T127 and T128 pass:
+- [X] T129 [US6] Add `sortByFit`, `filterByVerdict` and `mergeRequirementRows` to `shared/fitView.ts` to make T123 pass.
+- [X] T130 [US6] Add the sort and verdict-filter controls to `extension/components/JobPanel/SavedTab.tsx` using the shared helpers, to make T124 pass.
+- [X] T131 [US6] Create `web/src/lib/libraryTimeline.ts` with `groupByDay` and `summarizeJob`, and move `formatSalary` from `web/src/components/AnalysisView.tsx` to `web/src/lib/formatJob.ts`, importing it back into `AnalysisView`. Use `Intl.DateTimeFormat` with an explicit `timeZone` for grouping and headings. This makes T125 pass.
+- [X] T132 [US6] Rewrite `web/src/components/CompareGrid.tsx` as the requirements table, with each column's freshness marker from `freshness` (FR-003), and make `web/src/lib/libraryQuery.ts` delegate fit sort and filter to `shared/fitView.ts`, removing its local `fitScore` sorting. Add a verdict filter to `web/src/components/LibraryControls.tsx`. This makes T127 pass.
+- [X] T133 [US6] Build the timeline Library and the Compare dialog to make T126, T127 and T128 pass:
   - create `web/src/components/LibraryEntry.tsx`, a card showing the `summarizeJob` facts, the verdict and fit from `shared/fitView.ts` with the freshness marker, the status, and the compare checkbox; it stacks to one column below 640 px;
   - create `web/src/components/LibraryTimeline.tsx`, which renders `groupByDay` groups under headings for the date sort and a flat list with save dates for the fit sort;
   - create `web/src/components/CompareDialog.tsx` around a native `<dialog>` opened with `showModal()`, labelled "Compare postings", with a Close button, rendering `CompareGrid`; on close it returns focus to the trigger;
   - in `web/src/pages/Library.tsx`, replace the list with `LibraryTimeline` and the Compare link with a button that opens `CompareDialog`, disabled below 2 selections;
   - delete `web/src/pages/Compare.tsx`, replace its route in `web/src/App.tsx` with `<Navigate to="/library" replace />`, and remove the Compare link from `web/src/components/AppShell.tsx`.
 - [ ] T134 [US6] Run the PR6 gate (lint, tests, coverage, perf, compatibility smoke) and request QG-3 review of the timeline Library and the Compare dialog. Then open PR6.
+  - 2026-10-30: lint, unit/contract tests and coverage pass in `web/` (187 tests) and `extension/` (538 tests), and `npm run test:e2e` passes in `web/` (5 tests, including `libraryTimeline.spec.ts`). Not yet done: compatibility smoke, QG-3 review, and opening PR6.
 
 **Checkpoint**: all six user stories are delivered.
 

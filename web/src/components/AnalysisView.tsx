@@ -2,18 +2,7 @@ import { useState } from "react";
 import type { Fit, JobAnalysisResponse } from "shared/types/job";
 import { evidenceFor, scoredByLabel } from "shared/fitView";
 import { VerdictBadge } from "@/components/VerdictBadge";
-
-function formatSalary(analysis: JobAnalysisResponse): string | null {
-  const salary = analysis.salary;
-  if (!salary || (salary.min === null && salary.max === null)) return null;
-  const parts: string[] = [];
-  if (salary.min !== null) parts.push(salary.min.toLocaleString());
-  if (salary.max !== null) parts.push(salary.max.toLocaleString());
-  const range = parts.join(" – ");
-  const currency = salary.currency ? `${salary.currency} ` : "";
-  const period = salary.period ? `/${salary.period}` : "";
-  return `${currency}${range}${period}`;
-}
+import { formatSalary } from "@/lib/formatJob";
 
 interface ConfirmControl {
   confirm: (label: string) => void;

@@ -21,9 +21,6 @@ export function AppShell() {
           <NavLink to="/library" className={navLinkClass}>
             Library
           </NavLink>
-          <NavLink to="/compare" className={navLinkClass}>
-            Compare
-          </NavLink>
           <NavLink to="/upload" className={navLinkClass}>
             Analyze posting
           </NavLink>

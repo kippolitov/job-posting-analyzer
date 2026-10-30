@@ -6,9 +6,25 @@ import type { Arrangement, JobStatus, SavedJob } from "../../types/job";
 import { ARRANGEMENTS, JOB_STATUSES } from "../../types/job";
 import { SavedJobRow } from "./SavedJobRow";
 import { useLiveFingerprint } from "./useFreshness";
+import { filterByVerdict, sortByFit, verdictLabel, type Verdict } from "../../../shared/fitView";
 import { getCachedFingerprint, getProfile } from "../../services/profileStorage";
 
-type SortOrder = "newest" | "oldest";
+type SortOrder = "newest" | "oldest" | "fit-highest" | "fit-lowest";
+
+const SORT_OPTIONS: { value: SortOrder; label: string }[] = [
+  { value: "newest", label: "Saved (newest)" },
+  { value: "oldest", label: "Saved (oldest)" },
+  { value: "fit-highest", label: "Fit (highest)" },
+  { value: "fit-lowest", label: "Fit (lowest)" },
+];
+
+const VERDICT_OPTIONS: Exclude<Verdict, "unrated">[] = [
+  "strong",
+  "worth-a-shot",
+  "stretch",
+  "long-shot",
+  "dealbreaker",
+];
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -17,6 +33,7 @@ export function SavedTab() {
   const [arrangement, setArrangement] = useState<Arrangement | "all">("all");
   const [status, setStatus] = useState<JobStatus | "all">("all");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [verdict, setVerdict] = useState<Exclude<Verdict, "unrated"> | "all">("all");
   // The library is server-backed: a failed load must show as a failure with
   // Retry, never as an empty library (FR-015).
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -180,10 +197,15 @@ export function SavedTab() {
     }
   };
 
+  const verdictFiltered = verdict === "all" ? jobs : filterByVerdict(jobs, verdict);
   const displayed =
-    sortOrder === "newest"
-      ? jobs
-      : [...jobs].sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt));
+    sortOrder === "fit-highest"
+      ? sortByFit(verdictFiltered, "highest")
+      : sortOrder === "fit-lowest"
+        ? sortByFit(verdictFiltered, "lowest")
+        : sortOrder === "oldest"
+          ? [...verdictFiltered].sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt))
+          : verdictFiltered;
 
   return (
     <div className="flex h-full flex-col">
@@ -222,13 +244,38 @@ export function SavedTab() {
           ))}
         </select>
 
-        <button
-          onClick={() => setSortOrder(sortOrder === "newest" ? "oldest" : "newest")}
-          aria-label={`Sorted by date saved, ${sortOrder} first. Click to reverse.`}
-          className="rounded-md px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+        <label className="sr-only" htmlFor="filter-verdict">
+          Filter by verdict
+        </label>
+        <select
+          id="filter-verdict"
+          value={verdict}
+          onChange={(e) => setVerdict(e.target.value as Exclude<Verdict, "unrated"> | "all")}
+          className="rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
         >
-          {sortOrder === "newest" ? "Newest ↓" : "Oldest ↑"}
-        </button>
+          <option value="all">All verdicts</option>
+          {VERDICT_OPTIONS.map((v) => (
+            <option key={v} value={v}>
+              {verdictLabel(v)}
+            </option>
+          ))}
+        </select>
+
+        <label className="sr-only" htmlFor="sort-order">
+          Sort by
+        </label>
+        <select
+          id="sort-order"
+          value={sortOrder}
+          onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+          className="rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
 
         <input
           ref={fileInputRef}
@@ -332,7 +379,7 @@ export function SavedTab() {
           (displayed.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                No saved postings{arrangement !== "all" || status !== "all" ? " match these filters" : " yet"}
+                No saved postings{arrangement !== "all" || status !== "all" || verdict !== "all" ? " match these filters" : " yet"}
               </p>
               <p className="mt-1 text-xs text-gray-400 dark:text-gray-600">
                 Analyzed postings you save will appear here.
