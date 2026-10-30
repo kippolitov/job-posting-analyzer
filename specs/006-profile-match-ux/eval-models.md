@@ -358,6 +358,34 @@ unchanged. PR2 figures come from `pr2.json` (`--runs=5`).
   a small run count, not to evidence, but it is not proven. A Premium re-run at
   `--runs=5` would compare like with like.
 
+### Premium at reasoning effort `none` (2026-10-30, `--runs=5`)
+
+Run after the Premium recall miss above, to test whether Premium needs
+reasoning at all. Same deployment (`gpt-6-luna-premium`, DataZoneStandard),
+`reasoning_effort` `none`, same prompt as PR3. Raw output:
+[`eval-runs/pr3-premium-none.json`](./eval-runs/pr3-premium-none.json).
+
+| Metric | Premium `low` (PR2, 5 runs) | Premium `low` (PR3, 3 runs) | **Premium `none` (PR3, 5 runs)** |
+|---|---|---|---|
+| Gate | pass | fail (recall) | **pass** |
+| Recall (≥ 75%) | 76.7% | 69.4% | **76.7%** |
+| Trap false dealbreakers (0) | 0 | 0 | **0** |
+| Misread stated facts (≤ 2%) | 1.4% | 0.0% | **1.4%** |
+| Verdict stability (≥ 90%) | 90.9% | 90.9% | **91.4%** |
+| Evidence verbatim (≥ 95%) | n/a | 100% | **100%** (2,398 quotes, 0 dropped) |
+| Median completion tokens | 653 | 895 | **685** (no reasoning tokens) |
+| Latency p50 / p95 | 5.4 / 21.4 s | 6.6 / 20.1 s | **5.9 / 20.3 s** |
+| Truncations | 0 | 0 | 0 |
+
+- Dropping reasoning changes no quality metric: recall and stability match
+  `low` within noise, and the recall miss at 3 runs does not repeat at 5. Output
+  tokens fall by about 23% against `low` (PR3 run), so cost falls with them.
+- **p95 stays near 20 s with or without reasoning.** The free tier's
+  `gpt-6-luna` (GlobalStandard) is at 9.5 s. The Premium latency comes from
+  the DataZoneStandard deployment, not the effort setting.
+- Free still scores a little higher on recall and stability (83–92% and
+  95–97% across its runs), which is within the spread seen between runs.
+
 ## Sign-off
 
 - [X] Product owner: chosen settings approved (2026-10-29): free `gpt-6-luna`
