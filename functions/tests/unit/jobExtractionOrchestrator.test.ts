@@ -351,6 +351,17 @@ describe("jobExtractionOrchestrator", () => {
       expect(system).toContain("0-39: major mismatch");
     });
 
+    it("tells the model to treat the Confirmed skills section as evidence (006 US5)", async () => {
+      const mockCreate = await mockCreateWith(fixture("with-fit"));
+      await orchestrateJobAnalysis(withProfile);
+      const [params] = mockCreate.mock.calls[0] as [
+        { messages: { role: string; content: string }[] },
+      ];
+      const system = params.messages.find((m) => m.role === "system")!.content;
+      expect(system).toContain('"Confirmed skills:" section');
+      expect(system).toContain("goes in fit.matching, never fit.missing");
+    });
+
     it("omits the rubric when no profile was provided", async () => {
       const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
       await orchestrateJobAnalysis(baseRequest);
