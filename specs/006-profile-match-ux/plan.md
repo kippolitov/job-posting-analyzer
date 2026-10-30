@@ -125,7 +125,7 @@ Derived from `.specify/memory/constitution.md` v1.2.0:
 
 | Principle | Gate | Status |
 |-----------|------|--------|
-| **I. Code Quality** | Meaningful naming, no dead code, single responsibility, review | ✅ PASS. Single-purpose pure units: `resolveModelConfig`, `profileFingerprint`, `resolveDealbreakers` / `applyPreferences`, `validateQuotes`, and `fitView`. Dead code is removed rather than kept: `scoreStyle` with its hard-coded 70/20 thresholds, and `needsFitRefresh`'s silent auto-refresh branches (R7). |
+| **I. Code Quality** | Meaningful naming, no dead code, single responsibility, review | ✅ PASS. Single-purpose pure units: `resolveModelConfig`, `profileFingerprint`, `violatedLines` / `applyPreferences`, `validateQuotes`, and `fitView`. Dead code is removed rather than kept: `scoreStyle` with its hard-coded 70/20 thresholds, and `needsFitRefresh`'s silent auto-refresh branches (R7). |
 | **II. Testing Standards** | Test-first; ≥ 80% on changed modules; recorded fixtures; E2E for P1 journeys | ✅ PASS. Each PR's quickstart table becomes failing tests first. Model behaviour uses recorded fixtures. The live eval decides models but does not gate merges, because it is non-deterministic and costs money. **P1 E2E (US1)**: out-of-date marking and Rescore in the extension e2e suite, using the localhost fixture server, including the taken-down page. `shared/fitView.ts` gets coverage through both clients' suites, which share one fixture table (R10). |
 | **III. UX Consistency** | Progress over 300 ms; plain-language errors with an action; stable terms; WCAG 2.1 AA | ✅ PASS. Rescore reuses the existing analyzing spinner. Every new error state names a next action (unavailable posting, exhausted allowance, failed import). New copy follows the spec's vocabulary table, so the UI says "Rescore", never "refresh". Verdicts are text plus icon, never colour alone (FR-010). Evidence is reachable by keyboard (FR-013). The screen-reader label is pinned by a test. **Watch item for QG-3**: the score header gains a banner, a freshness notice, a cost line and a secondary "My profile" button. FR-025's default collapsed view is what keeps this within the panel. |
 | **IV. Performance** | ≤ 30 s; non-blocking; ≤ 512 MB; reject a p95 regression of 20% or more | ⚠️ **PASS WITH A WATCH ITEM.** PR1 is neutral to slightly faster at `none`. PR2 adds one point read (`SavedJobs`) and one profile read for rescore intents only, each a few ms. **PR3 evidence may add 2–4 s**, which is above 20% of about 5.5 s. If the R9 mitigations don't bring it under, PR3 carries a documented QG-4 exception for your approval, since the absolute p95 stays far below 30 s. |
@@ -203,8 +203,8 @@ Each PR lists its scope, its compatibility story, and what is deployed when.
   - Fingerprints on profile GET and PUT, and `fingerprintHistory`.
   - Merge-PUT.
   - `profileData` on both analyze endpoints.
-  - Rubric prompt, the `dealbreakersViolated` schema field and
-    `resolveDealbreakers`.
+  - Rubric prompt, the `dealbreakersViolated` field, and the separate
+    dealbreaker check (`violatedLines`; research R8 "Superseded").
   - Rescore eligibility and counters, with Merge writes and the
     charge-after-validation side fix.
   - `postingUnavailable`.
@@ -353,7 +353,7 @@ shared/
 functions/
 ├── src/services/
 │   ├── modelConfig.ts           # NEW resolveModelConfig (PR1)
-│   ├── jobExtractionOrchestrator.ts  # config, observe, rubric, schema, validateQuotes, resolveDealbreakers/applyPreferences
+│   ├── jobExtractionOrchestrator.ts  # config, observe, rubric, schema, validateQuotes, violatedLines/applyPreferences
 │   ├── profileFingerprint.ts    # NEW (PR2)
 │   ├── profileRepository.ts     # merge PUT, history, preferences, confirmedSkills
 │   ├── meteringService.ts       # Merge writes; rescore + unavailable counters
@@ -370,7 +370,7 @@ functions/
     ├── fixtures/postings/full/*.json        # NEW (exported)
     ├── fixtures/profiles/*.json, pairs.json # NEW
     ├── fixtures/jobAnalysis/*.json          # new recorded outputs (dealbreaker, evidence, fabricated quote)
-    ├── unit/…                               # modelConfig, fingerprint, eligibility, resolveDealbreakers, applyPreferences, validateQuotes
+    ├── unit/…                               # modelConfig, fingerprint, eligibility, violatedLines, applyPreferences, validateQuotes
     └── integration/…                        # metering Merge, rescore flows, profile merge/import, unavailableAt
 
 extension/

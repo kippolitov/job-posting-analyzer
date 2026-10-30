@@ -28,6 +28,7 @@
 import { readFileSync, readdirSync, writeFileSync } from "fs";
 import path from "path";
 import {
+  fitCallMessages,
   orchestrateJobAnalysis,
   type ModelUsage,
 } from "../src/services/jobExtractionOrchestrator";
@@ -36,6 +37,8 @@ import type { Tier } from "../src/models/user";
 import { profileToPromptText } from "../../shared/types/profile";
 import {
   bandFor,
+  fitInputIndependence,
+  identicalVerdictShare,
   costPerAnalysis,
   falseDealbreakers,
   median,
@@ -379,8 +382,10 @@ interface ConfigReport {
     runs: number;
     falseDealbreakers: number;
     missedDealbreakers: number;
+    fitInputIdenticalPct: number;
     scoreIndependencePct: number;
     verdictStabilityPct: number;
+    identicalVerdictPct: number;
     detectionMethod: string;
     falseDetails: string[];
     missedDetails: string[];
@@ -457,6 +462,22 @@ function buildReport(
       .map((r) => ({ pair: pairKey(r.posting, r.profile), score: r.fit!.score }));
   const independence = scoreIndependence(samples(scored), samples(stripped));
   const stability = verdictStability(bandsByPair);
+  // Rebuilt offline from the fixtures, so --report checks it too.
+  const postingExtract = new Map(postings.map((p) => [p.id, p.extract]));
+  const fitInput = (posting: string, profile: { text: string; dealbreakers: string[] }) =>
+    JSON.stringify(
+      fitCallMessages({ extract: postingExtract.get(posting)!, profile: profileToPromptText(profile) })
+    );
+  const fitInputs = pairs
+    .filter((p) => p.violations.length > 0 && postingExtract.has(p.posting) && profiles.has(p.profile))
+    .map((p) => {
+      const profile = profiles.get(p.profile)!;
+      return {
+        pair: pairKey(p.posting, p.profile),
+        withDealbreakers: fitInput(p.posting, profile),
+        withoutDealbreakers: fitInput(p.posting, { text: profile.text, dealbreakers: [] }),
+      };
+    });
 
   // Tokens, cost, latency — per analysis (a repair retry belongs to its analysis).
   const usages = ok.flatMap((r) => r.usages);
@@ -478,8 +499,10 @@ function buildReport(
       runs: Math.max(0, ...scored.map((r) => r.run + 1)),
       falseDealbreakers: falseTally.count,
       missedDealbreakers: missedTally.count,
+      fitInputIdenticalPct: fitInputIndependence(fitInputs) * 100,
       scoreIndependencePct: independence * 100,
       verdictStabilityPct: stability * 100,
+      identicalVerdictPct: identicalVerdictShare(bandsByPair) * 100,
       detectionMethod: falseTally.detectionMethod,
       falseDetails: falseTally.details,
       missedDetails: missedTally.details,
@@ -505,7 +528,8 @@ function buildReport(
   };
 
   // Targets (contracts/eval-harness.md). Score independence is gated only once
-  // the field exists (PR2+): the PR1 prompt still caps a violating score.
+  // the field exists (PR2+): the PR1 prompt still caps a violating score. The
+  // gate is identical fit input; the 5-point score check is reported only.
   const targets: [boolean, string][] = [
     [report.errors.length === 0, `errors ${report.errors.length} (target 0)`],
     [report.arrangement.accuracyPct === 100, "arrangement accuracy < 100%"],
@@ -516,7 +540,10 @@ function buildReport(
     [report.latency.p95Ms <= 30_000, "p95 latency > 30 s (SC-009)"],
   ];
   if (report.fit.detectionMethod === "field") {
-    targets.push([report.fit.scoreIndependencePct >= 90, "score independence < 90% (SC-002)"]);
+    targets.push([
+      report.fit.fitInputIdenticalPct === 100,
+      "fit input differs with and without dealbreakers (SC-002)",
+    ]);
   }
   report.failedTargets = targets.filter(([pass]) => !pass).map(([, message]) => message);
   return report;
@@ -545,8 +572,12 @@ function printReport(report: ConfigReport): void {
       `missedDealbreakers ${fit.missedDealbreakers} (SC-002, target 0)`
   );
   console.log(
-    `              scoreIndependence ${pct(fit.scoreIndependencePct)} (SC-002, ≥ 90, PR2+), ` +
-      `verdictStability ${pct(fit.verdictStabilityPct)} (SC-004, ≥ 90), detectionMethod ${fit.detectionMethod}`
+    `              fitInputIdentical ${pct(fit.fitInputIdenticalPct)} (SC-002, 100, PR2+), ` +
+      `scoreIndependence ${pct(fit.scoreIndependencePct)} (median within 5 points, reported)`
+  );
+  console.log(
+    `              verdictStability ${pct(fit.verdictStabilityPct)} (SC-004, runs agreeing, ≥ 90), ` +
+      `identicalVerdicts ${pct(fit.identicalVerdictPct)} (pairs, reported), detectionMethod ${fit.detectionMethod}`
   );
   console.log(
     `tokens:       median prompt ${tokens.prompt} / completion ${tokens.completion} / ` +

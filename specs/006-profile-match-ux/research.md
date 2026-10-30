@@ -674,6 +674,26 @@ instead of text. That needs ID-numbered serialization, and it changes the prompt
 an older extension sends, which has no IDs. Verbatim copy plus validation works
 on both formats. Rejected.
 
+**Superseded on 2026-10-29 (T087)**: three eval attempts failed, so the decision
+above changed in three steps:
+
+1. The fallback was adopted. The fit call never sees the dealbreakers, and its
+   schema has no `dealbreakersViolated`. A second call on the same deployment,
+   run in parallel, judges them. A failed judge call reports none, with a
+   warning.
+2. The judge returns one check per dealbreaker: `number`, `postingSays` (a
+   verbatim posting quote, `""` if none), and `verdict` (`violated`,
+   `compatible` or `not stated`). Its prompt has reading rules for arrangement,
+   salary and location dealbreakers. The list comes after the posting. The
+   server (`violatedLines`) reports a line only for a `violated` check whose
+   quote is a substring of the posting, and maps it by number to the user's
+   exact line. That makes `resolveDealbreakers`' paraphrase matching
+   unnecessary, so it was removed. Numbering is server-side only, so the
+   older-extension objection above does not apply.
+3. SC-002's independence is now gated on the fit call getting identical input
+   with and without dealbreakers (`fitCallMessages`). SC-004 counts runs that
+   agree with their pair's most common verdict. See spec.md Clarifications.
+
 ---
 
 ## R9 — Evidence quotes (PR3, FR-011/FR-012)

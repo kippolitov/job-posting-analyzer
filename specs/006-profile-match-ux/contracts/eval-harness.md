@@ -41,8 +41,13 @@ For each configuration:
 config, deployment, settings
 arrangement: accuracy %, stated contradictions, hybrid days n/m          (existing)
 fit: pairs, runs, falseDealbreakers (SC-008, target 0),
-     missedDealbreakers (SC-002, target 0), scoreIndependence % (SC-002, ≥ 90, PR2+),
-     verdictStability % (SC-004, ≥ 90),
+     missedDealbreakers (SC-002, target 0),
+     fitInputIdentical % (SC-002, 100, PR2+): violating pairs whose fit-call messages
+       are identical with and without dealbreakers, rebuilt offline from the fixtures,
+     scoreIndependence % (reported): violating pairs whose median score is within
+       5 points with and without dealbreakers,
+     verdictStability % (SC-004, ≥ 90): runs giving their pair's most common verdict,
+     identicalVerdicts % (reported): pairs with the same verdict on every run,
      evidenceVerbatim % (SC-003, ≥ 95, PR3+), detectionMethod: "field" | "score-proxy"
 tokens: median prompt / completion / reasoning / cached
 cost: median and p95 $ per analysis (modelPrices.json; price source and date printed)
