@@ -312,6 +312,52 @@ Five misses per configuration are the kept phenom-intuit label.
 - **Premium cost** is still not computed: `modelPrices.json` has no
   `gpt-6-luna-premium` entry.
 
+## PR3 — evidence (T097)
+
+Run 2026-10-30, `--runs=3`, 44 pairs, chosen configurations. Raw output:
+[`eval-runs/pr3.json`](./eval-runs/pr3.json). The prompt now asks for a
+verbatim `postingQuote` and `profileQuote` per matching, missing and desired
+item (research R9), and the schema returns `{label, postingQuote, profileQuote}`
+objects with `matching` and `missing` capped at 8. The dealbreaker call is
+unchanged. PR2 figures come from `pr2.json` (`--runs=5`).
+
+| Metric | Free `gpt-6-luna`, `none` | Premium `gpt-6-luna-premium`, `low` |
+|---|---|---|
+| Quotes kept / dropped | 1,471 / 0 | 1,276 / 0 |
+| **SC-003 verbatim rate** (target ≥ 95%) | **100%** | **100%** |
+| Truncations (`finish_reason: length`) | 0 | 0 |
+| Median prompt tokens (PR2 → PR3) | 2,170 → 2,364 (+8.9%) | 2,170 → 2,364 (+8.9%) |
+| Median completion tokens (PR2 → PR3) | 456 → 705 (+55%) | 653 → 895 (+37%) |
+| **Median cost per analysis** (PR2 → PR3) | **$0.000302 → $0.000439 (+45%)** | not computed: no `gpt-6-luna-premium` price entry |
+| Latency p50 (PR2 → PR3) | 4.1 s → 5.0 s (+22%) | 5.4 s → 6.6 s (+22%) |
+| **Latency p95** (PR2 → PR3) | **10.9 s → 9.5 s (−13%)** | **21.4 s → 20.1 s (−6%)** |
+
+- **Cost is a feature cost** (research R9, decided 2026-10-28), not an FR-M05
+  limit. The free increase is +45%, at the top of R9's +23% to +45% estimate:
+  about +$0.00014 per analysis, or about +$0.007 for a full 50-analysis month.
+  Premium output tokens rose less (+37%); if its price matches `gpt-6-luna`'s,
+  its cost rises by a similar share. It needs a price entry to be exact.
+- **QG-4 (p95 latency)**: no regression. The p95 values fell against PR2, so no
+  exception is needed. Premium's absolute p95 is 20.1 s against the 30 s limit.
+- **Other metrics under `--runs=3`** (not changed by PR3, noisy at 3 runs):
+
+| Metric | Free | Premium |
+|---|---|---|
+| Trap false dealbreakers (SC-008, 0) | 0 | 0 |
+| Misread stated facts (SC-008, ≤ 2%) | 1.5% | 0.0% |
+| Recall (SC-002, ≥ 75%) | 91.7% | **69.4%, below target** |
+| Fit input identical (SC-002, 100%) | 100% | 100% |
+| Verdict stability (SC-004, ≥ 90%) | 97.0% | 90.9% |
+
+  **Premium recall misses its target (11 of 36 labelled violations missed,
+  against 14 of 60 in PR2's five runs).** The dealbreaker call's prompt and
+  input are identical to PR2's, and PR3 changes only the fit call. Free recall
+  rose in the same run (83.3% to 91.7%), and the missed pairs are PR2's known
+  limitations (phenom-intuit, onsite-explicit, greenhouse-discord,
+  workday-nvidia and lever-palantir on Premium). That points to judge noise at
+  a small run count, not to evidence, but it is not proven. A Premium re-run at
+  `--runs=5` would compare like with like.
+
 ## Sign-off
 
 - [X] Product owner: chosen settings approved (2026-10-29): free `gpt-6-luna`
