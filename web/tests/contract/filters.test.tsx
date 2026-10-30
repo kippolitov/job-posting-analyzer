@@ -69,3 +69,42 @@ describe("library filters (FR-013, US2 scenario 5)", () => {
     await screen.findByText(/no postings match/i);
   });
 });
+
+describe("Current profile only filter (006 FR-008)", () => {
+  const api = installFakeApi();
+
+  it("hides fits that are out of date or have no fingerprint", async () => {
+    seedSession();
+    api.setProfile({
+      text: "Engineer",
+      dealbreakers: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      schemaVersion: 1,
+      fingerprint: "c".repeat(64),
+    });
+    const withFit = (title: string, fingerprint?: string): SavedJobPayload => {
+      const j = job(title, "remote");
+      j.analysis.fit = {
+        score: 60,
+        rationale: "r",
+        ...(fingerprint ? { profileFingerprint: fingerprint } : {}),
+      };
+      return j;
+    };
+    api.setJobs([
+      withFit("Current Role", "c".repeat(64)),
+      withFit("Stale Role", "o".repeat(64)),
+      withFit("Unversioned Role"),
+    ]);
+
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+    await screen.findByRole("link", { name: "Stale Role" });
+
+    await userEvent.click(screen.getByRole("checkbox", { name: "Current profile only" }));
+
+    expect(screen.getByRole("link", { name: "Current Role" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Stale Role" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Unversioned Role" })).not.toBeInTheDocument();
+  });
+});

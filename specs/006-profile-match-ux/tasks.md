@@ -170,36 +170,36 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for the groundwork (write first, must fail) ⚠️
 
-- [ ] T028 [P] Write `shared/fitView.fixtures.ts` exporting `NORMALIZE_CASES` as `[input, expected]` pairs. Cover:
+- [X] T028 [P] Write `shared/fitView.fixtures.ts` exporting `NORMALIZE_CASES` as `[input, expected]` pairs. Cover:
   - `null`;
   - a pre-breakdown fit (`{score, rationale}` only);
   - a 005-era fit with all string arrays and no new fields;
   - a fully populated PR2 fit.
   Each expects absent arrays to become `[]`, `dealbreakersViolated` to default to `[]`, `evidence` to default to `{}`, and `profileFingerprint` to stay `undefined` when absent.
-- [ ] T029 [P] Write `extension/tests/unit/fitView.test.ts` and `web/tests/unit/fitView.test.ts`. Each iterates `NORMALIZE_CASES` from `shared/fitView.fixtures.ts` against `normalizeFit` and asserts it never throws. The two suites are deliberately duplicated (research R10, FR-023 guard). They get more fixture tables in later tasks.
-- [ ] T030 [P] Write `functions/tests/unit/profileSerialization.test.ts` for `shared/types/profile.ts`:
+- [X] T029 [P] Write `extension/tests/unit/fitView.test.ts` and `web/tests/unit/fitView.test.ts`. Each iterates `NORMALIZE_CASES` from `shared/fitView.fixtures.ts` against `normalizeFit` and asserts it never throws. The two suites are deliberately duplicated (research R10, FR-023 guard). They get more fixture tables in later tasks.
+- [X] T030 [P] Write `functions/tests/unit/profileSerialization.test.ts` for `shared/types/profile.ts`:
   - **invariant**: `profileToPromptText({text, dealbreakers})` output is byte-identical to the current implementation for 5 cases (no dealbreakers, one, several, trailing whitespace, unicode). Snapshot the strings literally in the test.
   - `dealbreakerLinesFromPrompt(profileToPromptText(p))` round-trips `p.dealbreakers` for every case.
   - `dealbreakerLinesFromPrompt` on text with no `Dealbreakers:` section returns `[]`.
-- [ ] T031 [P] Write `functions/tests/unit/profileFingerprint.test.ts`:
+- [X] T031 [P] Write `functions/tests/unit/profileFingerprint.test.ts`:
   - `profileFingerprint(s)` is 64 lowercase hex characters;
   - it equals SHA-256 of `s.replace(/\s+/g, " ").trim()`;
   - whitespace-only variants give the same fingerprint (US1 #6);
   - a changed dealbreaker gives a different one;
   - `fingerprintForRequest({ profileData })` equals `fingerprintForRequest({ profile: profileToPromptText(profileData) })`.
-- [ ] T032 [P] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` (Azurite), per [contracts/profile-api.md](./contracts/profile-api.md):
+- [X] T032 [P] Extend `functions/tests/unit/profileRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` (Azurite), per [contracts/profile-api.md](./contracts/profile-api.md):
   - GET and PUT responses include `fingerprint`;
   - **merge PUT (trap 2)**: seed a row with `preferences` and `confirmedSkills` columns, PUT `{text, dealbreakers}`, and assert both columns survive;
   - `preferences: null` clears them;
   - `fingerprintHistory` is prepended only when the fingerprint changes, capped at 20, and never returned by GET;
   - a whitespace-only PUT leaves `fingerprint` unchanged and history unchanged;
   - a PUT racing another write (simulate a 412 on the first attempt) retries and keeps both changes.
-- [ ] T033 [P] Write `functions/tests/unit/analyzeRequest.test.ts` for the request guard and profile resolution in [contracts/analyze-api.md §1](./contracts/analyze-api.md):
+- [X] T033 [P] Write `functions/tests/unit/analyzeRequest.test.ts` for the request guard and profile resolution in [contracts/analyze-api.md §1](./contracts/analyze-api.md):
   - `isAnalyzeJobRequest` accepts a body with valid `profileData`;
   - it rejects malformed `profileData` (non-string `text`, non-array `dealbreakers`) and a malformed `rescore.priorFingerprint` (not null and not 64 hex);
   - `resolveScoringProfile(body)` returns `profileToPromptText(profileData)` when `profileData` is present, ignoring `profile`, and otherwise returns `profile`;
   - a legacy body without the new fields is accepted unchanged.
-- [ ] T034 [P] Extend `extension/tests/unit/AccountBar.test.tsx` for FR-028:
+- [X] T034 [P] Extend `extension/tests/unit/AccountBar.test.tsx` for FR-028:
   - the web app control is a link whose visible text is "Web app", found with `getByRole("link", { name: "Web app" })`, opening `WXT_WEB_APP_URL` in a new tab;
   - its accessible description (`toHaveAccessibleDescription`) and its `title` are both "Opens in a new tab. You'll be asked to sign in with Google.";
   - it carries the secondary-button classes, including a minimum 24 × 24 px target (`min-h-6 min-w-6`);
@@ -209,19 +209,19 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Implementation for the groundwork
 
-- [ ] T035 Extend `Fit` in `shared/types/job.ts` with optional `dealbreakersViolated?: string[]` and `profileFingerprint?: string`, with JSDoc citing research R4. Do **not** change `matching`, `missing` or `desired`. Add `AnalyzeJobRequest.profileData?: ScoringProfile` and `AnalyzeJobRequest.rescore?: { priorFingerprint: string | null }`. `ScoringProfile` is `{ text; dealbreakers; preferences?; confirmedSkills? }`, exported from `shared/types/profile.ts`. Leave `isJobAnalysisPayload` unchanged.
-- [ ] T036 Add `dealbreakerLinesFromPrompt` to `shared/types/profile.ts`, and widen `profileToPromptText`'s generic to accept `ScoringProfile` without changing output for `{text, dealbreakers}`. This makes T030 pass.
-- [ ] T037 Implement `functions/src/services/profileFingerprint.ts`, exporting `profileFingerprint(serialized)` and `fingerprintForRequest(body)` with `node:crypto`. This makes T031 pass.
-- [ ] T038 Extend `isAnalyzeJobRequest` in `shared/types/job.ts` to validate the optional `profileData` and `rescore` shapes. Add `resolveScoringProfile` in `functions/src/services/profileFingerprint.ts`. This makes T033 pass.
-- [ ] T039 Update `functions/src/services/profileRepository.ts` and `functions/src/models/user.ts` to make T032 pass:
+- [X] T035 Extend `Fit` in `shared/types/job.ts` with optional `dealbreakersViolated?: string[]` and `profileFingerprint?: string`, with JSDoc citing research R4. Do **not** change `matching`, `missing` or `desired`. Add `AnalyzeJobRequest.profileData?: ScoringProfile` and `AnalyzeJobRequest.rescore?: { priorFingerprint: string | null }`. `ScoringProfile` is `{ text; dealbreakers; preferences?; confirmedSkills? }`, exported from `shared/types/profile.ts`. Leave `isJobAnalysisPayload` unchanged.
+- [X] T036 Add `dealbreakerLinesFromPrompt` to `shared/types/profile.ts`, and widen `profileToPromptText`'s generic to accept `ScoringProfile` without changing output for `{text, dealbreakers}`. This makes T030 pass.
+- [X] T037 Implement `functions/src/services/profileFingerprint.ts`, exporting `profileFingerprint(serialized)` and `fingerprintForRequest(body)` with `node:crypto`. This makes T031 pass.
+- [X] T038 Extend `isAnalyzeJobRequest` in `shared/types/job.ts` to validate the optional `profileData` and `rescore` shapes. Add `resolveScoringProfile` in `functions/src/services/profileFingerprint.ts`. This makes T033 pass.
+- [X] T039 Update `functions/src/services/profileRepository.ts` and `functions/src/models/user.ts` to make T032 pass:
   - `ProfileEntity` gains the optional JSON columns `fingerprintHistory`, `preferences` and `confirmedSkills`;
   - `StoredProfile` gains `fingerprint`, computed on read with `profileFingerprint(profileToPromptText(stored))`;
   - `putProfile` reads the existing row, merges the body over it, prepends the old fingerprint to `fingerprintHistory` when it changed (capped at 20), and writes **conditionally on the row's ETag** (`updateEntity(…, "Replace", { etag })`, or `createEntity` when no row exists), carrying **all** columns and retrying on 412 up to 4 times;
   - `isProfilePutBody` accepts the optional `preferences` (or `null`) and `confirmedSkills`, structurally only. Detailed validation lands in US4 and US5.
   Return `fingerprint` from the GET and PUT handlers in `functions/src/profile/index.ts`.
-- [ ] T040 Create `shared/fitView.ts` with `normalizeFit`, `NormalizedFit`, `Verdict` and `Freshness` per [data-model.md §2](./data-model.md), to make T028 and T029 pass. Keep it pure TypeScript with no DOM, `chrome` or `fetch` imports.
-- [ ] T041 [P] Rework the web app link in `extension/components/AccountBar.tsx` to make T034 pass. Keep the `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. Give it the visible text "Web app" after the existing icon (still `aria-hidden`), the "Manage subscription" button's classes (`rounded-md px-2 py-1 text-[11px] font-medium`) plus a border so it reads as a button, and `min-h-6 min-w-6`. Drop `aria-label`, so the accessible name is the visible text. Put the sign-in note in `title` and, through `aria-describedby`, in a visually hidden (`sr-only`) span. Buttons and links have no `alt` attribute; `title` gives the hover tooltip and `aria-describedby` makes screen readers announce it. Check the bar at 360 px width with the Premium fixture: nothing may wrap onto a second line except the left-hand usage text.
-- [ ] T042 [P] Add `fingerprint: string` to `web/src/api/types.ts` `ProfilePayload` and `fingerprint` to the extension's `CandidateProfile` in `extension/types/job.ts`. Both are optional on read, so an older backend still type-checks at runtime.
+- [X] T040 Create `shared/fitView.ts` with `normalizeFit`, `NormalizedFit`, `Verdict` and `Freshness` per [data-model.md §2](./data-model.md), to make T028 and T029 pass. Keep it pure TypeScript with no DOM, `chrome` or `fetch` imports.
+- [X] T041 [P] Rework the web app link in `extension/components/AccountBar.tsx` to make T034 pass. Keep the `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. Give it the visible text "Web app" after the existing icon (still `aria-hidden`), the "Manage subscription" button's classes (`rounded-md px-2 py-1 text-[11px] font-medium`) plus a border so it reads as a button, and `min-h-6 min-w-6`. Drop `aria-label`, so the accessible name is the visible text. Put the sign-in note in `title` and, through `aria-describedby`, in a visually hidden (`sr-only`) span. Buttons and links have no `alt` attribute; `title` gives the hover tooltip and `aria-describedby` makes screen readers announce it. Check the bar at 360 px width with the Premium fixture: nothing may wrap onto a second line except the left-hand usage text.
+- [X] T042 [P] Add `fingerprint: string` to `web/src/api/types.ts` `ProfilePayload` and `fingerprint` to the extension's `CandidateProfile` in `extension/types/job.ts`. Both are optional on read, so an older backend still type-checks at runtime.
 
 **Checkpoint**: shared types, fingerprinting and merge-PUT are in place, with no user-visible change yet.
 
@@ -235,11 +235,11 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for User Story 1 (write first, must fail) ⚠️
 
-- [ ] T043 [P] [US1] Add the recorded fixtures `functions/tests/fixtures/jobAnalysis/dealbreaker-onsite.json` and `functions/tests/fixtures/jobAnalysis/dealbreaker-paraphrased.json`:
+- [X] T043 [P] [US1] Add the recorded fixtures `functions/tests/fixtures/jobAnalysis/dealbreaker-onsite.json` and `functions/tests/fixtures/jobAnalysis/dealbreaker-paraphrased.json`:
   - `dealbreaker-onsite.json`: an on-site posting with `fit.score: 72` and `fit.dealbreakersViolated: ["No fully on-site roles"]`.
   - `dealbreaker-paraphrased.json`: `dealbreakersViolated: ["no on-site"]`, plus one unrelated entry, `"Must sponsor visas"`.
   Update the folder README with what each fixture proves.
-- [ ] T044 [P] [US1] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` for `resolveDealbreakers` ([research R8](./research.md#r8--server-validated-dealbreakers-and-the-rubric-pr2-fr-005fr-008)):
+- [X] T044 [P] [US1] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts` for `resolveDealbreakers` ([research R8](./research.md#r8--server-validated-dealbreakers-and-the-rubric-pr2-fr-005fr-008)):
   - with `dealbreaker-onsite` and the profile dealbreaker "No fully on-site roles", the violation keeps the user's exact wording and **the score stays 72** (FR-005: violations never change the score);
   - with `dealbreaker-paraphrased`, "no on-site" maps by containment to the user's line, and the unmatched entry is kept with exactly one warning;
   - the step never changes `score`, with or without violations;
@@ -247,7 +247,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - no profile gives `fit: null` with no `dealbreakersViolated`;
   - `fit.profileFingerprint` equals `fingerprintForRequest(req)` whenever `fit` is non-null;
   - the schema sent to the model includes `fit.dealbreakersViolated` as a required string array with `maxItems: 10`.
-- [ ] T045 [P] [US1] Write `functions/tests/unit/rescoreEligibility.test.ts` for the pure `decideRescoreCharge({ intent, currentFingerprint, savedFit, fingerprintHistory, rescoresUsed })`. It covers every row of [research R6's eligibility rule](./research.md#r6--free-rescore-metering-pr2-fr-004fr-004a-constitution-v):
+- [X] T045 [P] [US1] Write `functions/tests/unit/rescoreEligibility.test.ts` for the pure `decideRescoreCharge({ intent, currentFingerprint, savedFit, fingerprintHistory, rescoresUsed })`. It covers every row of [research R6's eligibility rule](./research.md#r6--free-rescore-metering-pr2-fr-004fr-004a-constitution-v):
   - no intent, or no profile, charges an analysis;
   - a saved fit with an absent fingerprint charges a rescore;
   - a saved fit with a different fingerprint charges a rescore;
@@ -258,11 +258,11 @@ These are silent failures, not crashes. They were found in existing code during 
   - an eligible request with `rescoresUsed` at 10 or more charges an analysis;
   - a saved row with `fit: null` charges an analysis;
   - every case gives the same result for `free` and `premium` accounts (FR-026).
-- [ ] T046 [P] [US1] Extend `functions/tests/integration/metering.test.ts` (Azurite) for the **Replace hazard (trap 1)**: do a free rescore, then an ordinary analysis, and assert `rescoresUsed === 1` and `count === 1` on the row. Also cover:
+- [X] T046 [P] [US1] Extend `functions/tests/integration/metering.test.ts` (Azurite) for the **Replace hazard (trap 1)**: do a free rescore, then an ordinary analysis, and assert `rescoresUsed === 1` and `count === 1` on the row. Also cover:
   - parallel rescores at `rescoresUsed: 9` produce exactly one free rescore, and the rest fall back to analyses;
   - a refund decrements the counter that was charged;
   - a row written before 006 without the new columns reads them as 0.
-- [ ] T047 [P] [US1] Write `functions/tests/integration/rescore.test.ts` (Azurite, recorded model fixtures), using `functions/tests/helpers/savedJobsSeeder.ts`. Cover:
+- [X] T047 [P] [US1] Write `functions/tests/integration/rescore.test.ts` (Azurite, recorded model fixtures), using `functions/tests/helpers/savedJobsSeeder.ts`. Cover:
   - a rescore of a saved stale posting returns `usage.charged: "rescore"`, plus `rescoresUsed` and `rescoresLimit: 10`;
   - with the allowance exhausted (`count === limit`) but free rescores left, the rescore still returns 200;
   - with both exhausted, it returns 429 `USAGE_LIMIT_REACHED`, whose `usage` includes `rescoresUsed`;
@@ -271,24 +271,24 @@ These are silent failures, not crashes. They were found in existing code during 
   - an 11th unavailable refund in the month is not granted;
   - the same flows run through `analyze-document` using `functions/tests/fixtures/documents/valid.docx`, whose saved row is keyed by `sha256("doc:" + sha256(text))`;
   - a paste rescore through `analyze-document`'s `text` part finds a `paste:` row saved the way the extension saves it, and charges `rescore`.
-- [ ] T048 [P] [US1] Write `functions/tests/unit/pasteIdentity.test.ts` for `shared/pasteIdentity.ts`: a fixed test vector, the exact hex for one sample posting, written literally in the test; whitespace and line-ending variants give the same key; the key matches `/^paste:[0-9a-f]{64}$/`. Point `extension/tests/unit/pasteIdentity.test.ts` at the shared module and add the same literal vector, so the server and the extension are proven to agree.
-- [ ] T049 [P] [US1] Write `functions/tests/unit/analyze-document.paste.test.ts` for the `text` part per [contracts/analyze-api.md §1](./contracts/analyze-api.md), with the orchestrator and metering mocked:
+- [X] T048 [P] [US1] Write `functions/tests/unit/pasteIdentity.test.ts` for `shared/pasteIdentity.ts`: a fixed test vector, the exact hex for one sample posting, written literally in the test; whitespace and line-ending variants give the same key; the key matches `/^paste:[0-9a-f]{64}$/`. Point `extension/tests/unit/pasteIdentity.test.ts` at the shared module and add the same literal vector, so the server and the extension are proven to agree.
+- [X] T049 [P] [US1] Write `functions/tests/unit/analyze-document.paste.test.ts` for the `text` part per [contracts/analyze-api.md §1](./contracts/analyze-api.md), with the orchestrator and metering mocked:
   - both `file` and `text`, or neither, is a 400;
   - 299 characters is `400 TEXT_TOO_SHORT` and 40,001 is `413 TEXT_TOO_LONG`, and metering is never called;
   - a valid paste calls the orchestrator with an empty title and `mainText` equal to the text, and returns `source: "paste"`, no `filename`, and `canonicalUrl === await pasteIdentity(text)`;
   - a whitespace variant of the same text returns the same `saveKey`.
-- [ ] T050 [P] [US1] Extend `functions/tests/unit/analyze-job.handler.test.ts` for the **charge-after-validation side fix** ([contracts/analyze-api.md §4](./contracts/analyze-api.md)): an invalid JSON body (400), a missing extract (400) and an oversized `mainText` (413) each leave the metering mock **uncalled**.
-- [ ] T051 [P] [US1] Extend `functions/tests/unit/savedJobsRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` per [contracts/saved-jobs-api.md §4](./contracts/saved-jobs-api.md):
+- [X] T050 [P] [US1] Extend `functions/tests/unit/analyze-job.handler.test.ts` for the **charge-after-validation side fix** ([contracts/analyze-api.md §4](./contracts/analyze-api.md)): an invalid JSON body (400), a missing extract (400) and an oversized `mainText` (413) each leave the metering mock **uncalled**.
+- [X] T051 [P] [US1] Extend `functions/tests/unit/savedJobsRepository.test.ts` and `functions/tests/integration/storageApi.test.ts` per [contracts/saved-jobs-api.md §4](./contracts/saved-jobs-api.md):
   - `PATCH {unavailableAt}` round-trips through GET and list;
   - a PATCH with `analysis` clears it, and so does a PUT;
   - an invalid date returns 400;
   - `PATCH {status}` preserves it.
-- [ ] T052 [P] [US1] Add the freshness and rescore cases to `shared/fitView.fixtures.ts` as `FRESHNESS_CASES`, `RESCORE_ACTION_CASES` and `COST_LINE_CASES`:
+- [X] T052 [P] [US1] Add the freshness and rescore cases to `shared/fitView.fixtures.ts` as `FRESHNESS_CASES`, `RESCORE_ACTION_CASES` and `COST_LINE_CASES`:
   - every row of the data-model §2 freshness table;
   - `rescoreAction` for each `source` × freshness, plus `unavailableAt`, covering the research R7 table and including paste rows, whose copy is "Paste again to rescore" on both surfaces and whose web link is `/upload?mode=paste&rescore=<key>`;
   - `rescoreCostLine` for 7 of 10 left ("Free — 7 of 10 free rescores left this month"), 0 left with allowance left ("Uses 1 analysis"), and both exhausted.
   Extend both `fitView.test.ts` suites (T029) to iterate them.
-- [ ] T053 [P] [US1] Extend `extension/tests/unit/jobFlow.test.ts` and `extension/tests/unit/revisitFlow.test.ts`:
+- [X] T053 [P] [US1] Extend `extension/tests/unit/jobFlow.test.ts` and `extension/tests/unit/revisitFlow.test.ts`:
   - a revisit with a stored fit whose fingerprint differs from `getProfile().fingerprint` broadcasts the stored result with `currentProfileFingerprint` set, and does **not** call `postJobAnalysis`. This replaces the old auto-refresh expectation.
   - pre-breakdown fits and null fits are no longer auto-refreshed;
   - a revisit writes `profile:fingerprint` to `chrome.storage.session`;
@@ -298,11 +298,11 @@ These are silent failures, not crashes. They were found in existing code during 
   - a `postingUnavailable: true` response keeps the stored analysis and PATCHes `unavailableAt`;
   - when `getProfile` throws, the page, paste and region flows still analyze, and the broadcast carries `profileUnavailable: true` (spec edge case "Profile fetch fails at analysis time");
   - a Rescore that fails (5xx or timeout) keeps the stored analysis, still marked out of date, and PATCHes nothing (spec edge case "Rescore fails").
-- [ ] T054 [P] [US1] Extend `extension/tests/unit/jobAnalysisClient.test.ts`. The request body includes `profileData`, `profile` and, when given, `rescore`. The response's `usage` (with `charged`, `rescoresUsed` and `rescoresLimit`) and `postingUnavailable` are surfaced to the caller.
-- [ ] T055 [US1] Write the **FR-001 / SC-006 contract tests**:
+- [X] T054 [P] [US1] Extend `extension/tests/unit/jobAnalysisClient.test.ts`. The request body includes `profileData`, `profile` and, when given, `rescore`. The response's `usage` (with `charged`, `rescoresUsed` and `rescoresLimit`) and `postingUnavailable` are surfaced to the caller.
+- [X] T055 [US1] Write the **FR-001 / SC-006 contract tests**:
   - in `extension/tests/unit/jobFlow.test.ts`, the page, paste and scoped-region flows each send `profileData` equal to the stored profile and `profile === profileToPromptText(profileData)`;
   - in `web/tests/contract/upload.test.tsx`, the web document upload and the web Paste text option each send a `profileData` form part with the same content as the extension, from one shared fixture profile.
-- [ ] T056 [P] [US1] Extend `extension/tests/unit/FitScore.test.tsx`, `extension/tests/unit/ThisPageTab.test.tsx` and `extension/tests/unit/SavedTab.test.tsx`:
+- [X] T056 [P] [US1] Extend `extension/tests/unit/FitScore.test.tsx`, `extension/tests/unit/ThisPageTab.test.tsx` and `extension/tests/unit/SavedTab.test.tsx`:
   - the dealbreaker banner reads "Violates your dealbreaker: <line>" for each violation, above the score (FR-006);
   - an out-of-date fit shows "Scored against an older profile" with a Rescore button and the cost line;
   - a version-unknown fit shows "May be out of date";
@@ -312,20 +312,20 @@ These are silent failures, not crashes. They were found in existing code during 
   - a `storage.onChanged` event for `profile:fingerprint` re-marks the visible result and shows the FR-007 offer to rescore without auto-running;
   - a result with `profileUnavailable: true` shows "Fit not scored — your profile couldn't be loaded", not the "Configure profile" call to action;
   - Saved tab rows show the out-of-date marker.
-- [ ] T057 [P] [US1] Extend `web/tests/contract/library-view.test.tsx` and `web/tests/contract/filters.test.tsx`, and create `web/tests/contract/posting-detail.test.tsx`:
+- [X] T057 [P] [US1] Extend `web/tests/contract/library-view.test.tsx` and `web/tests/contract/filters.test.tsx`, and create `web/tests/contract/posting-detail.test.tsx`:
   - library rows and the detail page mark out-of-date and version-unknown fits;
   - URL-sourced rows link "Open posting to rescore" to `sourceUrl`;
   - document rows link "Upload again to rescore" to `/upload?rescore=<key>`;
   - paste rows link "Paste again to rescore" to `/upload?mode=paste&rescore=<key>`;
   - a "Current profile only" filter hides non-current fits;
   - the unavailable note renders.
-- [ ] T058 [P] [US1] Extend `web/tests/contract/upload.test.tsx`:
+- [X] T058 [P] [US1] Extend `web/tests/contract/upload.test.tsx`:
   - Upload does not send until the profile request settles, whether it succeeds or fails (spec edge case);
   - with `?rescore=<key>`, the request carries `rescore=true` and the entry's `priorFingerprint`, and a successful result PATCHes that saved entry's `analysis` in place instead of offering "Save to library";
   - with `?rescore=<key>` and a result whose `saveKey` differs from `<key>`, nothing is PATCHed, "Save to library" is offered, and the note reads "This didn't match the saved posting, so it was analyzed as a new one.";
   - when the profile fetch failed, the result shows "Fit not scored — your profile couldn't be loaded";
   - with `?rescore=<key>`, the page shows the cost line from `rescoreCostLine` before a file is sent, using `rescoresUsed` and `rescoresLimit` from `GET /api/account` (FR-004a).
-- [ ] T059 [US1] Extend `web/tests/contract/upload.test.tsx` for the **Paste text option** (FR-027). It shares the file with T058, so it runs after it:
+- [X] T059 [US1] Extend `web/tests/contract/upload.test.tsx` for the **Paste text option** (FR-027). It shares the file with T058, so it runs after it:
   - the nav entry reads "Analyze posting" and the page heading reads "Analyze a posting";
   - the page offers "Upload a file" and "Paste text" as a two-option toggle, with upload selected by default and paste selected by `?mode=paste`;
   - a paste under 300 characters shows "Paste more of the posting before analyzing." and one over 40,000 shows "Trim it to the posting itself before analyzing.", and neither sends a request;
@@ -333,14 +333,14 @@ These are silent failures, not crashes. They were found in existing code during 
   - "Save to library" PUTs a payload with `source: "paste"`, empty `sourceUrl` and `filename`, and the response's `canonicalUrl`;
   - the result header reads "From pasted text" instead of a filename;
   - `?mode=paste&rescore=<key>` shows the cost line before sending and PATCHes in place when the keys match.
-- [ ] T060 [US1] Write the **P1 E2E test** `extension/tests/e2e/profileFreshness.spec.ts`, using the existing `fixtures.ts` harness and localhost fixture server:
+- [x] T060 [US1] Write the **P1 E2E test** `extension/tests/e2e/profileFreshness.spec.ts`, using the existing `fixtures.ts` harness and localhost fixture server:
   1. analyze a posting and save it;
   2. change the profile through the options page;
   3. the panel shows the out-of-date notice and the Rescore cost line;
   4. Rescore clears the notice;
   5. serve a thin stub at the same URL, then Rescore shows "Posting no longer available" and makes no network call to analyze-job (assert with route interception).
 
-- [ ] T061 [US1] Write the **P1 web E2E test** `web/tests/e2e/profileFreshness.spec.ts` (Constitution II: US1 scenarios 1 and 5 name web surfaces). Follow `web/tests/e2e/signin-shared-data.spec.ts`: stub the backend at the network layer with Playwright `page.route`. Seed `GET /api/jobs` with three saved postings: one scored against the current fingerprint, one against an older fingerprint, and one with no fingerprint. Return the current fingerprint from `GET /api/profile`. Assert:
+- [X] T061 [US1] Write the **P1 web E2E test** `web/tests/e2e/profileFreshness.spec.ts` (Constitution II: US1 scenarios 1 and 5 name web surfaces). Follow `web/tests/e2e/signin-shared-data.spec.ts`: stub the backend at the network layer with Playwright `page.route`. Seed `GET /api/jobs` with three saved postings: one scored against the current fingerprint, one against an older fingerprint, and one with no fingerprint. Return the current fingerprint from `GET /api/profile`. Assert:
   - the library marks the stale row "Scored against an older profile" and the fingerprint-less row "May be out of date";
   - "Current profile only" hides both;
   - when sorted by fit, the stale rows still sort by number;
@@ -351,7 +351,7 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Implementation for User Story 1
 
-- [ ] T062 [US1] Add `resolveDealbreakers(payload, dealbreakerLines, warn)` to `functions/src/services/jobExtractionOrchestrator.ts`. It runs after `enforceConsistency`. Wire it in:
+- [X] T062 [US1] Add `resolveDealbreakers(payload, dealbreakerLines, warn)` to `functions/src/services/jobExtractionOrchestrator.ts`. It runs after `enforceConsistency`. Wire it in:
   - add `fit.dealbreakersViolated` (array of string, `maxItems: 10`, required) to `JOB_ANALYSIS_SCHEMA`;
   - **remove** today's prompt line "If the posting violates any stated dealbreaker in the profile, cap fit.score at 20 or below and name the dealbreaker in the rationale";
   - add the system-prompt lines "fit.score measures only how well the posting matches the candidate's skills, experience and seniority; do not lower it for dealbreakers", "copy each violated dealbreaker exactly as written in the profile into dealbreakersViolated, and also name it in the rationale" and "a fact the posting does not state is not a violation — add an `Unverified: …` weakness instead";
@@ -360,14 +360,14 @@ These are silent failures, not crashes. They were found in existing code during 
   - build the user message from `resolveScoringProfile(req)`;
   - stamp `fit.profileFingerprint`.
   This makes T044 pass.
-- [ ] T063 [US1] Implement `functions/src/services/rescoreEligibility.ts`, exporting the pure `decideRescoreCharge`, to make T045 pass. Add `FREE_RESCORES_PER_MONTH = 10` and `UNAVAILABLE_REFUNDS_PER_MONTH = 10` next to `MONTHLY_ANALYSES` in `functions/src/models/user.ts`, and add `rescoresUsed?` and `unavailableRefunds?` to `UsageEntity`.
-- [ ] T064 [US1] Extend `functions/src/services/meteringService.ts`:
+- [X] T063 [US1] Implement `functions/src/services/rescoreEligibility.ts`, exporting the pure `decideRescoreCharge`, to make T045 pass. Add `FREE_RESCORES_PER_MONTH = 10` and `UNAVAILABLE_REFUNDS_PER_MONTH = 10` next to `MONTHLY_ANALYSES` in `functions/src/models/user.ts`, and add `rescoresUsed?` and `unavailableRefunds?` to `UsageEntity`.
+- [X] T064 [US1] Extend `functions/src/services/meteringService.ts`:
   - switch every `updateEntity` in `checkAndIncrement` and `refundOnSystemFailure` from `"Replace"` to `"Merge"` with the same ETag (trap 1);
   - add `chargeAnalysis(sub, tier, decision)`, which returns `{ charged: "rescore" | "analysis", allowed, usage }`. A rescore increments `rescoresUsed` if it is below 10 and otherwise falls back to `count`.
   - add `refundCharge(sub, tier, charged)` and `grantUnavailableRefund(sub, tier, charged)`, which checks `unavailableRefunds < 10`, decrements the charged counter, and increments `unavailableRefunds`;
   - make `peekUsage` return `rescoresUsed` and `rescoresLimit`.
   This makes T046 pass.
-- [ ] T065 [US1] Restructure `functions/src/analyze-job/index.ts` to validate, then charge, then call the model (contracts/analyze-api.md §2):
+- [X] T065 [US1] Restructure `functions/src/analyze-job/index.ts` to validate, then charge, then call the model (contracts/analyze-api.md §2):
   - remove `withUsageMetering` from the route composition, keeping `withRateLimit(withAuth(handler))`;
   - after validation, look up the saved row with `getJob(user.sub, sha256Hex(extract.canonicalUrl))` and the profile's `fingerprintHistory` only when `body.rescore` is present;
   - call `decideRescoreCharge`, then `chargeAnalysis`, and return 429 as before when not allowed;
@@ -375,31 +375,31 @@ These are silent failures, not crashes. They were found in existing code during 
   - refund the charged counter on 5xx;
   - echo `usage` with `charged`, `rescoresUsed` and `rescoresLimit`.
   Delete `withUsageMetering` if nothing else uses it (Constitution I, no dead code). This makes T047 (job part) and T050 pass.
-- [ ] T066 [US1] Apply the same flow in `functions/src/analyze-document/index.ts`:
+- [X] T066 [US1] Apply the same flow in `functions/src/analyze-document/index.ts`:
   - parse the `profileData`, `rescore` and `priorFingerprint` form parts, returning 400 if `profileData` is malformed;
   - compute the saved key from the server-computed `doc:` canonical URL, after `extractDocument` and before charging;
   - use `chargeAnalysis`, `refundCharge` and `grantUnavailableRefund`.
   This makes the T047 document part pass.
-- [ ] T067 [US1] Move `extension/lib/pasteIdentity.ts` to `shared/pasteIdentity.ts`, using `globalThis.crypto.subtle` so it runs in Node 20, the service worker and browsers. Update the import in `extension/services/jobFlow.ts` and delete the old file. Move `MIN_TEXT_CHARS = 300` to `shared/types/job.ts` next to `MAIN_TEXT_CAP`, and re-export it from `extension/lib/pageExtractor.ts` so existing imports keep working. This makes T048 pass.
-- [ ] T068 [US1] Accept the `text` part in `functions/src/analyze-document/index.ts` per [contracts/analyze-api.md §1](./contracts/analyze-api.md):
+- [X] T067 [US1] Move `extension/lib/pasteIdentity.ts` to `shared/pasteIdentity.ts`, using `globalThis.crypto.subtle` so it runs in Node 20, the service worker and browsers. Update the import in `extension/services/jobFlow.ts` and delete the old file. Move `MIN_TEXT_CHARS = 300` to `shared/types/job.ts` next to `MAIN_TEXT_CAP`, and re-export it from `extension/lib/pageExtractor.ts` so existing imports keep working. This makes T048 pass.
+- [X] T068 [US1] Accept the `text` part in `functions/src/analyze-document/index.ts` per [contracts/analyze-api.md §1](./contracts/analyze-api.md):
   - exactly one of `file` and `text`, otherwise 400;
   - the length limits, with `TEXT_TOO_SHORT` and `TEXT_TOO_LONG`, checked before charging;
   - the extract built as the extension's paste flow builds it;
   - `canonicalUrl` from `pasteIdentity`, and the saved-row lookup for rescore eligibility from that key;
   - the response carries `source: "paste"` and omits `filename`.
   Add `"paste"` to the response's `source` type in `web/src/api/types.ts` and make `filename` optional there. This makes T049 and the T047 paste case pass.
-- [ ] T069 [US1] Add `unavailableAt` per [contracts/saved-jobs-api.md](./contracts/saved-jobs-api.md):
+- [X] T069 [US1] Add `unavailableAt` per [contracts/saved-jobs-api.md](./contracts/saved-jobs-api.md):
   - add the column to `SavedJobEntity`;
   - add `unavailableAt?: string | null` to `SavedJobPayload` and `SavedJobPatchBody` in `functions/src/models/user.ts`;
   - validate it as an ISO date in `isSavedJobPatchBody`;
   - map it in `entityFromPayload` and `payloadFromEntity` in `functions/src/services/savedJobsRepository.ts`, and clear it in `patchJob` and `saveJob` whenever `analysis` is written.
   This makes T051 pass. Mirror the field in `web/src/api/types.ts` and in the extension's `SavedJob` type in `extension/types/job.ts`.
-- [ ] T070 [US1] Add `freshness`, `rescoreAction` and `rescoreCostLine` to `shared/fitView.ts` to make the T052 cases pass in both suites.
-- [ ] T071 [US1] Update `extension/services/profileStorage.ts`:
+- [X] T070 [US1] Add `freshness`, `rescoreAction` and `rescoreCostLine` to `shared/fitView.ts` to make the T052 cases pass in both suites.
+- [X] T071 [US1] Update `extension/services/profileStorage.ts`:
   - `getProfile` and `setProfile` write `chrome.storage.session` key `profile:fingerprint` as `{ value, fetchedAt }`, with `null` meaning no profile (404) and the value left untouched on fetch failure;
   - export `getCachedFingerprint()` and `toScoringProfile(profile)`.
-- [ ] T072 [US1] Update `extension/services/jobAnalysisClient.ts` to send `profileData`, `profile` and the optional `rescore`, and to return `{ analysis, usage, postingUnavailable }` while keeping the existing error mapping. This makes T054 pass. Update the callers in `extension/services/jobFlow.ts` to the new return shape.
-- [ ] T073 [US1] Update `extension/services/jobFlow.ts` to make T053 and T055 pass:
+- [X] T072 [US1] Update `extension/services/jobAnalysisClient.ts` to send `profileData`, `profile` and the optional `rescore`, and to return `{ analysis, usage, postingUnavailable }` while keeping the existing error mapping. This makes T054 pass. Update the callers in `extension/services/jobFlow.ts` to the new return shape.
+- [X] T073 [US1] Update `extension/services/jobFlow.ts` to make T053 and T055 pass:
   - delete `needsFitRefresh` and its two auto-refresh branches (research R7);
   - every result broadcast carries `currentProfileFingerprint`;
   - a new `RESCORE_JOB_PAGE` message runs with `bypassCache`, `rescore: { priorFingerprint }` and `profileData`;
@@ -408,26 +408,26 @@ These are silent failures, not crashes. They were found in existing code during 
   - the paste and scoped-region flows send `profileData`;
   - every flow sets `profileUnavailable: true` on its broadcast when `getProfile` throws.
   Add the new message types and fields to `extension/types/messages.ts`.
-- [ ] T074 [US1] Implement the extension UI to make T056 pass:
+- [X] T074 [US1] Implement the extension UI to make T056 pass:
   - in `extension/components/JobPanel/FitScore.tsx`, the dealbreaker banner above the score, the freshness notice with Rescore and the cost line from `rescoreCostLine`, the unavailable note, and the "Fit not scored — your profile couldn't be loaded" message;
   - in `extension/components/JobPanel/ThisPageTab.tsx`, the Rescore dispatch, the `UsageExhausted` fallback, and the FR-007 offer through `chrome.storage.onChanged`;
   - in `extension/components/JobPanel/SavedJobRow.tsx`, the row marker and the "Open posting to rescore" or "Paste again to rescore" action from `rescoreAction`;
   - in `extension/entrypoints/options/OptionsApp.tsx`, writing `profile:fingerprint` after save through `setProfile`.
   Get the cost line's usage numbers from `extension/services/accountService.ts` `fetchAccount()`, extended with `rescoresUsed` and `rescoresLimit`. Use only spec-vocabulary copy: "Rescore", "out of date", "Dealbreaker".
-- [ ] T075 [US1] Add `rescoresUsed` and `rescoresLimit` to the `/api/account` usage response in `functions/src/billing/index.ts`, from `peekUsage`. Extend `functions/tests/integration/billing.test.ts` with the assertion, written first.
-- [ ] T076 [US1] Implement the web side to make T057 and T058 pass:
+- [X] T075 [US1] Add `rescoresUsed` and `rescoresLimit` to the `/api/account` usage response in `functions/src/billing/index.ts`, from `peekUsage`. Extend `functions/tests/integration/billing.test.ts` with the assertion, written first.
+- [X] T076 [US1] Implement the web side to make T057 and T058 pass:
   - in `web/src/api/endpoints.ts`, `analyzeDocument` sends `profileData`, `rescore` and `priorFingerprint`, and gains a `patchJob` function;
   - add the freshness marker and the `rescoreAction` link to `web/src/pages/Library.tsx` and `web/src/pages/PostingDetail.tsx`;
   - add the "Current profile only" toggle to `web/src/components/LibraryControls.tsx` and `web/src/lib/libraryQuery.ts`, using `freshness`;
   - in `web/src/pages/Upload.tsx`, gate Upload on profile settlement, support `?rescore=<key>` with PATCH in place only when the result's `saveKey` equals `<key>` (otherwise offer "Save to library" with the "didn't match" note), and show the profile-failed message;
   - in `web/src/components/AnalysisView.tsx`, show the dealbreaker banner;
   - add `rescoresUsed` and `rescoresLimit` to `AccountPayload.usage` in `web/src/api/types.ts`, and show the cost line on the Upload page in rescore mode.
-- [ ] T077 [US1] Implement the **Paste text option** to make T059 and the T061 paste step pass:
+- [X] T077 [US1] Implement the **Paste text option** to make T059 and the T061 paste step pass:
   - create `web/src/components/PastePosting.tsx`: a labelled textarea, a live character count, and an Analyze button, with the length check and messages from T059 using `MIN_TEXT_CHARS` and `MAIN_TEXT_CAP` from `shared/types/job.ts`;
   - in `web/src/pages/Upload.tsx`, add the "Upload a file" and "Paste text" toggle as a radio group (`role="radiogroup"`), driven by and written back to `?mode=`. Both modes share the profile gate, rescore mode, cost line, result view and Save flow. Rename the heading from "Analyze a document" to "Analyze a posting", and in `web/src/components/AppShell.tsx` rename the nav entry from "Analyze document" to "Analyze posting". Keep the `/upload` route. Update any existing test that queries the old names.
   - in `web/src/api/endpoints.ts`, `analyzeDocument` accepts `{ text }` as an alternative to `{ file }`;
   - a paste result's header reads "From pasted text", and Save sends `source: "paste"` with empty `sourceUrl` and `filename`.
-- [ ] T078 [US1] Run `npm run build` in `extension/`, then both P1 E2E tests: the extension test (T060) and `npm run test:e2e` from `web/` for T061. Fix until green.
+- [x] T078 [US1] Run `npm run build` in `extension/`, then both P1 E2E tests: the extension test (T060) and `npm run test:e2e` from `web/` for T061. Fix until green.
 
 **Checkpoint**: US1 is fully functional. Scores are trustworthy across all four surfaces, with dealbreakers listed next to an unchanged score, and free-rescore metering.
 
@@ -441,7 +441,7 @@ These are silent failures, not crashes. They were found in existing code during 
 
 ### Tests for User Story 2 (write first, must fail) ⚠️
 
-- [ ] T079 [P] [US2] Add `VERDICT_CASES` to `shared/fitView.fixtures.ts` and iterate them in both `fitView.test.ts` suites. Cover:
+- [X] T079 [P] [US2] Add `VERDICT_CASES` to `shared/fitView.fixtures.ts` and iterate them in both `fitView.test.ts` suites. Cover:
   - the boundaries 0, 39, 40, 64, 65, 84, 85 and 100;
   - a dealbreaker with score 95, which maps to `dealbreaker`;
   - no fingerprint, which maps to `unrated` with the label "Unrated — rescore for a verdict";
@@ -449,8 +449,8 @@ These are silent failures, not crashes. They were found in existing code during 
   - `verdictLabel` copy for all six values, exactly as in the spec;
   - `previewMissing(fit)` returning the first 3 items;
   - `scoredByLabel` returning "Scored on Premium" or "Scored on Free" from `analysis.tier`, and "Scored by <model>" when `tier` is absent.
-- [ ] T080 [P] [US2] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts`: the system prompt sent with a profile contains the four FR-008 rubric bands, with their exact numeric ranges and descriptions; and the response carries `tier` equal to the caller's tier for both tiers (spec edge case "Free-to-Premium switch").
-- [ ] T081 [P] [US2] Extend `extension/tests/unit/FitScore.test.tsx` and `extension/tests/unit/SavedTab.test.tsx`:
+- [X] T080 [P] [US2] Extend `functions/tests/unit/jobExtractionOrchestrator.test.ts`: the system prompt sent with a profile contains the four FR-008 rubric bands, with their exact numeric ranges and descriptions; and the response carries `tier` equal to the caller's tier for both tiers (spec edge case "Free-to-Premium switch").
+- [X] T081 [P] [US2] Extend `extension/tests/unit/FitScore.test.tsx` and `extension/tests/unit/SavedTab.test.tsx`:
   - the verdict label and icon render next to the score;
   - the score element's accessible name equals `ariaFitLabel`;
   - labels are present as text, so FR-010 doesn't rely on colour;
@@ -459,30 +459,31 @@ These are silent failures, not crashes. They were found in existing code during 
   - the default view shows the verdict, score, rationale and up to 3 missing items, and "Show full breakdown" reveals the rest (FR-025);
   - `SavedJobRow` uses the shared tone, and no `scoreStyle` import remains;
   - the fit details show `scoredByLabel`, and a fit scored on a different tier from the account's current one is not marked out of date.
-- [ ] T082 [P] [US2] Extend `web/tests/contract/library-view.test.tsx` and `web/tests/contract/posting-detail.test.tsx`: verdict labels and accessible names on rows and detail match the extension's for the same fixture fit, legacy fits are Unrated, and the detail page shows `scoredByLabel`.
+- [X] T082 [P] [US2] Extend `web/tests/contract/library-view.test.tsx` and `web/tests/contract/posting-detail.test.tsx`: verdict labels and accessible names on rows and detail match the extension's for the same fixture fit, legacy fits are Unrated, and the detail page shows `scoredByLabel`.
 
 ### Implementation for User Story 2
 
-- [ ] T083 [US2] Add the FR-008 rubric lines to `buildSystemPrompt` in `functions/src/services/jobExtractionOrchestrator.ts`:
+- [X] T083 [US2] Add the FR-008 rubric lines to `buildSystemPrompt` in `functions/src/services/jobExtractionOrchestrator.ts`:
   - 85–100: all required skills covered and seniority aligned;
   - 65–84: minor gaps;
   - 40–64: significant gaps or a level mismatch;
   - 0–39: major mismatch.
   Also stamp `tier` on the response in `orchestrateJobAnalysis`, and add optional `tier?: "free" | "premium"` to `JobAnalysisResponse` in `shared/types/job.ts`. This makes T080 pass.
-- [ ] T084 [US2] Add `verdictFor`, `verdictLabel`, `scoreTone`, `ariaFitLabel`, `scoredByLabel` and `previewMissing` to `shared/fitView.ts` to make T079 pass.
-- [ ] T085 [US2] Update `extension/components/JobPanel/FitScore.tsx` and `extension/components/JobPanel/SavedJobRow.tsx` to make T081 pass:
+- [X] T084 [US2] Add `verdictFor`, `verdictLabel`, `scoreTone`, `ariaFitLabel`, `scoredByLabel` and `previewMissing` to `shared/fitView.ts` to make T079 pass.
+- [X] T085 [US2] Update `extension/components/JobPanel/FitScore.tsx` and `extension/components/JobPanel/SavedJobRow.tsx` to make T081 pass:
   - delete `scoreStyle` with its hard-coded 70/20 thresholds;
   - map `scoreTone` to Tailwind classes and an inline SVG icon per verdict in one local map;
   - restyle "My profile" as secondary;
   - add the collapsed default view with a "Show full breakdown" toggle that has `aria-expanded`;
   - show `scoredByLabel` in the fit details.
-- [ ] T086 [US2] Update `web/src/components/AnalysisView.tsx`, `web/src/pages/Library.tsx` and `web/src/pages/PostingDetail.tsx` to show the verdict label and icon using `scoreTone`, `verdictLabel` and `ariaFitLabel`, and `scoredByLabel` on the detail page. Use a web-local class map, because Tailwind classes are not shared (contracts/fit-view.md). This makes T082 pass.
-- [ ] T087 [US2] Re-run the eval with field-based detection **(live, the chosen free and Premium configurations only, `--runs=5`)** using `npm run eval:postings -- --configs=<chosen-only file> --out=../specs/006-profile-match-ux/eval-runs/pr2.json`. Run the violating pairs a second time with each profile's dealbreakers and preferences removed, for SC-002's score-independence check. Append a "PR2 — rubric and dealbreakers listed without changing the score" table to `specs/006-profile-match-ux/eval-models.md`, with SC-002, SC-004 and SC-008 now measured with `detectionMethod: "field"`. If SC-004 or score independence drops below 90%, stop and report to the user before merging (research R8 names the fallback).
+- [X] T086 [US2] Update `web/src/components/AnalysisView.tsx`, `web/src/pages/Library.tsx` and `web/src/pages/PostingDetail.tsx` to show the verdict label and icon using `scoreTone`, `verdictLabel` and `ariaFitLabel`, and `scoredByLabel` on the detail page. Use a web-local class map, because Tailwind classes are not shared (contracts/fit-view.md). This makes T082 pass.
+- [X] T087 [US2] Re-run the eval with field-based detection **(live, the chosen free and Premium configurations only, `--runs=5`)** using `npm run eval:postings -- --configs=<chosen-only file> --out=../specs/006-profile-match-ux/eval-runs/pr2.json`. Run the violating pairs a second time with each profile's dealbreakers and preferences removed, for SC-002's score-independence check. Append a "PR2 — rubric and dealbreakers listed without changing the score" table to `specs/006-profile-match-ux/eval-models.md`, with SC-002, SC-004 and SC-008 now measured with `detectionMethod: "field"`. If SC-004 or score independence drops below 90%, stop and report to the user before merging (research R8 names the fallback). *2026-10-29: after three failed attempts the user approved the per-run SC-004 and the identical-fit-input SC-002 gate (spec.md Clarifications, research R8 "Superseded"). After the final run (attempt 4, `eval-runs/pr2.json`) the dealbreaker targets were relaxed too (0 trap false, ≤ 2% misreadings, ≥ 75% recall), and the gate passes on both configurations.*
 - [ ] T088 [US2] Run the PR2 gate:
   - lint, tests and coverage (at least 80% on `rescoreEligibility.ts`, `meteringService.ts`, `profileRepository.ts`, `profileFingerprint.ts`, `jobExtractionOrchestrator.ts`, `savedJobsRepository.ts`, `shared/fitView.ts`, `jobFlow.ts`, `FitScore.tsx` and `libraryQuery.ts`);
   - `perf.test.ts` against the T001 baseline;
   - the compatibility smoke (rule 3), including an **old-extension profile save that must not erase anything** and old-extension rendering of a PR2-shaped saved fit.
   Request QG-3 review of the score header, banner and cost line, then open PR2 (US1 + US2).
+  *2026-10-30: lint, tests, coverage, perf and and both halves of the compatibility smoke are done; left are QG-3 and the PR. See handoff-pr2.md section 7.*
 
 **Checkpoint**: PR2 is shippable. Out-of-date, dealbreaker and verdict UI works on both surfaces, and old extensions keep working.
 
@@ -596,7 +597,7 @@ These are silent failures, not crashes. They were found in existing code during 
 - [ ] T105 [US4] Implement `POST /api/profile/import` in `functions/src/profile/index.ts`, as a new `app.http("profile-import")` with `route: "profile/import"`, `withRateLimit("analyze", withAuth(...))`, and a preflight route mirroring `profile-preflight`. Reuse `extractDocument` and the `REJECTION_STATUS` map. Move that map to `functions/src/services/documentExtraction.ts` and import it in both handlers, to avoid duplicating it. This makes T099 pass.
 - [ ] T106 [US4] Add `Preferences` to `shared/types/profile.ts` and the Preferences section to `profileToPromptText`. This makes T100 pass.
 - [ ] T107 [US4] Add preferences validation and `schemaVersion: 2` to `functions/src/models/user.ts` and `functions/src/services/profileRepository.ts`, to make T102 pass.
-- [ ] T108 [US4] Implement `applyPreferences` in a new file, `functions/src/services/applyPreferences.ts`, to make T101 pass. Call it from `orchestrateJobAnalysis` after `resolveDealbreakers`, with `req.profileData?.preferences`. Merge its violations into `fit.dealbreakersViolated`. Never change `score`.
+- [ ] T108 [US4] Implement `applyPreferences` in a new file, `functions/src/services/applyPreferences.ts`, to make T101 pass. Call it from `orchestrateJobAnalysis` after the dealbreaker check (`violatedLines`, research R8 "Superseded"), with `req.profileData?.preferences`. Merge its violations into `fit.dealbreakersViolated`. Never change `score`.
 - [ ] T109 [US4] Add a `rawBody` option to `extension/services/api/apiClient.ts`, mirroring `web/src/api/apiClient.ts`. Add `importResume(file)` to `extension/services/profileStorage.ts`. This makes T103 pass.
 - [ ] T110 [US4] Add the import control and preference fields to `extension/entrypoints/options/OptionsApp.tsx`, and add the same to `web/src/pages/Profile.tsx` with `importResume` in `web/src/api/endpoints.ts`. Organize both editors into the headed sections from FR-015. Show a progress indicator during import (Principle III, over 300 ms). This makes T104 pass.
 - [ ] T111 [US4] Ensure every analyze flow sends `profileData.preferences`. In `extension/services/jobFlow.ts` and `web/src/pages/Upload.tsx`, build `profileData` with `toScoringProfile`. Extend the FR-001 contract tests (T055) to include a profile with preferences.

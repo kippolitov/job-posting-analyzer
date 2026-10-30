@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   fetchAccount,
   startCheckout,
@@ -19,6 +19,10 @@ declare const WXT_WEB_APP_URL: string;
  * having to reload the whole panel. */
 const RETRY_DELAY_MS = 5000;
 
+/** FR-028: hover tooltip and screen-reader description for the Web app button. */
+const WEB_APP_NOTE =
+  "Opens in a new tab. You'll be asked to sign in with Google.";
+
 /**
  * Plan, usage, and renewal state — always visible, never requiring the user
  * to hunt for it (contracts/billing-api.md, FR-013). Fetched on mount and on
@@ -33,6 +37,7 @@ export function AccountBar() {
   const [portalBusy, setPortalBusy] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
   const stopPollRef = useRef<(() => void) | null>(null);
+  const webAppNoteId = useId();
 
   const checkoutPending = useDelayedPending(checkoutBusy);
   const portalPending = useDelayedPending(portalBusy);
@@ -175,31 +180,37 @@ export function AccountBar() {
             </button>
           )}
           {WXT_WEB_APP_URL && (
-            <a
-              href={WXT_WEB_APP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open the web app in a new tab"
-              title="Open web app"
-              className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
+            <>
+              <a
+                href={WXT_WEB_APP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={WEB_APP_NOTE}
+                aria-describedby={webAppNoteId}
+                className="inline-flex min-h-6 min-w-6 shrink-0 items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                <path d="M15 3h6v6" />
-                <path d="M10 14 21 3" />
-              </svg>
-            </a>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <path d="M15 3h6v6" />
+                  <path d="M10 14 21 3" />
+                </svg>
+                Web app
+              </a>
+              <span id={webAppNoteId} className="sr-only">
+                {WEB_APP_NOTE}
+              </span>
+            </>
           )}
         </div>
       </div>

@@ -12,7 +12,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "lcov", "json-summary", "json"],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
-      include: ["services/**", "components/**", "entrypoints/**", "types/**", "lib/**"],
+      include: ["services/**", "components/**", "entrypoints/**", "types/**", "lib/**", "../shared/fitView.ts"],
       exclude: ["node_modules", "tests", "output"],
     },
   },

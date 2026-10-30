@@ -11,7 +11,7 @@ import {
   TEST_CLIENT_ID,
 } from "../helpers/testTokens";
 import { withAuth } from "../../src/services/auth";
-import { withUsageMetering } from "../../src/analyze-job/index";
+import { chargeForAnalysis } from "../../src/services/analysisMetering";
 import { jobsCollectionHandler } from "../../src/jobs/index";
 import { analyzeDocumentHandler } from "../../src/analyze-document/index";
 import { extractDocument, MAX_DOCUMENT_BYTES } from "../../src/services/documentExtraction";
@@ -104,7 +104,14 @@ describe("performance budgets (Azurite-backed)", () => {
     // The inner handler is a no-op, so the measured time is auth (token
     // verification + Users point-read/auto-create) plus metering (Usage
     // read + conditional create/update) — no OpenAI call is on this path.
-    const noop = withAuth(withUsageMetering(() => Promise.resolve({ status: 200 })));
+    const noop = withAuth(async (_request, ctx, user) => {
+      const outcome = await chargeForAnalysis(
+        { user, saveKey: "perf", intent: undefined, currentFingerprint: undefined },
+        ctx,
+        null
+      );
+      return outcome.ok ? { status: 200 } : outcome.response;
+    });
     const context = makeContext();
 
     await noop(makeRequest(token), context); // warm-up (also creates the Users row)

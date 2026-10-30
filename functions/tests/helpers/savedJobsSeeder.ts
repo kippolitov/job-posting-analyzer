@@ -62,3 +62,53 @@ export async function fillPartitionForTests(
     await client.submitTransaction(actions);
   }
 }
+
+/**
+ * Writes one saved posting whose analysis carries `fit` (006 rescore tests).
+ * `fit: null` models a saved posting that was never scored against a profile.
+ */
+export async function seedSavedJob(
+  sub: string,
+  canonicalUrl: string,
+  fit: Record<string, unknown> | null,
+  source: "url" | "document" | "paste" = "url"
+): Promise<void> {
+  const client = await ensureTable("SavedJobs");
+  await client.upsertEntity(
+    {
+      partitionKey: sub,
+      rowKey: createHash("sha256").update(canonicalUrl).digest("hex"),
+      canonicalUrl,
+      sourceUrl: source === "url" ? canonicalUrl : "",
+      title: "Seeded",
+      company: "Seed Co",
+      arrangement: "onsite",
+      status: "interested",
+      notes: "",
+      analysisJson: JSON.stringify({
+        isJobPosting: true,
+        title: "Seeded",
+        company: "Seed Co",
+        location: null,
+        arrangement: "onsite",
+        arrangementConfidence: "explicit",
+        arrangementEvidence: null,
+        daysInOffice: null,
+        daysRemote: null,
+        remoteRestrictions: null,
+        salary: null,
+        seniority: "senior",
+        techStack: [],
+        fit,
+        model: "seed",
+        analyzedAt: "2026-07-01T00:00:00.000Z",
+      }),
+      savedAt: "2026-07-01T00:00:00.000Z",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+      schemaVersion: 1,
+      source,
+      filename: source === "document" ? "valid.docx" : "",
+    },
+    "Replace"
+  );
+}

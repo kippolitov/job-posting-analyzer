@@ -1,4 +1,5 @@
 import type { CandidateProfile } from "../types/job";
+import type { ScoringProfile } from "../../shared/types/profile";
 import { ApiError, apiFetch } from "./api/apiClient";
 
 // Sized for a full pasted resume (a dense multi-page resume is ~15k chars).
@@ -24,12 +25,52 @@ async function throwUnexpected(response: Response): Promise<never> {
   throw new ApiError(response.status, "SERVICE_ERROR", message, false);
 }
 
+/**
+ * Session-scoped copy of the current profile's fingerprint (006 R7), so the
+ * panel can mark stale scores and react to a profile edit made elsewhere via
+ * `chrome.storage.onChanged`. `value: null` means the account has no profile.
+ */
+export const FINGERPRINT_KEY = "profile:fingerprint";
+
+interface CachedFingerprint {
+  value: string | null;
+  fetchedAt: number;
+}
+
+async function writeCachedFingerprint(value: string | null): Promise<void> {
+  try {
+    const entry: CachedFingerprint = { value, fetchedAt: Date.now() };
+    await chrome.storage.session.set({ [FINGERPRINT_KEY]: entry });
+  } catch {
+    // The cache is an optimisation; a storage failure must not fail the call.
+  }
+}
+
+/** `undefined` while unknown, `null` when the account has no profile. */
+export async function getCachedFingerprint(): Promise<string | null | undefined> {
+  try {
+    const stored = await chrome.storage.session.get(FINGERPRINT_KEY);
+    const entry = stored[FINGERPRINT_KEY] as CachedFingerprint | undefined;
+    return entry ? entry.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getProfile(): Promise<CandidateProfile | null> {
   const response = await apiFetch("/profile");
-  if (response.status === 404) return null;
+  if (response.status === 404) {
+    await writeCachedFingerprint(null);
+    return null;
+  }
   if (!response.ok) await throwUnexpected(response);
   const profile = (await response.json()) as CandidateProfile;
-  return profile.text.length > 0 ? profile : null;
+  if (profile.text.length === 0) {
+    await writeCachedFingerprint(null);
+    return null;
+  }
+  await writeCachedFingerprint(profile.fingerprint ?? null);
+  return profile;
 }
 
 export async function setProfile(input: {
@@ -38,12 +79,23 @@ export async function setProfile(input: {
 }): Promise<CandidateProfile> {
   const response = await apiFetch("/profile", { method: "PUT", body: input });
   if (!response.ok) await throwUnexpected(response);
-  return (await response.json()) as CandidateProfile;
+  const saved = (await response.json()) as CandidateProfile;
+  await writeCachedFingerprint(saved.fingerprint ?? null);
+  return saved;
 }
 
 export async function clearProfile(): Promise<void> {
   const response = await apiFetch("/profile", { method: "DELETE" });
   if (!response.ok && response.status !== 204) await throwUnexpected(response);
+  await writeCachedFingerprint(null);
+}
+
+/** The shape analysis requests carry as `profileData`. */
+export function toScoringProfile(profile: {
+  text: string;
+  dealbreakers: string[];
+}): ScoringProfile {
+  return { text: profile.text, dealbreakers: profile.dealbreakers };
 }
 
 /** Serialized form sent with analysis requests (pure; shared with the web app). */

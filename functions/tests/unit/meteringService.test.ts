@@ -82,7 +82,8 @@ describe("checkAndIncrement — first-of-month create", () => {
 
     expect(updateSpy).toHaveBeenCalledTimes(1);
     const [, mode, options] = updateSpy.mock.calls[0];
-    expect(mode).toBe("Replace");
+    // Merge, never Replace: Replace would erase rescoresUsed (006 research R6, trap 1).
+    expect(mode).toBe("Merge");
     expect(options).toBeDefined();
     expect((options as { etag?: string }).etag).toBeTruthy();
     expect((options as { etag?: string }).etag).not.toBe("*");

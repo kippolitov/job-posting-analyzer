@@ -82,7 +82,10 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
       new Response(JSON.stringify(analysis), { status: 200 })
     );
 
-    await expect(postJobAnalysis({ extract })).resolves.toEqual(analysis);
+    await expect(postJobAnalysis({ extract })).resolves.toEqual({
+      analysis,
+      postingUnavailable: false,
+    });
 
     const [url, init] = vi.mocked(fetch).mock.calls[0]!;
     expect(String(url)).toContain("/api/analyze-job");
@@ -121,7 +124,10 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
       user: { sub: "s", email: "e@example.com" },
     });
 
-    await expect(postJobAnalysis({ extract })).resolves.toEqual(analysis);
+    await expect(postJobAnalysis({ extract })).resolves.toEqual({
+      analysis,
+      postingUnavailable: false,
+    });
     expect(signInSilently).toHaveBeenCalledTimes(1);
     const retryInit = vi.mocked(fetch).mock.calls[1]![1] as RequestInit;
     expect((retryInit.headers as Record<string, string>).Authorization).toBe(
@@ -165,6 +171,55 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
     ) as Record<string, unknown>;
     expect(body.profile).toBe("Senior .NET engineer");
     expect(body.assumeJobPosting).toBe(true);
+  });
+
+  it("sends profileData, profile and rescore, and surfaces usage and postingUnavailable (T054)", async () => {
+    const usage = {
+      count: 3,
+      limit: 50,
+      resetsAt: "2026-11-01T00:00:00Z",
+      tier: "free",
+      charged: "rescore",
+      rescoresUsed: 1,
+      rescoresLimit: 10,
+    };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ ...analysis, usage, postingUnavailable: true }),
+        { status: 200 }
+      )
+    );
+    const profileData = { text: "Senior engineer", dealbreakers: ["no on-site"] };
+
+    const result = await postJobAnalysis({
+      extract,
+      profileData,
+      profile: "Senior engineer\n\nDealbreakers:\n- no on-site",
+      rescore: { priorFingerprint: "a".repeat(64) },
+    });
+
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string
+    ) as Record<string, unknown>;
+    expect(body.profileData).toEqual(profileData);
+    expect(body.profile).toBe("Senior engineer\n\nDealbreakers:\n- no on-site");
+    expect(body.rescore).toEqual({ priorFingerprint: "a".repeat(64) });
+    expect(result.analysis).toEqual(analysis);
+    expect(result.analysis).not.toHaveProperty("usage");
+    expect(result.usage).toEqual(usage);
+    expect(result.postingUnavailable).toBe(true);
+  });
+
+  it("omits rescore and profileData when not given", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify(analysis), { status: 200 })
+    );
+    await postJobAnalysis({ extract });
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]![1] as RequestInit).body as string
+    ) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("rescore");
+    expect(body).not.toHaveProperty("profileData");
   });
 
   it("rejects with not-configured when no endpoint is available", async () => {

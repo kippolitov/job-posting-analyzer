@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { canonicalKey } from "../../lib/canonicalUrl";
 import { formatSalary } from "../../lib/formatSalary";
 import type { JobStatus, SavedJob } from "../../types/job";
 import { JOB_STATUSES } from "../../types/job";
 import { ArrangementBadge } from "./ArrangementBadge";
-import { scoreStyle } from "./FitScore";
+import { freshnessLabel, VerdictBadge } from "./FitScore";
+import { freshness, rescoreAction } from "../../../shared/fitView";
+
+declare const WXT_WEB_APP_URL: string;
 
 const TECH_STACK_PREVIEW = 6;
 
 interface SavedJobRowProps {
   job: SavedJob;
+  /** `undefined` = not known yet, `null` = the account has no profile. */
+  currentFingerprint?: string | null;
   onStatusChange: (canonicalUrl: string, status: JobStatus) => void;
   onNotesChange: (canonicalUrl: string, notes: string) => void;
   onDelete: (canonicalUrl: string) => void;
@@ -16,12 +22,28 @@ interface SavedJobRowProps {
 
 export function SavedJobRow({
   job,
+  currentFingerprint,
   onStatusChange,
   onNotesChange,
   onDelete,
 }: SavedJobRowProps) {
   const [notes, setNotes] = useState(job.notes);
   const title = job.analysis.title ?? "Untitled posting";
+  const fitFreshness = freshness(job.analysis.fit, currentFingerprint);
+  const staleLabel = freshnessLabel(fitFreshness);
+  // Document and paste rescore links carry the saved key, which the library
+  // derives from the canonical URL.
+  const [saveKey, setSaveKey] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    void canonicalKey(job.canonicalUrl).then((key) => {
+      if (!cancelled) setSaveKey(key);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [job.canonicalUrl]);
+  const action = rescoreAction({ ...job, saveKey }, fitFreshness, "list");
 
   return (
     <li className="rounded-xl border border-gray-200/70 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
@@ -66,12 +88,8 @@ export function SavedJobRow({
       {(job.analysis.fit || job.analysis.salary) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {job.analysis.fit && (
-            <span
-              aria-label={`Fit score: ${job.analysis.fit.score} out of 100`}
-              title={job.analysis.fit.rationale}
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${scoreStyle(job.analysis.fit.score)}`}
-            >
-              Fit {job.analysis.fit.score}
+            <span title={job.analysis.fit.rationale}>
+              <VerdictBadge fit={job.analysis.fit} compact />
             </span>
           )}
           {job.analysis.salary && (
@@ -80,6 +98,34 @@ export function SavedJobRow({
             </span>
           )}
         </div>
+      )}
+
+      {staleLabel && (
+        <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+          {staleLabel}
+          {action.kind !== "none" && action.kind !== "rescore-here" && (
+            <>
+              {" · "}
+              <a
+                href={
+                  action.href.startsWith("/")
+                    ? `${WXT_WEB_APP_URL}${action.href}`
+                    : action.href
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold underline"
+              >
+                {action.label}
+              </a>
+            </>
+          )}
+        </p>
+      )}
+      {job.unavailableAt && (
+        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+          Posting no longer available — score can&rsquo;t be updated
+        </p>
       )}
 
       {job.analysis.techStack.length > 0 && (

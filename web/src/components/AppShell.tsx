@@ -25,7 +25,7 @@ export function AppShell() {
             Compare
           </NavLink>
           <NavLink to="/upload" className={navLinkClass}>
-            Analyze document
+            Analyze posting
           </NavLink>
           <NavLink to="/profile" className={navLinkClass}>
             Profile

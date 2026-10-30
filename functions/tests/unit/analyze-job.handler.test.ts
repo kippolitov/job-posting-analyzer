@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { randomUUID } from "node:crypto";
 import type { HttpRequest, InvocationContext } from "@azure/functions";
-import { analyzeJobHandler, withUsageMetering } from "../../src/analyze-job/index";
+import { analyzeJobHandler } from "../../src/analyze-job/index";
 import { withAuth } from "../../src/services/auth";
 import { JobSchemaError } from "../../src/services/jobExtractionOrchestrator";
 import {
@@ -45,7 +45,9 @@ function makeContext(): InvocationContext {
   } as unknown as InvocationContext;
 }
 
-const testUser = { sub: "test-sub", email: "user@example.com", tier: "free" as const };
+// Unique per run: the handler meters against Azurite, so a fixed sub would
+// accumulate usage across runs.
+const testUser = { sub: `test-sub-${randomUUID()}`, email: "user@example.com", tier: "free" as const };
 
 const validBody = {
   extract: {
@@ -236,9 +238,10 @@ describe("analyze-job handler", () => {
     vi.mocked(orchestrateJobAnalysis).mockRejectedValue(
       new ModelConfigError("AZURE_OPENAI_JOB_TEMPERATURE must be a number in [0, 2]")
     );
-    const wrapped = withUsageMetering(analyzeJobHandler);
-
-    const res = await wrapped(makeRequest(validBody), makeContext(), { ...testUser, sub });
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), {
+      ...testUser,
+      sub,
+    });
     expect(res.status).toBe(500);
     await vi.waitFor(async () => {
       expect((await readUsage(sub)).count).toBe(5);
@@ -295,18 +298,27 @@ async function readUsage(sub: string): Promise<{ count: number }> {
   };
 }
 
-describe("withUsageMetering", () => {
+describe("analyze-job metering (moved from withUsageMetering, 006 §4)", () => {
+  const success = () =>
+    vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
+      ...hybridAnalysis,
+      model: "gpt-4o-mini",
+      analyzedAt: "2026-07-04T12:00:04Z",
+    } as never);
+
+  beforeEach(() => {
+    vi.mocked(orchestrateJobAnalysis).mockReset();
+  });
+
   afterEach(() => {
     delete process.env.METERING_ENFORCED;
   });
 
-  it("returns 429 USAGE_LIMIT_REACHED before the wrapped handler runs when the allowance is exhausted", async () => {
+  it("returns 429 USAGE_LIMIT_REACHED before the model runs when the allowance is exhausted", async () => {
     const sub = uniqueSub();
     await seedUsage(sub, MONTHLY_ANALYSES.free, MONTHLY_ANALYSES.free);
-    const inner = vi.fn();
-    const wrapped = withUsageMetering(inner);
 
-    const res = await wrapped(makeRequest(validBody), makeContext(), {
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), {
       ...testUser,
       sub,
     });
@@ -315,57 +327,97 @@ describe("withUsageMetering", () => {
       error: { code: "USAGE_LIMIT_REACHED" },
       usage: { count: MONTHLY_ANALYSES.free, limit: MONTHLY_ANALYSES.free, tier: "free" },
     });
-    expect(inner).not.toHaveBeenCalled();
+    expect(orchestrateJobAnalysis).not.toHaveBeenCalled();
   });
 
   it("echoes usage on a 200 response, additive to the existing body", async () => {
+    success();
     const sub = uniqueSub();
-    const inner = vi.fn().mockResolvedValue({
-      status: 200,
-      jsonBody: { isJobPosting: true },
-    });
-    const wrapped = withUsageMetering(inner);
-
-    const res = await wrapped(makeRequest(validBody), makeContext(), {
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), {
       ...testUser,
       sub,
     });
     expect(res.status).toBe(200);
     expect(res.jsonBody).toMatchObject({
-      isJobPosting: true,
-      usage: { count: 1, limit: MONTHLY_ANALYSES.free, tier: "free" },
+      arrangement: "hybrid",
+      usage: { count: 1, limit: MONTHLY_ANALYSES.free, tier: "free", charged: "analysis" },
     });
     expect((await readUsage(sub)).count).toBe(1);
   });
 
-  it("best-effort refunds the increment when the wrapped handler fails with a system error", async () => {
+  it("best-effort refunds the increment on a system error", async () => {
+    vi.mocked(orchestrateJobAnalysis).mockRejectedValue(new Error("boom"));
     const sub = uniqueSub();
     await seedUsage(sub, 5, MONTHLY_ANALYSES.free);
-    const inner = vi.fn().mockResolvedValue({
-      status: 500,
-      jsonBody: { error: { code: "SERVICE_ERROR" } },
-    });
-    const wrapped = withUsageMetering(inner);
-
-    await wrapped(makeRequest(validBody), makeContext(), { ...testUser, sub });
-    // Increment (5 -> 6) then refund (6 -> 5): net unchanged.
+    await analyzeJobHandler(makeRequest(validBody), makeContext(), { ...testUser, sub });
     await vi.waitFor(async () => {
       expect((await readUsage(sub)).count).toBe(5);
     });
   });
 
   it("METERING_ENFORCED=false counts but never blocks (shadow mode)", async () => {
+    success();
     process.env.METERING_ENFORCED = "false";
     const sub = uniqueSub();
     await seedUsage(sub, MONTHLY_ANALYSES.free, MONTHLY_ANALYSES.free);
-    const inner = vi.fn().mockResolvedValue({ status: 200, jsonBody: {} });
-    const wrapped = withUsageMetering(inner);
-
-    const res = await wrapped(makeRequest(validBody), makeContext(), {
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), {
       ...testUser,
       sub,
     });
     expect(res.status).toBe(200);
-    expect(inner).toHaveBeenCalledTimes(1);
+    expect(orchestrateJobAnalysis).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("analyze-job charges only after validation (contracts/analyze-api.md §4)", () => {
+  beforeEach(() => {
+    vi.mocked(orchestrateJobAnalysis).mockReset();
+  });
+
+  async function usageOrNull(sub: string): Promise<number | null> {
+    const client = await ensureTable("Usage");
+    try {
+      return (await client.getEntity<{ count: number }>(sub, usageRowKey())).count;
+    } catch {
+      return null;
+    }
+  }
+
+  it.each([
+    ["invalid JSON", new Error("bad json"), 400],
+    ["a missing extract", { profile: "x" }, 400],
+    ["an oversized mainText", { extract: { ...validBody.extract, mainText: "x".repeat(40_001) } }, 413],
+    [
+      "malformed profileData",
+      { ...validBody, profileData: { text: 1, dealbreakers: [] } },
+      400,
+    ],
+  ])("%s leaves the allowance untouched", async (_name, body, status) => {
+    const sub = uniqueSub();
+    const res = await analyzeJobHandler(makeRequest(body), makeContext(), { ...testUser, sub });
+    expect(res.status).toBe(status);
+    expect(await usageOrNull(sub)).toBeNull();
+    expect(orchestrateJobAnalysis).not.toHaveBeenCalled();
+  });
+
+  it(
+    "N parallel requests at the cap produce exactly one 200",
+    async () => {
+      vi.mocked(orchestrateJobAnalysis).mockResolvedValue({
+        ...hybridAnalysis,
+        model: "gpt-4o-mini",
+        analyzedAt: "2026-07-04T12:00:04Z",
+      } as never);
+      const sub = uniqueSub();
+      await seedUsage(sub, MONTHLY_ANALYSES.free - 1, MONTHLY_ANALYSES.free);
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          analyzeJobHandler(makeRequest(validBody), makeContext(), { ...testUser, sub })
+        )
+      );
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      expect(results.filter((r) => r.status === 429)).toHaveLength(9);
+    },
+    30_000
+  );
 });

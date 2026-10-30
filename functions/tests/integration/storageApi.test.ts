@@ -156,6 +156,36 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
       expect(get.jsonBody).toMatchObject({ text: "Engineer" });
     });
 
+    it("GET and PUT include the profile fingerprint, but never fingerprintHistory (006)", async () => {
+      const user = makeTestUser();
+      const put = await profile(
+        makeRequest({
+          method: "PUT",
+          token: user.token,
+          body: { text: "Engineer", dealbreakers: ["Remote only"] },
+        }),
+        makeContext()
+      );
+      const fingerprint = (put.jsonBody as { fingerprint: string }).fingerprint;
+      expect(fingerprint).toMatch(/^[0-9a-f]{64}$/);
+
+      await profile(
+        makeRequest({
+          method: "PUT",
+          token: user.token,
+          body: { text: "Engineer v2", dealbreakers: ["Remote only"] },
+        }),
+        makeContext()
+      );
+      const get = await profile(
+        makeRequest({ method: "GET", token: user.token }),
+        makeContext()
+      );
+      expect(get.jsonBody).toHaveProperty("fingerprint");
+      expect((get.jsonBody as { fingerprint: string }).fingerprint).not.toBe(fingerprint);
+      expect(get.jsonBody).not.toHaveProperty("fingerprintHistory");
+    });
+
     it("PUT rejects malformed bodies with 400 INVALID_REQUEST", async () => {
       const user = makeTestUser();
       const res = await profile(
@@ -320,6 +350,53 @@ describe("storage API endpoints (integration: certs stub + Azurite)", () => {
         makeContext()
       );
       expect(immutable.status).toBe(400);
+    });
+
+    it("PATCH sets unavailableAt, GET and list return it, and an invalid date is a 400 (006)", async () => {
+      const user = makeTestUser();
+      const job = makeJobBody();
+      const key = keyOf(job.canonicalUrl);
+      await jobsItem(
+        makeRequest({ method: "PUT", token: user.token, body: job, params: { key } }),
+        makeContext()
+      );
+
+      const stamp = "2026-10-29T10:00:00.000Z";
+      const patch = await jobsItem(
+        makeRequest({
+          method: "PATCH",
+          token: user.token,
+          body: { unavailableAt: stamp },
+          params: { key },
+        }),
+        makeContext()
+      );
+      expect(patch.status).toBe(200);
+      expect(patch.jsonBody).toMatchObject({ unavailableAt: stamp });
+
+      const get = await jobsItem(
+        makeRequest({ method: "GET", token: user.token, params: { key } }),
+        makeContext()
+      );
+      expect(get.jsonBody).toMatchObject({ unavailableAt: stamp });
+
+      const list = await jobsCollection(
+        makeRequest({ method: "GET", token: user.token }),
+        makeContext()
+      );
+      expect(JSON.stringify(list.jsonBody)).toContain(stamp);
+
+      const invalid = await jobsItem(
+        makeRequest({
+          method: "PATCH",
+          token: user.token,
+          body: { unavailableAt: "not a date" },
+          params: { key },
+        }),
+        makeContext()
+      );
+      expect(invalid.status).toBe(400);
+      expect(invalid.jsonBody).toMatchObject({ error: { code: "INVALID_REQUEST" } });
     });
 
     it("DELETE returns 204 and is idempotent", async () => {

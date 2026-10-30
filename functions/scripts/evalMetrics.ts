@@ -99,8 +99,25 @@ export function bandFor(score: number, violations: readonly string[]): Band {
   return "long-shot";
 }
 
-/** Share of pairs whose band is identical across every run (SC-004). NaN when empty. */
+/**
+ * SC-004: share of all runs that give their pair's most common verdict.
+ * Measured per run, not per pair, so one borderline score in five runs costs
+ * one run rather than the whole pair (approved 2026-10-29). NaN when empty.
+ */
 export function verdictStability(runsByPair: Record<string, Band[]>): number {
+  let runs = 0;
+  let agreeing = 0;
+  for (const bands of Object.values(runsByPair)) {
+    const counts = new Map<Band, number>();
+    for (const band of bands) counts.set(band, (counts.get(band) ?? 0) + 1);
+    runs += bands.length;
+    agreeing += Math.max(0, ...counts.values());
+  }
+  return runs === 0 ? NaN : agreeing / runs;
+}
+
+/** Share of pairs whose band is identical across every run (the pre-2026-10-29 SC-004, reported only). */
+export function identicalVerdictShare(runsByPair: Record<string, Band[]>): number {
   const pairs = Object.values(runsByPair).filter((bands) => bands.length > 0);
   if (pairs.length === 0) return NaN;
   const stable = pairs.filter((bands) => bands.every((band) => band === bands[0])).length;
@@ -133,7 +150,7 @@ export function reportedViolations(result: ScoredResult): {
 function tally(
   results: ScoredResult[],
   pairs: PairLabel[],
-  pick: (reported: string[], labelled: string[]) => string[]
+  pick: (reported: string[], labelled: string[], label: PairLabel) => string[]
 ): DealbreakerTally {
   const labels = new Map(pairs.map((p) => [pairKey(p.posting, p.profile), p]));
   const methods = new Set<DetectionMethod>();
@@ -143,7 +160,7 @@ function tally(
     if (!label) continue;
     const { violations, method } = reportedViolations(result);
     methods.add(method);
-    for (const line of pick(violations, label.violations)) {
+    for (const line of pick(violations, label.violations, label)) {
       details.push(`${pairKey(result.posting, result.profile)}: ${line}`);
     }
   }
@@ -161,9 +178,55 @@ export function falseDealbreakers(results: ScoredResult[], pairs: PairLabel[]): 
   return tally(results, pairs, (reported, labelled) => missingFrom(reported, labelled));
 }
 
-/** Labelled violations not reported (SC-002, target 0). */
+/** Labelled violations not reported (SC-002 reports them; `dealbreakerRecall` gates). */
 export function missedDealbreakers(results: ScoredResult[], pairs: PairLabel[]): DealbreakerTally {
   return tally(results, pairs, (reported, labelled) => missingFrom(labelled, reported));
+}
+
+/**
+ * Splits false dealbreakers (approved 2026-10-29). A **trap** is claimed for a
+ * fact the posting does not state: the line's fact (`facts`, from pairs.json
+ * `dealbreakerFacts`) is in the pair's `unstatedFacts`. SC-008 allows none. A
+ * line with no known fact counts as a trap, the stricter reading. The rest
+ * misread a fact the posting does state.
+ */
+export function splitFalseDealbreakers(
+  results: ScoredResult[],
+  pairs: PairLabel[],
+  facts: Record<string, string>
+): { trap: DealbreakerTally; stated: DealbreakerTally } {
+  const factOf = new Map(Object.entries(facts).map(([line, fact]) => [normalize(line), fact]));
+  const isTrap = (line: string, label: PairLabel) => {
+    const fact = factOf.get(normalize(line));
+    return fact === undefined || label.unstatedFacts.includes(fact);
+  };
+  return {
+    trap: tally(results, pairs, (reported, labelled, label) =>
+      missingFrom(reported, labelled).filter((line) => isTrap(line, label))
+    ),
+    stated: tally(results, pairs, (reported, labelled, label) =>
+      missingFrom(reported, labelled).filter((line) => !isTrap(line, label))
+    ),
+  };
+}
+
+/** Dealbreaker lines judged: one per line, per scored result with a labelled pair. */
+export function dealbreakerChecks(results: ScoredResult[], pairs: PairLabel[]): number {
+  const labelled = new Set(pairs.map((p) => pairKey(p.posting, p.profile)));
+  return results
+    .filter((r) => r.fit && labelled.has(pairKey(r.posting, r.profile)))
+    .reduce((sum, r) => sum + r.dealbreakers.length, 0);
+}
+
+/** SC-002 (≥ 75%, approved 2026-10-29): share of labelled violations reported, over every run. NaN when none. */
+export function dealbreakerRecall(results: ScoredResult[], pairs: PairLabel[]): number {
+  const labels = new Map(pairs.map((p) => [pairKey(p.posting, p.profile), p]));
+  const expected = results.reduce(
+    (sum, r) => sum + (labels.get(pairKey(r.posting, r.profile))?.violations.length ?? 0),
+    0
+  );
+  if (expected === 0) return NaN;
+  return (expected - missedDealbreakers(results, pairs).count) / expected;
 }
 
 function medianScoreByPair(samples: ScoreSample[]): Map<string, number> {
@@ -172,10 +235,14 @@ function medianScoreByPair(samples: ScoreSample[]): Map<string, number> {
   return new Map([...byPair].map(([pair, scores]) => [pair, median(scores)]));
 }
 
+/** Points two median scores may differ by and still count as the same score. */
+const SCORE_TOLERANCE = 5;
+
 /**
- * SC-002: share of violating pairs whose band, computed from the score alone,
- * is the same with and without the profile's dealbreakers. Runs are reduced to
- * the median score per pair. NaN when no pair is in both runs.
+ * SC-002, reported only: share of violating pairs whose median score is within
+ * SCORE_TOLERANCE points with and without the profile's dealbreakers. With
+ * identical fit input (`fitInputIndependence`) the difference is run-to-run
+ * noise. NaN when no pair is in both runs.
  */
 export function scoreIndependence(
   withDealbreakers: ScoreSample[],
@@ -186,9 +253,26 @@ export function scoreIndependence(
   const compared = [...withScores].filter(([pair]) => withoutScores.has(pair));
   if (compared.length === 0) return NaN;
   const same = compared.filter(
-    ([pair, score]) => bandFor(score, []) === bandFor(withoutScores.get(pair)!, [])
+    ([pair, score]) => Math.abs(score - withoutScores.get(pair)!) <= SCORE_TOLERANCE
   ).length;
   return same / compared.length;
+}
+
+export interface FitInputPair {
+  pair: string;
+  /** The serialized fit-call input for the full profile and for the stripped one. */
+  withDealbreakers: string;
+  withoutDealbreakers: string;
+}
+
+/**
+ * SC-002 gate (approved 2026-10-29): share of violating pairs whose fit call
+ * receives identical input with and without dealbreakers, so the score cannot
+ * depend on them. NaN when empty.
+ */
+export function fitInputIndependence(pairs: FitInputPair[]): number {
+  if (pairs.length === 0) return NaN;
+  return pairs.filter((p) => p.withDealbreakers === p.withoutDealbreakers).length / pairs.length;
 }
 
 /**

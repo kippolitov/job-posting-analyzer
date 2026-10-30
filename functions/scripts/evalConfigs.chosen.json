@@ -1,0 +1,4 @@
+[
+  { "label": "free-luna-none", "tier": "free", "deployment": "gpt-6-luna", "reasoningEffort": "none", "gate": true },
+  { "label": "premium-luna-low", "tier": "premium", "deployment": "gpt-6-luna-premium", "reasoningEffort": "low", "gate": true }
+]

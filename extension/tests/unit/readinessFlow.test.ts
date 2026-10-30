@@ -179,6 +179,8 @@ describe("readiness — cancellation (T015, FR-006/FR-006b)", () => {
       provenance: provenance(),
     });
     vi.mocked(postJobAnalysis).mockResolvedValue({
+    postingUnavailable: false,
+    analysis: {
       isJobPosting: true,
       title: "Engineer",
       company: "Acme",
@@ -195,6 +197,7 @@ describe("readiness — cancellation (T015, FR-006/FR-006b)", () => {
       fit: null,
       model: "gpt-4o-mini",
       analyzedAt: "2026-07-26T12:00:01Z",
+    },
     });
 
     const messages = await runFlow();

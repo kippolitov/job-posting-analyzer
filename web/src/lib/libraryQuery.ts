@@ -1,5 +1,6 @@
 import type { SavedJobPayload } from "@/api/types";
 import type { Arrangement, JobStatus, Seniority } from "shared/types/job";
+import { freshness } from "shared/fitView";
 
 export type SortKey = "fit-desc" | "fit-asc" | "saved-desc" | "saved-asc";
 
@@ -12,6 +13,8 @@ export interface LibraryQuery {
   /** Fit range 0–100. */
   fitMin?: number;
   fitMax?: number;
+  /** Hide every posting not scored against the current profile (FR-008). */
+  currentProfileOnly?: boolean;
   sort: SortKey;
 }
 
@@ -31,10 +34,18 @@ function fitScore(job: SavedJobPayload): number | null {
 /** Pure search + filter + sort over the fetched library (no backend involvement). */
 export function applyLibraryQuery(
   jobs: SavedJobPayload[],
-  query: LibraryQuery
+  query: LibraryQuery,
+  /** `undefined` = not known yet, `null` = no profile; only used by `currentProfileOnly`. */
+  currentFingerprint?: string | null
 ): SavedJobPayload[] {
   const filtered = jobs.filter((job) => {
     if (!matchesText(job, query.text)) return false;
+    if (
+      query.currentProfileOnly &&
+      freshness(job.analysis.fit, currentFingerprint) !== "current"
+    ) {
+      return false;
+    }
     if (query.status && job.status !== query.status) return false;
     if (query.arrangement && job.analysis.arrangement !== query.arrangement) return false;
     if (query.seniority && job.analysis.seniority !== query.seniority) return false;
@@ -67,7 +78,7 @@ export function applyLibraryQuery(
 }
 
 export interface FilterChip {
-  key: "status" | "arrangement" | "seniority" | "fit";
+  key: "status" | "arrangement" | "seniority" | "fit" | "currentProfileOnly";
   label: string;
 }
 
@@ -81,6 +92,9 @@ export function activeFilterSummary(query: LibraryQuery): FilterChip[] {
   if (query.seniority) chips.push({ key: "seniority", label: `Seniority: ${query.seniority}` });
   if (query.fitMin !== undefined || query.fitMax !== undefined) {
     chips.push({ key: "fit", label: `Fit: ${query.fitMin ?? 0}–${query.fitMax ?? 100}` });
+  }
+  if (query.currentProfileOnly) {
+    chips.push({ key: "currentProfileOnly", label: "Current profile only" });
   }
   return chips;
 }

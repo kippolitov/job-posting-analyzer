@@ -50,6 +50,7 @@ describe("profile dealbreakers on the web (parity with the extension)", () => {
     render(<App />);
 
     const input = await screen.findByLabelText(/upload a document/i);
+    await waitFor(() => expect(input).toBeEnabled());
     await waitFor(() => expect(api.calls.profile).toBe(1));
     await userEvent.upload(
       input,

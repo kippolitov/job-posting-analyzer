@@ -8,12 +8,12 @@
     "build:production": "npm run build && func pack",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run --reporter=verbose tests/unit",
-    "test:integration": "vitest run --reporter=verbose tests/integration",
+    "test:integration": "vitest run --reporter=verbose --fileParallelism=false tests/integration",
     "azurite": "azurite-table --location .azurite --silent",
     "users": "tsx scripts/manage-users.ts",
     "migrate-allowlist": "tsx scripts/migrate-allowlist.ts",
     "eval:postings": "npx tsx scripts/evalPostings.ts",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage --fileParallelism=false"
   },
   "main": "dist/functions/src/index.js",
   "dependencies": {

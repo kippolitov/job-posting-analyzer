@@ -1,11 +1,14 @@
 import { Link, useParams } from "react-router-dom";
 import { AnalysisView } from "@/components/AnalysisView";
+import { FreshnessMarker } from "@/components/FreshnessMarker";
+import { useCurrentFingerprint } from "@/lib/useCurrentFingerprint";
 import { useLibrary } from "@/lib/useLibrary";
 
 /** Full stored analysis for one posting (FR-008, spec US1 scenario 2). */
 export function PostingDetail() {
   const { key } = useParams<{ key: string }>();
   const state = useLibrary();
+  const currentFingerprint = useCurrentFingerprint();
 
   if (state.status === "idle" || state.status === "loading") {
     return <div className="p-6 text-sm text-gray-500">Loading…</div>;
@@ -38,6 +41,7 @@ export function PostingDetail() {
       <Link to="/library" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
         ← Back to library
       </Link>
+      <FreshnessMarker job={job} currentFingerprint={currentFingerprint} />
       <AnalysisView analysis={job.analysis} />
       {job.notes && (
         <div>

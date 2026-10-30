@@ -23,6 +23,10 @@ export const SAVED_JOBS_SOFT_CAP = 1_000;
 
 /** The only place per-tier limits live (data-model.md "Per-tier entitlements"). */
 export const MONTHLY_ANALYSES: Record<Tier, number> = { free: 50, premium: 300 };
+/** Free rescores per month, the same on both tiers (006 research R6, FR-026). */
+export const FREE_RESCORES_PER_MONTH = 10;
+/** Refunded "posting unavailable" rescores per month (006 research R6, FR-003a). */
+export const UNAVAILABLE_REFUNDS_PER_MONTH = 10;
 export const SAVED_JOBS_CAP: Record<Tier, number> = {
   free: 100,
   premium: SAVED_JOBS_SOFT_CAP,
@@ -65,6 +69,10 @@ export interface UsageEntity {
   rowKey: string;
   count: number;
   limit: number;
+  /** Free rescores used this month (006). Absent on older rows; reads as 0. */
+  rescoresUsed?: number;
+  /** "Posting unavailable" refunds granted this month (006). Absent reads as 0. */
+  unavailableRefunds?: number;
 }
 
 export function isUsageEntity(value: unknown): value is UsageEntity {
@@ -122,6 +130,12 @@ export interface ProfileEntity {
   dealbreakers: string;
   updatedAt: string;
   schemaVersion: number;
+  /** JSON-encoded string[]: the last 20 previous fingerprints, newest first (006 R5/R6). */
+  fingerprintHistory?: string;
+  /** JSON-encoded Preferences (006 PR4). Absent means none. */
+  preferences?: string;
+  /** JSON-encoded string[] (006 PR5). */
+  confirmedSkills?: string;
 }
 
 /** Discriminates a saved posting's origin (data-model.md §2; "paste" added by 005 FR-020/FR-021). */
@@ -147,6 +161,8 @@ export interface SavedJobEntity {
   source?: string;
   /** Absent on rows written before 004 — the repository defaults to "" on read. */
   filename?: string;
+  /** ISO timestamp of a rescore that found no posting (006 R7). Absent or "" when available. */
+  unavailableAt?: string;
 }
 
 /** Wire shape of a saved job (matches the extension's `SavedJob`). */
@@ -163,6 +179,8 @@ export interface SavedJobPayload {
   notes: string;
   savedAt: string;
   updatedAt: string;
+  /** Set after a rescore finds no posting; omitted when the posting is available (006). */
+  unavailableAt?: string | null;
 }
 
 /** The persisted analysis snapshot: model output plus server-appended fields. */
@@ -175,18 +193,32 @@ export interface SavedJobAnalysis extends Record<string, unknown> {
   analyzedAt: string;
 }
 
+/**
+ * PUT /api/profile body. Merge semantics (contracts/profile-api.md §2):
+ * omitted optional fields keep their stored values; `preferences: null` and
+ * `confirmedSkills: []` clear them.
+ */
 export interface ProfilePutBody {
   text: string;
   dealbreakers: string[];
+  preferences?: Record<string, unknown> | null;
+  confirmedSkills?: string[];
 }
 
+/** Structural only; detailed preference and skill validation lands with PR4/PR5. */
 export function isProfilePutBody(body: unknown): body is ProfilePutBody {
   if (typeof body !== "object" || body === null) return false;
   const v = body as Record<string, unknown>;
   return (
     typeof v.text === "string" &&
     Array.isArray(v.dealbreakers) &&
-    v.dealbreakers.every((d) => typeof d === "string")
+    v.dealbreakers.every((d) => typeof d === "string") &&
+    (v.preferences === undefined ||
+      v.preferences === null ||
+      (typeof v.preferences === "object" && !Array.isArray(v.preferences))) &&
+    (v.confirmedSkills === undefined ||
+      (Array.isArray(v.confirmedSkills) &&
+        v.confirmedSkills.every((s) => typeof s === "string")))
   );
 }
 
@@ -269,6 +301,16 @@ export interface SavedJobPatchBody {
   analysis?: SavedJobAnalysis;
   canonicalUrl?: string;
   savedAt?: string;
+  /** ISO date, or null to clear. Ignored when `analysis` is also sent (006 contracts/saved-jobs-api.md). */
+  unavailableAt?: string | null;
+}
+
+function isIsoDate(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T/.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
 }
 
 export function isSavedJobPatchBody(body: unknown): body is SavedJobPatchBody {
@@ -286,5 +328,8 @@ export function isSavedJobPatchBody(body: unknown): body is SavedJobPatchBody {
   if (v.analysis !== undefined && !isSavedJobAnalysis(v.analysis)) return false;
   if (v.canonicalUrl !== undefined && typeof v.canonicalUrl !== "string") return false;
   if (v.savedAt !== undefined && typeof v.savedAt !== "string") return false;
+  if (v.unavailableAt !== undefined && v.unavailableAt !== null && !isIsoDate(v.unavailableAt)) {
+    return false;
+  }
   return true;
 }

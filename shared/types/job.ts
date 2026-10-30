@@ -1,3 +1,5 @@
+import type { ScoringProfile } from "./profile";
+
 export type Arrangement = "remote" | "hybrid" | "onsite" | "unspecified";
 export type ArrangementConfidence = "explicit" | "inferred" | "none";
 export type Seniority =
@@ -65,6 +67,30 @@ export interface Fit {
   strengths?: string[];
   /** Risks or downsides of this role for this candidate. */
   weaknesses?: string[];
+  /**
+   * Violated dealbreakers in the user's own wording; the server maps model
+   * output to profile lines (research R8). Never changes `score` (FR-005).
+   * Absent on fits scored before 006 (research R4: additive fields only).
+   */
+  dealbreakersViolated?: string[];
+  /**
+   * SHA-256 of the whitespace-normalized profile this fit was scored against
+   * (research R5). Absent means version-unknown, so no verdict is shown.
+   */
+  profileFingerprint?: string;
+}
+
+/** One verbatim quote backing a fit chip (PR3, data-model.md §1). */
+export interface EvidenceItem {
+  label: string;
+  postingQuote: string | null;
+  profileQuote: string | null;
+}
+
+export interface FitEvidence {
+  matching?: EvidenceItem[];
+  missing?: EvidenceItem[];
+  desired?: EvidenceItem[];
 }
 
 export type StructuredSourceKind = "json-ld" | "microdata";
@@ -137,8 +163,13 @@ export interface PageExtractPayload {
 
 export interface AnalyzeJobRequest {
   extract: PageExtractPayload;
+  /** Legacy serialized profile; new clients still send it during the deploy window. */
   profile?: string;
+  /** Structured profile; when present the server serializes it and ignores `profile` (R5). */
+  profileData?: ScoringProfile;
   assumeJobPosting?: boolean;
+  /** Rescore intent; eligibility is decided on the server (research R6). */
+  rescore?: { priorFingerprint: string | null };
 }
 
 /** Model output shape (schema-enforced); server appends model + analyzedAt. */
@@ -162,15 +193,57 @@ export interface JobAnalysisPayload {
 export interface JobAnalysisResponse extends JobAnalysisPayload {
   model: string;
   analyzedAt: string;
+  /** The tier that scored this analysis (006 FR-008). Absent on analyses saved before. */
+  tier?: "free" | "premium";
 }
 
 export const MAIN_TEXT_CAP = 40_000;
 
+/** Below this many characters (with no JSON-LD) a page or paste is not worth analyzing. */
+export const MIN_TEXT_CHARS = 300;
+
+const FINGERPRINT_RE = /^[0-9a-f]{64}$/;
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
+}
+
+/**
+ * Structural check for `profileData` (contracts/analyze-api.md §1). A
+ * malformed optional field is rejected, never silently ignored. Detailed
+ * preference validation lands with PR4.
+ */
+export function isScoringProfile(value: unknown): value is ScoringProfile {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.text === "string" &&
+    isStringArray(v.dealbreakers) &&
+    (v.preferences === undefined ||
+      v.preferences === null ||
+      (typeof v.preferences === "object" && !Array.isArray(v.preferences))) &&
+    (v.confirmedSkills === undefined || isStringArray(v.confirmedSkills))
+  );
+}
+
+/** `null` or 64 lowercase hex characters. */
+export function isPriorFingerprint(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && FINGERPRINT_RE.test(value));
+}
+
 export function isAnalyzeJobRequest(body: unknown): body is AnalyzeJobRequest {
   if (typeof body !== "object" || body === null) return false;
-  const extract = (body as { extract?: unknown }).extract;
+  const b = body as Record<string, unknown>;
+  const extract = b.extract;
   if (typeof extract !== "object" || extract === null) return false;
   const e = extract as Record<string, unknown>;
+  if (b.profileData !== undefined && !isScoringProfile(b.profileData)) return false;
+  if (b.rescore !== undefined) {
+    if (typeof b.rescore !== "object" || b.rescore === null) return false;
+    if (!isPriorFingerprint((b.rescore as Record<string, unknown>).priorFingerprint)) {
+      return false;
+    }
+  }
   return (
     typeof e.url === "string" &&
     typeof e.mainText === "string" &&

@@ -151,6 +151,17 @@ export function LibraryControls({
           />
         </label>
 
+        <label className="flex items-center gap-2 pb-2 text-sm">
+          <input
+            type="checkbox"
+            checked={query.currentProfileOnly ?? false}
+            onChange={(e) =>
+              onChange({ ...query, currentProfileOnly: e.target.checked || undefined })
+            }
+          />
+          <span className="text-gray-600 dark:text-gray-300">Current profile only</span>
+        </label>
+
         <label className="flex flex-col text-sm">
           <span className="mb-1 text-gray-600 dark:text-gray-300">Sort</span>
           <select

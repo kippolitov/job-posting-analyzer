@@ -31,6 +31,8 @@ export interface SavedJob {
   notes: string;
   savedAt: string;
   updatedAt: string;
+  /** Set after a rescore found no posting (006 contracts/saved-jobs-api.md). */
+  unavailableAt?: string | null;
 }
 
 /** User-authored candidate profile, stored locally, sent only with analysis requests. */
@@ -38,6 +40,8 @@ export interface CandidateProfile {
   text: string;
   dealbreakers: string[];
   updatedAt: string;
+  /** Server-derived (006 R5). Optional on read so an older backend still type-checks. */
+  fingerprint?: string;
 }
 
 export type JobErrorCode =
@@ -56,6 +60,10 @@ export interface UsageInfo {
   limit: number;
   resetsAt: string;
   tier: "free" | "premium";
+  /** 006: what this request cost, and the free-rescore allowance after it. */
+  charged?: "none" | "rescore" | "analysis";
+  rescoresUsed?: number;
+  rescoresLimit?: number;
 }
 
 export interface JobPanelError {

@@ -2,13 +2,18 @@ import { describe, it, expect } from "vitest";
 import {
   bandFor,
   costPerAnalysis,
+  dealbreakerChecks,
+  dealbreakerRecall,
   falseDealbreakers,
+  fitInputIndependence,
+  identicalVerdictShare,
   median,
   missedDealbreakers,
   p95,
   pairKey,
   reportedViolations,
   scoreIndependence,
+  splitFalseDealbreakers,
   truncations,
   verdictStability,
   type PairLabel,
@@ -53,9 +58,32 @@ describe("bandFor (FR-009 bands)", () => {
 });
 
 describe("verdictStability (SC-004)", () => {
-  it("is the share of pairs whose band is identical across runs", () => {
+  it("is the share of runs that give their pair's most common verdict", () => {
     expect(
       verdictStability({
+        a: ["strong", "strong", "strong"],
+        b: ["stretch", "stretch", "worth-a-shot"],
+        c: ["dealbreaker", "dealbreaker"],
+        d: ["long-shot"],
+        e: [],
+      })
+    ).toBe(8 / 9);
+  });
+
+  it("counts one tied verdict as the most common", () => {
+    expect(verdictStability({ a: ["stretch", "long-shot"] })).toBe(0.5);
+  });
+
+  it("is NaN with no runs, so a gate can never pass vacuously", () => {
+    expect(verdictStability({})).toBeNaN();
+    expect(verdictStability({ a: [] })).toBeNaN();
+  });
+});
+
+describe("identicalVerdictShare (reported, not gated)", () => {
+  it("is the share of pairs whose band is identical across runs", () => {
+    expect(
+      identicalVerdictShare({
         a: ["strong", "strong", "strong"],
         b: ["stretch", "stretch", "worth-a-shot"],
         c: ["dealbreaker", "dealbreaker"],
@@ -63,9 +91,20 @@ describe("verdictStability (SC-004)", () => {
       })
     ).toBe(0.75);
   });
+});
 
-  it("is NaN with no pairs, so a gate can never pass vacuously", () => {
-    expect(verdictStability({})).toBeNaN();
+describe("fitInputIndependence (SC-002)", () => {
+  it("is the share of pairs whose fit input is identical with and without dealbreakers", () => {
+    expect(
+      fitInputIndependence([
+        { pair: "a", withDealbreakers: "same", withoutDealbreakers: "same" },
+        { pair: "b", withDealbreakers: "x\nDealbreakers:", withoutDealbreakers: "x" },
+      ])
+    ).toBe(0.5);
+  });
+
+  it("is NaN with no pairs", () => {
+    expect(fitInputIndependence([])).toBeNaN();
   });
 });
 
@@ -235,18 +274,81 @@ describe("falseDealbreakers / missedDealbreakers", () => {
   });
 });
 
+describe("dealbreaker targets (approved 2026-10-29)", () => {
+  const REMOTE = "Remote only";
+  const SALARY = "Minimum salary 120000 USD per year";
+  const facts = { [ONSITE]: "arrangement", [REMOTE]: "arrangement", [SALARY]: "salary" };
+  const labels: PairLabel[] = [
+    { posting: "onsite", profile: "backend", violations: [ONSITE], unstatedFacts: [] },
+    // States an arrangement (hybrid) but no salary.
+    { posting: "hybrid", profile: "frontend", violations: [REMOTE], unstatedFacts: ["salary"] },
+  ];
+  const fit = (dealbreakersViolated: string[]) => ({ score: 50, rationale: "x", dealbreakersViolated });
+
+  describe("splitFalseDealbreakers", () => {
+    it("calls a false report a trap when its fact is one the posting does not state (SC-008)", () => {
+      const results = [result("hybrid", "frontend", fit([REMOTE, SALARY]), [REMOTE, SALARY])];
+      const { trap, stated } = splitFalseDealbreakers(results, labels, facts);
+      expect(trap.count).toBe(1);
+      expect(trap.details[0]).toContain(SALARY);
+      expect(stated.count).toBe(0);
+    });
+
+    it("calls a false report on a stated fact a misreading", () => {
+      const results = [result("onsite", "backend", fit([ONSITE, REMOTE]), [ONSITE, REMOTE])];
+      const { trap, stated } = splitFalseDealbreakers(results, labels, facts);
+      expect(trap.count).toBe(0);
+      expect(stated.count).toBe(1);
+    });
+
+    it("counts a line with no known fact as a trap, the stricter reading", () => {
+      const results = [result("hybrid", "frontend", fit(["No startups"]), ["No startups"])];
+      expect(splitFalseDealbreakers(results, labels, facts).trap.count).toBe(1);
+    });
+  });
+
+  describe("dealbreakerChecks", () => {
+    it("counts every dealbreaker line sent with a scored, labelled result", () => {
+      const results = [
+        result("onsite", "backend", fit([]), [ONSITE]),
+        result("hybrid", "frontend", fit([]), [REMOTE, SALARY]),
+        result("hybrid", "frontend", null, [REMOTE, SALARY]),
+        result("unlabelled", "backend", fit([]), [ONSITE]),
+      ];
+      expect(dealbreakerChecks(results, labels)).toBe(3);
+    });
+  });
+
+  describe("dealbreakerRecall (SC-002)", () => {
+    it("is the share of labelled violations reported, over every run", () => {
+      const results = [
+        result("onsite", "backend", fit([ONSITE])),
+        result("onsite", "backend", fit([])),
+        result("hybrid", "frontend", fit([REMOTE]), [REMOTE, SALARY]),
+        result("hybrid", "frontend", null, [REMOTE, SALARY]),
+      ];
+      expect(dealbreakerRecall(results, labels)).toBe(0.5);
+    });
+
+    it("is NaN with no labelled violations", () => {
+      expect(dealbreakerRecall([result("silent", "backend", fit([]))], pairs)).toBeNaN();
+    });
+  });
+});
+
 describe("scoreIndependence (SC-002)", () => {
   const key = pairKey("onsite", "backend");
   const other = pairKey("onsite", "frontend");
 
-  it("is the share of violating pairs whose score-only band matches with and without dealbreakers", () => {
+  it("is the share of violating pairs whose median scores are within 5 points with and without dealbreakers", () => {
+    // 62/67 cross a band edge but are 5 apart; 15/25 share a band but are 10 apart.
     const withDealbreakers = [
-      { pair: key, score: 72 },
+      { pair: key, score: 62 },
       { pair: other, score: 15 },
     ];
     const withoutDealbreakers = [
-      { pair: key, score: 70 },
-      { pair: other, score: 68 },
+      { pair: key, score: 67 },
+      { pair: other, score: 25 },
     ];
     expect(scoreIndependence(withDealbreakers, withoutDealbreakers)).toBe(0.5);
   });

@@ -1,5 +1,12 @@
 import { RestError } from "@azure/data-tables";
-import { MONTHLY_ANALYSES, type Tier, type UsageEntity } from "../models/user";
+import {
+  FREE_RESCORES_PER_MONTH,
+  MONTHLY_ANALYSES,
+  UNAVAILABLE_REFUNDS_PER_MONTH,
+  type Tier,
+  type UsageEntity,
+} from "../models/user";
+import type { ChargeKind } from "./rescoreEligibility";
 import { ensureTable } from "./tablesService";
 
 /**
@@ -8,6 +15,10 @@ import { ensureTable } from "./tablesService";
  * never costs a token (fail closed). Optimistic concurrency via real ETags
  * only — never `If-Match: *`, never an unconditional write — so N parallel
  * requests at the cap yield exactly one winner (SC-002).
+ *
+ * Every update is an ETag-conditional `Merge` (006 research R6): `Replace`
+ * would drop the columns a write doesn't name, so an ordinary analysis would
+ * erase `rescoresUsed`.
  */
 
 const TABLE = "Usage";
@@ -31,6 +42,27 @@ export interface UsageResult {
 export interface CheckAndIncrementResult extends UsageResult {
   allowed: boolean;
 }
+
+/** UsageResult plus the free-rescore counters (006 contracts/analyze-api.md §3). */
+export interface RescoreUsage extends UsageResult {
+  rescoresUsed: number;
+  rescoresLimit: number;
+}
+
+export interface ChargeResult {
+  allowed: boolean;
+  /** The counter actually charged; a rescore falls back to "analysis" past its cap. */
+  charged: ChargeKind;
+  usage: RescoreUsage;
+}
+
+type StoredUsage = UsageEntity & { etag?: string };
+
+/** The Usage column a charge of this kind increments. */
+const COUNTER: Record<ChargeKind, "count" | "rescoresUsed"> = {
+  analysis: "count",
+  rescore: "rescoresUsed",
+};
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -58,37 +90,70 @@ function isPreconditionFailed(err: unknown): boolean {
   return err instanceof RestError && err.statusCode === 412;
 }
 
+function usageView(row: StoredUsage | null, tier: Tier): RescoreUsage {
+  return {
+    count: row?.count ?? 0,
+    limit: MONTHLY_ANALYSES[tier],
+    resetsAt: resetsAt(),
+    tier,
+    rescoresUsed: row?.rescoresUsed ?? 0,
+    rescoresLimit: FREE_RESCORES_PER_MONTH,
+  };
+}
+
+async function readUsageRow(sub: string): Promise<StoredUsage | null> {
+  const client = await ensureTable(TABLE);
+  try {
+    return await client.getEntity<UsageEntity>(sub, usageRowKey());
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw new MeteringUnavailableError();
+  }
+}
+
 /**
- * Check-and-increment algorithm (contracts/metering.md, normative). `limit`
- * is always recomputed from the current `tier` — mid-month upgrades unblock
- * immediately (FR-019); the stored `limit` column is refreshed but never the
- * enforcement input.
+ * Charges one request against the counter `decision` names (006 research R6),
+ * before the model call, failing closed. A rescore past
+ * FREE_RESCORES_PER_MONTH falls back to the analysis counter; the analysis
+ * counter refuses at the tier's limit, which is always recomputed from the
+ * current tier so mid-month upgrades unblock immediately (FR-019).
  */
-export async function checkAndIncrement(
+export async function chargeAnalysis(
   sub: string,
-  tier: Tier
-): Promise<CheckAndIncrementResult> {
+  tier: Tier,
+  decision: ChargeKind
+): Promise<ChargeResult> {
   const limit = MONTHLY_ANALYSES[tier];
   const rowKey = usageRowKey();
-  const reset = resetsAt();
   const client = await ensureTable(TABLE);
 
   let createRetries = 0;
   let updateRetries = 0;
 
   for (;;) {
-    let existing: (UsageEntity & { etag?: string }) | null;
-    try {
-      existing = await client.getEntity<UsageEntity>(sub, rowKey);
-    } catch (err) {
-      if (!isNotFound(err)) throw new MeteringUnavailableError();
-      existing = null;
+    const existing = await readUsageRow(sub);
+    const view = usageView(existing, tier);
+    const charged: ChargeKind =
+      decision === "rescore" && view.rescoresUsed < FREE_RESCORES_PER_MONTH
+        ? "rescore"
+        : "analysis";
+    if (charged === "analysis" && view.count >= limit) {
+      return { allowed: false, charged, usage: view };
     }
+
+    const column = COUNTER[charged];
+    const next = { ...view, [column]: view[column] + 1 };
 
     if (!existing) {
       try {
-        await client.createEntity({ partitionKey: sub, rowKey, count: 1, limit });
-        return { allowed: true, count: 1, limit, resetsAt: reset, tier };
+        await client.createEntity({
+          partitionKey: sub,
+          rowKey,
+          count: next.count,
+          limit,
+          rescoresUsed: next.rescoresUsed,
+        });
+        return { allowed: true, charged, usage: next };
       } catch (err) {
         if (isConflict(err) && createRetries < MAX_RETRIES) {
           createRetries++;
@@ -98,23 +163,13 @@ export async function checkAndIncrement(
       }
     }
 
-    if (existing.count >= limit) {
-      return { allowed: false, count: existing.count, limit, resetsAt: reset, tier };
-    }
-
     try {
       await client.updateEntity(
-        { partitionKey: sub, rowKey, count: existing.count + 1, limit },
-        "Replace",
+        { partitionKey: sub, rowKey, [column]: next[column], limit },
+        "Merge",
         { etag: existing.etag }
       );
-      return {
-        allowed: true,
-        count: existing.count + 1,
-        limit,
-        resetsAt: reset,
-        tier,
-      };
+      return { allowed: true, charged, usage: next };
     } catch (err) {
       if (isPreconditionFailed(err) && updateRetries < MAX_RETRIES) {
         updateRetries++;
@@ -125,33 +180,49 @@ export async function checkAndIncrement(
   }
 }
 
+/** Charges an ordinary analysis (contracts/metering.md, normative). */
+export async function checkAndIncrement(
+  sub: string,
+  tier: Tier
+): Promise<CheckAndIncrementResult> {
+  const { allowed, usage } = await chargeAnalysis(sub, tier, "analysis");
+  return {
+    allowed,
+    count: usage.count,
+    limit: usage.limit,
+    resetsAt: usage.resetsAt,
+    tier: usage.tier,
+  };
+}
+
 /**
- * Best-effort conditional decrement on a system-caused analysis failure
- * (FR-007): same ETag discipline, floor at 0, max 2 attempts. Never throws —
- * a lost refund over-counts by one and is accepted (contracts/metering.md).
+ * Best-effort conditional decrement of the counter that was charged, on a
+ * system-caused analysis failure (FR-007, 006 FR-004a): same ETag
+ * discipline, floor at 0, max 2 attempts. Never throws — a lost refund
+ * over-counts by one and is accepted (contracts/metering.md).
  */
-export async function refundOnSystemFailure(sub: string, tier: Tier): Promise<void> {
-  const limit = MONTHLY_ANALYSES[tier];
-  const rowKey = usageRowKey();
+export async function refundCharge(sub: string, tier: Tier, charged: ChargeKind): Promise<void> {
+  const column = COUNTER[charged];
   const client = await ensureTable(TABLE);
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    let existing: (UsageEntity & { etag?: string }) | null;
+    let existing: StoredUsage | null;
     try {
-      existing = await client.getEntity<UsageEntity>(sub, rowKey);
+      existing = await readUsageRow(sub);
     } catch {
       return;
     }
-    if (existing.count <= 0) return;
+    const current = existing?.[column] ?? 0;
+    if (!existing || current <= 0) return;
     try {
       await client.updateEntity(
         {
           partitionKey: sub,
-          rowKey,
-          count: Math.max(0, existing.count - 1),
-          limit,
+          rowKey: usageRowKey(),
+          [column]: current - 1,
+          limit: MONTHLY_ANALYSES[tier],
         },
-        "Replace",
+        "Merge",
         { etag: existing.etag }
       );
       return;
@@ -161,17 +232,56 @@ export async function refundOnSystemFailure(sub: string, tier: Tier): Promise<vo
   }
 }
 
-/** Read-only usage view for GET /api/account — never increments. */
-export async function peekUsage(sub: string, tier: Tier): Promise<UsageResult> {
-  const limit = MONTHLY_ANALYSES[tier];
-  const rowKey = usageRowKey();
-  const reset = resetsAt();
+/** Refund of an ordinary analysis; the pre-006 name for refundCharge(…, "analysis"). */
+export function refundOnSystemFailure(sub: string, tier: Tier): Promise<void> {
+  return refundCharge(sub, tier, "analysis");
+}
+
+/**
+ * FR-003a: a rescore that finds no posting consumes nothing — the charged
+ * counter is decremented — but at most UNAVAILABLE_REFUNDS_PER_MONTH times,
+ * so it can't become an unbounded free-call path (research R6). Returns
+ * whether the refund was granted; past the cap, or on a storage failure,
+ * the charge stands.
+ */
+export async function grantUnavailableRefund(
+  sub: string,
+  tier: Tier,
+  charged: ChargeKind
+): Promise<boolean> {
+  const column = COUNTER[charged];
   const client = await ensureTable(TABLE);
-  try {
-    const existing = await client.getEntity<UsageEntity>(sub, rowKey);
-    return { count: existing.count, limit, resetsAt: reset, tier };
-  } catch (err) {
-    if (isNotFound(err)) return { count: 0, limit, resetsAt: reset, tier };
-    throw new MeteringUnavailableError();
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    let existing: StoredUsage | null;
+    try {
+      existing = await readUsageRow(sub);
+    } catch {
+      return false;
+    }
+    const refunds = existing?.unavailableRefunds ?? 0;
+    if (!existing || refunds >= UNAVAILABLE_REFUNDS_PER_MONTH) return false;
+    try {
+      await client.updateEntity(
+        {
+          partitionKey: sub,
+          rowKey: usageRowKey(),
+          [column]: Math.max(0, (existing[column] ?? 0) - 1),
+          unavailableRefunds: refunds + 1,
+          limit: MONTHLY_ANALYSES[tier],
+        },
+        "Merge",
+        { etag: existing.etag }
+      );
+      return true;
+    } catch (err) {
+      if (!isPreconditionFailed(err)) return false;
+    }
   }
+  return false;
+}
+
+/** Read-only usage view for GET /api/account — never increments. */
+export async function peekUsage(sub: string, tier: Tier): Promise<RescoreUsage> {
+  return usageView(await readUsageRow(sub), tier);
 }

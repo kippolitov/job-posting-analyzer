@@ -5,6 +5,8 @@ import { fetchAccount } from "../../services/accountService";
 import { UsageExhausted } from "../UsageExhausted";
 import { AnalysisFields } from "./ThisPageTab";
 import { FitScore } from "./FitScore";
+import { useLiveFingerprint, useRescoreCostLine } from "./useFreshness";
+import { freshness, rescoreAction, scoredByLabel } from "../../../shared/fitView";
 import type { JobAnalysis, JobPanelError, SavedJob, UsageInfo } from "../../types/job";
 
 export type PasteViewStatus = "idle" | "analyzing" | "ready" | "error";
@@ -15,6 +17,9 @@ export interface PasteView {
   error: JobPanelError | null;
   canonicalUrl: string | null;
   saved: SavedJob | null;
+  currentProfileFingerprint?: string | null;
+  profileUnavailable?: boolean;
+  rescoreError?: JobPanelError | null;
 }
 
 interface PasteComposerProps {
@@ -26,6 +31,8 @@ interface PasteComposerProps {
   onForceSubmit: () => void;
   onSave: () => void;
   onUpgrade: () => void;
+  /** "Paste again to rescore": re-sends the current text with the rescore intent. */
+  onRescore?: (priorFingerprint: string | null) => void;
 }
 
 /**
@@ -43,10 +50,20 @@ export function PasteComposer({
   onForceSubmit,
   onSave,
   onUpgrade,
+  onRescore,
 }: PasteComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [usageChecked, setUsageChecked] = useState(false);
+
+  const currentFingerprint = useLiveFingerprint(view.currentProfileFingerprint);
+  const fitFreshness = freshness(view.analysis?.fit ?? null, currentFingerprint);
+  const action = rescoreAction(
+    { source: "paste", sourceUrl: "", saveKey: view.canonicalUrl ?? "" },
+    fitFreshness,
+    "panel"
+  );
+  const costLine = useRescoreCostLine(action.kind !== "none");
 
   // FR-017b: focus moves into the composer on open. This component only
   // mounts while the composer is open, so a mount-time focus is exactly
@@ -176,7 +193,24 @@ export function PasteComposer({
                   Save
                 </button>
               )}
-              <FitScore fit={view.analysis.fit} />
+              {view.rescoreError && (
+                <p role="alert" className="text-xs text-amber-800 dark:text-amber-400">
+                  {view.rescoreError.message} {view.rescoreError.action}
+                </p>
+              )}
+              <FitScore
+                fit={view.analysis.fit}
+                freshness={fitFreshness}
+                action={action}
+                costLine={costLine}
+                onRescore={
+                  onRescore
+                    ? () => onRescore(view.analysis?.fit?.profileFingerprint ?? null)
+                    : undefined
+                }
+                profileUnavailable={view.profileUnavailable}
+                scoredBy={scoredByLabel(view.analysis)}
+              />
               <AnalysisFields analysis={view.analysis} />
             </>
           )}

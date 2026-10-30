@@ -40,7 +40,14 @@ export async function accountHandler(
       {
         email: user.email,
         tier: user.tier,
-        usage: { count: usage.count, limit: usage.limit, resetsAt: usage.resetsAt },
+        usage: {
+          count: usage.count,
+          limit: usage.limit,
+          resetsAt: usage.resetsAt,
+          // 006 FR-004a: the clients' Rescore cost line.
+          rescoresUsed: usage.rescoresUsed,
+          rescoresLimit: usage.rescoresLimit,
+        },
         subscription,
       },
       origin

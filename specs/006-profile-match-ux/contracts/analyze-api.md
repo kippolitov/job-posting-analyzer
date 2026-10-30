@@ -105,7 +105,7 @@ unchanged, and N parallel requests at the cap produce exactly one 200.
 
 | Caller | Backend before 006 | Backend with 006 |
 |---|---|---|
-| Old extension (no new fields) | today | Gets an additive response. It ignores the new fit fields and `usage` fields. Its fit gets a fingerprint for the string it sent. It is metered as today. |
+| Old extension (no new fields) | today | Gets an additive response. It ignores the new fit fields and `usage` fields. Its fit gets a fingerprint for the string it sent. It is metered as today. Its score is no longer capped for a dealbreaker, so when the judge reports one, the server appends "Violates your dealbreaker(s): …" to `rationale`, which it does render. Only requests without `profileData` get this note (added 2026-10-30 after the PR2 compatibility smoke). |
 | New extension or web | Not reachable in production: the backend deploys first, and the extension waits for Chrome Web Store review | Full behaviour |
 | New web during the CD window (web live, functions still deploying) | Unknown fields ignored. Charged normally, so the "free" cost line could be wrong for about a minute. A paste gets `400` "Missing required file part" and is not charged. | n/a |
 

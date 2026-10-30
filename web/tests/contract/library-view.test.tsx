@@ -128,3 +128,80 @@ describe("library view (FR-007/FR-008, US1 scenario 2)", () => {
     expect(screen.queryByText(fullJob.sourceUrl)).not.toBeInTheDocument();
   });
 });
+
+describe("library rows mark stale scores (006 FR-002)", () => {
+  const api = installFakeApi();
+
+  it("marks out-of-date and version-unknown rows and links each source kind to its rescore path", async () => {
+    seedSession();
+    api.setProfile({
+      text: "Engineer",
+      dealbreakers: [],
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      schemaVersion: 1,
+      fingerprint: "c".repeat(64),
+    });
+    const withFit = (fingerprint?: string): SavedJobPayload["analysis"] => ({
+      ...fullJob.analysis,
+      fit: {
+        score: 60,
+        rationale: "r",
+        ...(fingerprint ? { profileFingerprint: fingerprint } : {}),
+      },
+    });
+    api.setJobs([
+      { ...fullJob, canonicalUrl: "https://example.com/a", sourceUrl: "https://example.com/a", analysis: withFit("o".repeat(64)) },
+      { ...fullJob, canonicalUrl: "https://example.com/b", sourceUrl: "https://example.com/b", analysis: withFit() },
+      { ...fullJob, canonicalUrl: "https://example.com/c", sourceUrl: "https://example.com/c", analysis: withFit("c".repeat(64)) },
+    ]);
+
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    expect(await screen.findByText(/Scored against an older profile/)).toBeInTheDocument();
+    expect(screen.getByText(/May be out of date/)).toBeInTheDocument();
+    expect(screen.getAllByText(/older profile|May be out of date/)).toHaveLength(2);
+    const links = screen.getAllByRole("link", { name: "Open posting to rescore" });
+    expect(links.map((l) => l.getAttribute("href")).sort()).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+  });
+});
+
+describe("library rows show the shared verdict (006 US2)", () => {
+  const api = installFakeApi();
+
+  it("rows use the shared label and accessible name; legacy fits are Unrated", async () => {
+    seedSession();
+    const row = (url: string, score: number, fingerprint?: string): SavedJobPayload => ({
+      ...fullJob,
+      canonicalUrl: url,
+      sourceUrl: url,
+      analysis: {
+        ...fullJob.analysis,
+        title: `Role ${score}`,
+        fit: {
+          score,
+          rationale: "r",
+          ...(fingerprint ? { profileFingerprint: fingerprint } : {}),
+        },
+      },
+    });
+    api.setJobs([
+      row("https://example.com/s", 90, "f".repeat(64)),
+      row("https://example.com/l", 20, "f".repeat(64)),
+      row("https://example.com/u", 72),
+    ]);
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    expect(await screen.findByLabelText("Strong match, fit 90 out of 100")).toHaveTextContent(
+      "Strong match"
+    );
+    expect(screen.getByLabelText("Long shot, fit 20 out of 100")).toHaveTextContent("Long shot");
+    expect(screen.getByLabelText("Unrated, fit 72 out of 100")).toHaveTextContent(
+      "Unrated — rescore for a verdict"
+    );
+  });
+});

@@ -1,3 +1,5 @@
+import { profileToPromptText, type ScoringProfile } from "shared/types/profile";
+import type { JobAnalysisResponse, JobStatus } from "shared/types/job";
 import { ApiError, apiFetch } from "./apiClient";
 import type {
   AccountPayload,
@@ -97,21 +99,48 @@ export async function saveJob(
   return (await res.json()) as SavedJobPayload;
 }
 
-export interface AnalyzeDocumentParams {
-  file: File;
-  profile?: string;
-  assumeJobPosting?: boolean;
+/** PATCH /api/jobs/:key body (contracts/saved-jobs-api.md); only the fields given change. */
+export interface JobPatch {
+  analysis?: JobAnalysisResponse;
+  status?: JobStatus;
+  notes?: string;
+  unavailableAt?: string | null;
 }
 
-/** POST /api/analyze-document (contracts/analyze-document.md). */
+export async function patchJob(key: string, patch: JobPatch): Promise<SavedJobPayload> {
+  const res = await apiFetch(`/jobs/${key}`, { method: "PATCH", body: patch });
+  return (await res.json()) as SavedJobPayload;
+}
+
+export interface AnalyzeDocumentParams {
+  /** Exactly one of `file` and `text` (the paste option, FR-027). */
+  file?: File;
+  text?: string;
+  /** Sent as `profileData`, with `profile` derived from it, exactly as the extension does (FR-001). */
+  profileData?: ScoringProfile;
+  assumeJobPosting?: boolean;
+  /** Rescore intent (research R6); `priorFingerprint` is the saved fit's own. */
+  rescore?: boolean;
+  priorFingerprint?: string | null;
+}
+
+/** POST /api/analyze-document (contracts/analyze-api.md §1). */
 export async function analyzeDocument(
   params: AnalyzeDocumentParams
 ): Promise<DocumentAnalysisResult> {
   const form = new FormData();
-  form.set("file", params.file);
-  if (params.profile) form.set("profile", params.profile);
+  if (params.file) form.set("file", params.file);
+  if (params.text !== undefined) form.set("text", params.text);
+  if (params.profileData) {
+    form.set("profile", profileToPromptText(params.profileData));
+    form.set("profileData", JSON.stringify(params.profileData));
+  }
   if (params.assumeJobPosting !== undefined) {
     form.set("assumeJobPosting", String(params.assumeJobPosting));
+  }
+  if (params.rescore) {
+    form.set("rescore", "true");
+    if (params.priorFingerprint) form.set("priorFingerprint", params.priorFingerprint);
   }
   const res = await apiFetch("/analyze-document", { method: "POST", rawBody: form });
   return (await res.json()) as DocumentAnalysisResult;

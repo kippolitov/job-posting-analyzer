@@ -99,6 +99,8 @@ function entityFromPayload(
     // persist a valid discriminator (data-model.md §2.3).
     source: payload.source ?? "url",
     filename: payload.filename ?? "",
+    // "" rather than omitted, so an upsert Replace clears a stale value.
+    unavailableAt: payload.unavailableAt ?? "",
   };
 }
 
@@ -119,6 +121,7 @@ function payloadFromEntity(entity: SavedJobEntity): SavedJobPayload {
     notes: entity.notes,
     savedAt: entity.savedAt,
     updatedAt: entity.updatedAt,
+    ...(entity.unavailableAt ? { unavailableAt: entity.unavailableAt } : {}),
   };
 }
 
@@ -179,12 +182,14 @@ export async function saveJob(
   }
   const savedAt = existing ? existing.savedAt : payload.savedAt;
   const updatedAt = nowIso();
+  // A PUT always carries an analysis, which proves the posting is reachable.
+  const { unavailableAt: _cleared, ...stored } = payload;
   const client = await ensureTable(TABLE);
   await client.upsertEntity(
-    entityFromPayload(sub, key, payload, savedAt, updatedAt),
+    entityFromPayload(sub, key, stored, savedAt, updatedAt),
     "Replace"
   );
-  return { ...payload, savedAt, updatedAt };
+  return { ...stored, savedAt, updatedAt };
 }
 
 export async function listJobs(
@@ -226,12 +231,21 @@ export async function patchJob(
   if (patch.savedAt !== undefined && patch.savedAt !== existing.savedAt) {
     throw new ImmutableFieldError("savedAt");
   }
-  const current = payloadFromEntity(existing);
+  const { unavailableAt: storedUnavailableAt, ...current } = payloadFromEntity(existing);
+  // A new analysis proves the posting is reachable, so it always clears the
+  // flag, even when the same body also sends one (contracts/saved-jobs-api.md §1).
+  const unavailableAt =
+    patch.analysis !== undefined
+      ? null
+      : patch.unavailableAt !== undefined
+        ? patch.unavailableAt
+        : (storedUnavailableAt ?? null);
   const updated: SavedJobPayload = {
     ...current,
     ...(patch.status !== undefined ? { status: patch.status } : {}),
     ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
     ...(patch.analysis !== undefined ? { analysis: patch.analysis } : {}),
+    ...(unavailableAt ? { unavailableAt } : {}),
     canonicalUrl: current.canonicalUrl,
     savedAt: current.savedAt,
     updatedAt: nowIso(),

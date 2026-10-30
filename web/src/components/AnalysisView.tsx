@@ -1,4 +1,6 @@
 import type { JobAnalysisResponse } from "shared/types/job";
+import { scoredByLabel } from "shared/fitView";
+import { VerdictBadge } from "@/components/VerdictBadge";
 
 function formatSalary(analysis: JobAnalysisResponse): string | null {
   const salary = analysis.salary;
@@ -98,14 +100,27 @@ export function AnalysisView({ analysis }: { analysis: JobAnalysisResponse }) {
         </div>
       )}
 
+      {analysis.fit?.dealbreakersViolated && analysis.fit.dealbreakersViolated.length > 0 && (
+        <ul aria-label="Dealbreakers" className="flex flex-col gap-1">
+          {analysis.fit.dealbreakersViolated.map((line) => (
+            <li
+              key={line}
+              className="rounded-md bg-red-100 px-3 py-1.5 text-sm font-semibold text-red-800 dark:bg-red-950 dark:text-red-200"
+            >
+              Violates your dealbreaker: {line}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {analysis.fit && (
         <div className="rounded-md border border-gray-200 p-4 dark:border-gray-800">
           <div className="flex items-baseline gap-2">
             <h3 className="text-lg font-semibold">Fit score</h3>
-            <span className="text-2xl font-bold">{analysis.fit.score}</span>
-            <span className="text-sm text-gray-500">/ 100</span>
+            <VerdictBadge fit={analysis.fit} large />
           </div>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{analysis.fit.rationale}</p>
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{scoredByLabel(analysis)}</p>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FitList title="Matching" items={analysis.fit.matching} />
             <FitList title="Missing" items={analysis.fit.missing} />

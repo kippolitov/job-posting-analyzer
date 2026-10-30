@@ -152,22 +152,52 @@ describe("AccountBar", () => {
     );
   });
 
-  it("offers an 'Open web app' link that opens the companion web app in a new tab", async () => {
-    render(<AccountBar />);
-    await screen.findByLabelText("Plan: Free");
-    const link = screen.getByRole("link", { name: /open the web app in a new tab/i });
-    expect(link).toHaveAttribute("href", "https://web-app.test");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-  });
+  describe("Web app button (FR-028)", () => {
+    const NOTE = "Opens in a new tab. You'll be asked to sign in with Google.";
 
-  it("hides the 'Open web app' link when WXT_WEB_APP_URL is not configured", async () => {
-    vi.stubGlobal("WXT_WEB_APP_URL", "");
-    render(<AccountBar />);
-    await screen.findByLabelText("Plan: Free");
-    expect(
-      screen.queryByRole("link", { name: /open the web app in a new tab/i })
-    ).not.toBeInTheDocument();
+    function expectWebAppButton() {
+      const link = screen.getByRole("link", { name: "Web app" });
+      expect(link).toHaveAttribute("href", "https://web-app.test");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+      expect(link).toHaveAccessibleDescription(NOTE);
+      expect(link).toHaveAttribute("title", NOTE);
+      expect(link).toHaveClass("rounded-md", "px-2", "py-1", "text-[11px]", "font-medium");
+      expect(link).toHaveClass("border", "min-h-6", "min-w-6");
+      return link;
+    }
+
+    it("is a labelled link to the web app next to Upgrade on a free account", async () => {
+      render(<AccountBar />);
+      await screen.findByLabelText("Plan: Free");
+      const link = expectWebAppButton();
+      expect(link).toHaveTextContent("Web app");
+      expect(
+        screen.getByRole("button", { name: /upgrade to premium/i }).parentElement
+      ).toBe(link.parentElement);
+    });
+
+    it("sits next to Manage subscription on a Premium account", async () => {
+      api.setAccount({
+        email: "user@example.com",
+        tier: "premium",
+        usage: { count: 12, limit: 300, resetsAt: "2026-08-01T00:00:00Z" },
+        subscription: { status: "active", renewsAt: "2026-08-03T00:00:00Z", endsAt: null },
+      });
+      render(<AccountBar />);
+      await screen.findByLabelText("Plan: Premium");
+      const link = expectWebAppButton();
+      expect(
+        screen.getByRole("button", { name: /manage subscription/i }).parentElement
+      ).toBe(link.parentElement);
+    });
+
+    it("is hidden when WXT_WEB_APP_URL is not configured", async () => {
+      vi.stubGlobal("WXT_WEB_APP_URL", "");
+      render(<AccountBar />);
+      await screen.findByLabelText("Plan: Free");
+      expect(screen.queryByRole("link", { name: "Web app" })).not.toBeInTheDocument();
+    });
   });
 
   it("hides Manage subscription for a free account that never subscribed", async () => {

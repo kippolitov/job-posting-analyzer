@@ -98,12 +98,18 @@ export function JobPanel({
     pasteButtonRef.current?.focus();
   };
 
-  const submitPaste = (assumeJobPosting: boolean) => {
+  const submitPaste = (
+    assumeJobPosting: boolean,
+    rescorePrior?: string | null
+  ) => {
     setPasteView((prev) => ({ ...prev, status: "analyzing", error: null }));
     void chrome.runtime.sendMessage({
       type: MessageType.ANALYZE_PASTED_TEXT,
       text: pasteDraft,
       assumeJobPosting,
+      ...(rescorePrior !== undefined
+        ? { rescore: { priorFingerprint: rescorePrior } }
+        : {}),
     });
   };
 
@@ -256,6 +262,9 @@ export function JobPanel({
           error: null,
           canonicalUrl: message.canonicalUrl,
           saved: message.saved,
+          currentProfileFingerprint: message.currentProfileFingerprint,
+          profileUnavailable: message.profileUnavailable,
+          rescoreError: message.rescoreError ?? null,
         });
         return;
       }
@@ -282,6 +291,10 @@ export function JobPanel({
           saved: message.saved,
           strategy: message.strategy,
           scopedRegion: message.scopedRegion,
+          currentProfileFingerprint: message.currentProfileFingerprint,
+          profileUnavailable: message.profileUnavailable,
+          postingUnavailable: message.postingUnavailable,
+          rescoreError: message.rescoreError ?? null,
         });
       } else if (message.type === MessageType.JOB_ANALYSIS_ERROR) {
         setView((prev) => ({
@@ -298,6 +311,17 @@ export function JobPanel({
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
+
+  const requestRescore = (priorFingerprint: string | null) => {
+    if (tabId === null) return;
+    cancelledRef.current = false;
+    setView((prev) => ({ ...prev, status: "analyzing", error: null }));
+    void chrome.runtime.sendMessage({
+      type: MessageType.RESCORE_JOB_PAGE,
+      tabId,
+      priorFingerprint,
+    });
+  };
 
   const handleCancel = () => {
     cancelledRef.current = true;
@@ -396,6 +420,7 @@ export function JobPanel({
             onSubmit={() => submitPaste(false)}
             onForceSubmit={() => submitPaste(true)}
             onSave={() => void handleSavePaste()}
+            onRescore={(priorFingerprint) => submitPaste(false, priorFingerprint)}
             onUpgrade={() => void handleUpgrade()}
           />
         ) : (
@@ -420,6 +445,7 @@ export function JobPanel({
                     requestAnalysis({ assumeJobPosting: true, bypassCache: true })
                   }
                   onReanalyze={() => requestAnalysis({ bypassCache: true })}
+                  onRescore={requestRescore}
                   onSave={() => void handleSave()}
                   onExport={() => void handleExport()}
                   onPruneArchived={() => void handlePruneArchived()}

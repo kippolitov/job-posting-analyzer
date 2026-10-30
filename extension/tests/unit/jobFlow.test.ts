@@ -420,6 +420,8 @@ describe("jobFlow — cancel then immediately re-trigger (FR-006c, T094)", () =>
     } as chrome.tabs.Tab);
     vi.mocked(learnedSelectors.get).mockResolvedValue(null);
     vi.mocked(postJobAnalysis).mockResolvedValue({
+    postingUnavailable: false,
+    analysis: {
       isJobPosting: true,
       title: "A posting",
       company: null,
@@ -436,6 +438,7 @@ describe("jobFlow — cancel then immediately re-trigger (FR-006c, T094)", () =>
       fit: null,
       model: "gpt-4o-mini",
       analyzedAt: "2026-07-04T12:00:04Z",
+    },
     });
   });
 
@@ -525,6 +528,8 @@ describe("jobFlow — no selector, host, or scoped content reaches the backend (
       url: "https://jobs.example.com/posting/42",
     } as chrome.tabs.Tab);
     vi.mocked(postJobAnalysis).mockResolvedValue({
+    postingUnavailable: false,
+    analysis: {
       isJobPosting: true,
       title: "Engineer",
       company: null,
@@ -541,6 +546,7 @@ describe("jobFlow — no selector, host, or scoped content reaches the backend (
       fit: null,
       model: "gpt-4o-mini",
       analyzedAt: "2026-07-04T12:00:04Z",
+    },
     });
 
     await analyzeScopedRegion(
@@ -587,6 +593,8 @@ describe("jobFlow — analyzePastedText records its strategy (FR-035, T082)", ()
 
   it("broadcasts PASTE_ANALYSIS_RESULT with strategy 'paste'", async () => {
     vi.mocked(postJobAnalysis).mockResolvedValue({
+    postingUnavailable: false,
+    analysis: {
       isJobPosting: true,
       title: "Engineer",
       company: null,
@@ -603,6 +611,7 @@ describe("jobFlow — analyzePastedText records its strategy (FR-035, T082)", ()
       fit: null,
       model: "gpt-4o-mini",
       analyzedAt: "2026-07-04T12:00:04Z",
+    },
     });
     const broadcast = vi.fn();
 

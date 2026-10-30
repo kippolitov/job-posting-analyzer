@@ -100,7 +100,8 @@ describe("analyze-job behind withAuth (integration: certs stub + Azurite self-se
     const email = uniqueEmail();
     expect(await getByEmail(email)).toBeNull();
 
-    const token = signTestIdToken({ email });
+    // A unique sub, so this account's monthly allowance is never shared across runs.
+    const token = signTestIdToken({ email, sub: `sub-${randomUUID()}` });
     const res = await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
     expect(res.status).toBe(200);
     expect(vi.mocked(orchestrateJobAnalysis)).toHaveBeenCalledTimes(1);
@@ -127,7 +128,8 @@ describe("analyze-job behind withAuth (integration: certs stub + Azurite self-se
 
   it("blocking is effective on the very next request (no caching)", async () => {
     const email = uniqueEmail();
-    const token = signTestIdToken({ email });
+    // A unique sub, so this account's monthly allowance is never shared across runs.
+    const token = signTestIdToken({ email, sub: `sub-${randomUUID()}` });
 
     const first = await analyzeJob(makeRequest(`Bearer ${token}`), makeContext());
     expect(first.status).toBe(200);

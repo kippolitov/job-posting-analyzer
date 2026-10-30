@@ -228,7 +228,7 @@ function ProfileEditor() {
             Dealbreakers (one per line)
           </label>
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            A posting that violates a dealbreaker is capped at a fit score of 20.
+            A posting that violates a dealbreaker is flagged next to its score.
           </p>
           <textarea
             id="profile-dealbreakers"

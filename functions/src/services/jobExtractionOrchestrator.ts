@@ -7,6 +7,8 @@ import type {
 import { isJobAnalysisPayload } from "../models/job";
 import type { Tier } from "../models/user";
 import { resolveModelConfig } from "./modelConfig";
+import { fingerprintForRequest, resolveScoringProfile } from "./profileFingerprint";
+import { dealbreakerLinesFromPrompt } from "../../../shared/types/profile";
 
 /** Model output violated the schema even after the repair retry → HTTP 502. */
 export class JobSchemaError extends Error {}
@@ -131,14 +133,14 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   if (hasProfile) {
     lines.push(
       "Fit scoring (a candidate profile is provided):",
-      "- fit.score is 0-100 for how well the posting matches the profile; fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
+      "- fit.score is 0-100 and measures only how well the posting matches the candidate's skills, experience and seniority; dealbreakers are judged separately and never change the score. Score against this rubric: 85-100: all required skills covered and seniority aligned; 65-84: minor gaps; 40-64: significant gaps or a level mismatch; 0-39: major mismatch. fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
       "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first).",
       "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of.",
       "- fit.desired: nice-to-have / preferred qualifications from the posting that the profile does not cover.",
       "- fit.strengths: what makes this specific role a strong choice for this candidate (e.g. seniority alignment, domain overlap, growth direction).",
       "- fit.weaknesses: risks or downsides of this role for this candidate (e.g. skill gaps to close, seniority mismatch, unstated arrangement, below-preference salary).",
       "- Base every item on the posting and profile text only; never invent skills or requirements.",
-      "- If the posting violates any stated dealbreaker in the profile, cap fit.score at 20 or below and name the dealbreaker in the rationale."
+      "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead."
     );
   } else {
     lines.push("No candidate profile was provided: set fit to null.");
@@ -146,10 +148,28 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   return lines.join("\n");
 }
 
+/**
+ * The profile text the fit call sees: no dealbreaker section, so dealbreakers
+ * cannot move the score (SC-002) and are judged by their own call (research R8
+ * fallback). The fingerprint still covers the full profile.
+ */
+function profileWithoutDealbreakers(req: AnalyzeJobRequest): string | undefined {
+  if (req.profileData) return req.profileData.text || undefined;
+  const full = resolveScoringProfile(req);
+  if (!full || dealbreakerLinesFromPrompt(full).length === 0) return full;
+  const at = full.lastIndexOf("\n\nDealbreakers:\n");
+  return at === -1 ? full : full.slice(0, at);
+}
+
+function dealbreakerLinesFor(req: AnalyzeJobRequest): string[] {
+  return req.profileData?.dealbreakers ?? dealbreakerLinesFromPrompt(req.profile ?? "");
+}
+
 function buildUserMessage(req: AnalyzeJobRequest): string {
   const parts: string[] = [];
-  if (req.profile) {
-    parts.push(`Candidate profile:\n${req.profile}`);
+  const profile = profileWithoutDealbreakers(req);
+  if (profile) {
+    parts.push(`Candidate profile:\n${profile}`);
   }
   if (req.extract.jsonLd.length > 0) {
     parts.push(`JSON-LD JobPosting data:\n${JSON.stringify(req.extract.jsonLd)}`);
@@ -160,6 +180,20 @@ function buildUserMessage(req: AnalyzeJobRequest): string {
   parts.push(`Page title: ${req.extract.title}`);
   parts.push(`Page content:\n${req.extract.mainText}`);
   return parts.join("\n\n");
+}
+
+/**
+ * The fit call's messages. The eval compares them with and without the
+ * profile's dealbreakers to show the score cannot depend on them (SC-002).
+ */
+export function fitCallMessages(req: AnalyzeJobRequest): { role: "system" | "user"; content: string }[] {
+  return [
+    {
+      role: "system",
+      content: buildSystemPrompt(Boolean(resolveScoringProfile(req)), Boolean(req.assumeJobPosting)),
+    },
+    { role: "user", content: buildUserMessage(req) },
+  ];
 }
 
 function normalizeWhitespace(text: string): string {
@@ -206,10 +240,90 @@ function enforceConsistency(
     result.daysInOffice = null;
     result.daysRemote = null;
   }
-  if (!req.profile) {
+  if (!resolveScoringProfile(req)) {
     result.fit = null;
   }
   return result;
+}
+
+const DEALBREAKER_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["checks"],
+  properties: {
+    checks: {
+      type: "array",
+      maxItems: 10,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        // Quote before verdict, so the verdict is grounded in what was quoted.
+        required: ["number", "postingSays", "verdict"],
+        properties: {
+          number: { type: "integer" },
+          postingSays: { type: "string" },
+          verdict: { enum: ["violated", "compatible", "not stated"] },
+        },
+      },
+    },
+  },
+} as const;
+
+const DEALBREAKER_PROMPT = [
+  "Check a job posting against the candidate's numbered dealbreakers. Do not score fit.",
+  "Return one check per dealbreaker, in order: postingSays is the shortest VERBATIM substring of the posting that decides it (\"\" if none), then the verdict: violated (the posting states a fact contradicting it), compatible (it states a fact satisfying it), or not stated (silent, vague, or a guess). Silence is never a violation.",
+  "- Arrangement (\"Remote only\", \"No fully on-site roles\"): decided only by how the role or the company works (remote, hybrid, office days, on-site), including a company-wide work policy anywhere on the page. A conditional line (\"if the posting is specified as Onsite…\"), a home area, relocation, job location, travel or occasional meetups do not decide it. Mind negations: only a fully on-site role violates \"No fully on-site roles\"; hybrid or remote is compatible.",
+  "- Minimum salary: compare only pay in the same currency and period, violated only if every stated range tops out below it; otherwise not stated.",
+  "- Location or time zone (\"EU timezones only\"): violated if the role's own location or allowed candidate region is outside it (a US city, \"US only\"); compatible if inside it (UK, London, CET ±2h are European) or that region may apply (\"US and Europe\"). Site menus, search filters and office lists do not count.",
+  "- The job description text wins over JSON-LD and page headers.",
+].join("\n");
+
+function postingHaystack(req: AnalyzeJobRequest): string {
+  return normalizeWhitespace(
+    `${JSON.stringify(req.extract.jsonLd)} ${JSON.stringify(req.extract.structuredSources ?? [])} ${req.extract.title} ${req.extract.mainText}`
+  ).toLowerCase();
+}
+
+/**
+ * The profile lines the judge's checks report as violated (research R8,
+ * FR-005). A check names its dealbreaker by number, so the reported line is
+ * the user's exact wording. A violation counts only with a verbatim posting
+ * quote. Never reads or writes `score`.
+ */
+export function violatedLines(
+  checks: { number?: number; postingSays?: string; verdict?: string }[],
+  lines: string[],
+  haystack: string,
+  warn: (message: string) => void
+): string[] {
+  const violated: string[] = [];
+  for (const check of checks) {
+    if (check.verdict !== "violated") continue;
+    const line = Number.isInteger(check.number) ? lines[check.number! - 1] : undefined;
+    if (line === undefined) {
+      warn(`dealbreaker ${check.number} is not in the profile; dropping it`);
+      continue;
+    }
+    const quote = normalizeWhitespace(check.postingSays ?? "").toLowerCase();
+    if (quote.length === 0 || !haystack.includes(quote)) {
+      warn(`dealbreaker "${line}" has no verbatim posting quote; dropping it`);
+      continue;
+    }
+    if (!violated.includes(line)) violated.push(line);
+  }
+  return violated;
+}
+
+/**
+ * Extensions from before PR2 send no `profileData` and ignore
+ * `dealbreakersViolated`, so the violation is named in the rationale they do
+ * render. The score is untouched (FR-005). Clients that send `profileData`
+ * show the banner instead.
+ */
+function withLegacyDealbreakerNote(rationale: string, violated: string[]): string {
+  if (violated.length === 0) return rationale;
+  const noun = violated.length === 1 ? "dealbreaker" : "dealbreakers";
+  return `${rationale} Violates your ${noun}: ${violated.join("; ")}.`;
 }
 
 export async function orchestrateJobAnalysis(
@@ -228,13 +342,7 @@ export async function orchestrateJobAnalysis(
 
   const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion });
 
-  const messages = [
-    {
-      role: "system" as const,
-      content: buildSystemPrompt(Boolean(req.profile), Boolean(req.assumeJobPosting)),
-    },
-    { role: "user" as const, content: buildUserMessage(req) },
-  ];
+  const messages = fitCallMessages(req);
 
   const complete = async (
     attempt: 1 | 2,
@@ -287,7 +395,57 @@ export async function orchestrateJobAnalysis(
     return isJobAnalysisPayload(parsed) ? parsed : null;
   };
 
-  let payload = await complete(1);
+  // Dealbreakers get their own call, run alongside the fit call (research R8
+  // fallback): the fit call never sees them, so they cannot move the score.
+  const lines = resolveScoringProfile(req) ? dealbreakerLinesFor(req) : [];
+  const judge = async (): Promise<string[]> => {
+    if (lines.length === 0) return [];
+    try {
+      const startedAt = Date.now();
+      const completion = await client.chat.completions.create({
+        model: deployment,
+        messages: [
+          { role: "system" as const, content: DEALBREAKER_PROMPT },
+          {
+            role: "user" as const,
+            content: `${buildUserMessage({ ...req, profile: undefined, profileData: undefined })}\n\nDealbreakers:\n${lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "dealbreaker_check",
+            strict: true,
+            schema: DEALBREAKER_SCHEMA as unknown as Record<string, unknown>,
+          },
+        },
+        ...(temperature !== undefined ? { temperature } : {}),
+        ...(reasoningEffort !== undefined ? { reasoning_effort: reasoningEffort } : {}),
+        max_completion_tokens: 1000,
+      });
+      observe?.({
+        deployment,
+        promptTokens: completion.usage?.prompt_tokens ?? 0,
+        completionTokens: completion.usage?.completion_tokens ?? 0,
+        reasoningTokens: completion.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+        cachedTokens: completion.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+        latencyMs: Date.now() - startedAt,
+        attempt: 1,
+        finishReason: completion.choices[0]?.finish_reason ?? null,
+      });
+      const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "") as {
+        checks?: { number?: number; postingSays?: string; verdict?: string }[];
+      };
+      return violatedLines(parsed.checks ?? [], lines, postingHaystack(req), warn);
+    } catch (error) {
+      warn(`dealbreaker check failed (${error instanceof Error ? error.message : "unknown"}); reporting none`);
+      return [];
+    }
+  };
+  const firstAttempt = complete(1);
+  const judged = judge();
+
+  let payload = await firstAttempt;
   if (!payload) {
     warn("job analysis output failed to parse; retrying with repair instruction");
     payload = await complete(
@@ -301,10 +459,28 @@ export async function orchestrateJobAnalysis(
 
   payload = validateEvidence(payload, req, warn);
   payload = enforceConsistency(payload, req);
+  const violated = await judged;
+  if (payload.fit) {
+    payload = {
+      ...payload,
+      fit: {
+        ...payload.fit,
+        rationale: req.profileData
+          ? payload.fit.rationale
+          : withLegacyDealbreakerNote(payload.fit.rationale, violated),
+        dealbreakersViolated: violated,
+      },
+    };
+  }
+  const profileFingerprint = fingerprintForRequest(req);
+  if (payload.fit && profileFingerprint) {
+    payload = { ...payload, fit: { ...payload.fit, profileFingerprint } };
+  }
 
   return {
     ...payload,
     model: deployment,
     analyzedAt: new Date().toISOString(),
+    tier,
   };
 }

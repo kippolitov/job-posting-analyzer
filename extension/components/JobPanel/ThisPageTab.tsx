@@ -6,6 +6,8 @@ import { RegionList } from "./RegionList";
 import type { ExtractionStrategy, JobAnalysis, JobPanelError, SavedJob } from "../../types/job";
 import { ArrangementBadge } from "./ArrangementBadge";
 import { FitScore } from "./FitScore";
+import { useLiveFingerprint, useRescoreCostLine } from "./useFreshness";
+import { freshness, rescoreAction, scoredByLabel } from "../../../shared/fitView";
 import { UsageExhausted } from "../UsageExhausted";
 
 export type JobViewStatus = "idle" | "analyzing" | "ready" | "error";
@@ -24,6 +26,12 @@ export interface JobView {
   strategy?: ExtractionStrategy;
   /** Present when `strategy` is "picked"/"selection" — offers the always-analyze prompt (FR-026b). */
   scopedRegion?: { selector: string; host: string };
+  /** `undefined` = unknown, `null` = the account has no profile (006 R7). */
+  currentProfileFingerprint?: string | null;
+  profileUnavailable?: boolean;
+  postingUnavailable?: boolean;
+  /** A rescore failed; `analysis` is the stored one, still out of date. */
+  rescoreError?: JobPanelError | null;
 }
 
 interface ThisPageTabProps {
@@ -34,6 +42,8 @@ interface ThisPageTabProps {
   onCancel: () => void;
   onForceAnalyze: () => void;
   onReanalyze?: () => void;
+  /** Rescore against the current profile; the argument is the fit's own fingerprint. */
+  onRescore?: (priorFingerprint: string | null) => void;
   onSave?: () => void;
   onExport?: () => void;
   onPruneArchived?: () => void;
@@ -52,6 +62,7 @@ export function ThisPageTab({
   onCancel,
   onForceAnalyze,
   onReanalyze,
+  onRescore,
   onSave,
   onExport,
   onPruneArchived,
@@ -66,6 +77,24 @@ export function ThisPageTab({
   const [regionScopingOpen, setRegionScopingOpen] = useState(false);
   const regionButtonRef = useRef<HTMLButtonElement>(null);
   const noAccess = view.status === "error" && view.error?.code === "no-access";
+
+  const currentFingerprint = useLiveFingerprint(view.currentProfileFingerprint);
+  const fit = view.analysis?.fit ?? null;
+  const fitFreshness = freshness(fit, currentFingerprint);
+  const unavailable = Boolean(
+    view.postingUnavailable || view.saved?.unavailableAt
+  );
+  const action = rescoreAction(
+    {
+      source: view.saved?.source ?? "url",
+      sourceUrl: view.sourceUrl ?? "",
+      saveKey: view.canonicalUrl ?? "",
+      unavailableAt: view.saved?.unavailableAt,
+    },
+    fitFreshness,
+    "panel"
+  );
+  const costLine = useRescoreCostLine(action.kind !== "none");
 
   const closeRegionScoping = (): void => {
     setRegionScopingOpen(false);
@@ -324,7 +353,39 @@ export function ThisPageTab({
             </div>
           </div>
         )}
-        <FitScore fit={view.analysis.fit} />
+        {view.rescoreError?.code === "usage-limit-reached" &&
+        view.rescoreError.usage ? (
+          <UsageExhausted
+            usage={view.rescoreError.usage}
+            onUpgrade={onUpgrade ?? (() => chrome.runtime.openOptionsPage())}
+          />
+        ) : view.rescoreError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/30"
+          >
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-400">
+              {view.rescoreError.message}
+            </p>
+            <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-500">
+              {view.rescoreError.action}
+            </p>
+          </div>
+        ) : null}
+        <FitScore
+          fit={view.analysis.fit}
+          freshness={fitFreshness}
+          action={action}
+          costLine={costLine}
+          onRescore={
+            onRescore
+              ? () => onRescore(view.analysis?.fit?.profileFingerprint ?? null)
+              : undefined
+          }
+          unavailable={unavailable}
+          profileUnavailable={view.profileUnavailable}
+          scoredBy={scoredByLabel(view.analysis)}
+        />
         <AnalysisFields analysis={view.analysis} />
       </div>
     );

@@ -8,8 +8,8 @@ import {
   billingPortalHandler,
 } from "../../src/billing/index";
 import { getOrCreate, setTier, applySubscriptionState } from "../../src/services/usersStore";
-import { checkAndIncrement } from "../../src/services/meteringService";
-import { MONTHLY_ANALYSES } from "../../src/models/user";
+import { chargeAnalysis, checkAndIncrement } from "../../src/services/meteringService";
+import { FREE_RESCORES_PER_MONTH, MONTHLY_ANALYSES } from "../../src/models/user";
 import { startCertsStub, stopCertsStub, signTestIdToken, TEST_CLIENT_ID } from "../helpers/testTokens";
 
 const account = withAuth(accountHandler);
@@ -109,6 +109,15 @@ describe("billing endpoints (integration: Azurite + certs stub + stubbed Paddle 
       await checkAndIncrement(user.sub, "free");
       const res = await account(makeRequest(user.token), makeContext());
       expect(res.jsonBody).toMatchObject({ usage: { count: 2, limit: MONTHLY_ANALYSES.free } });
+    });
+
+    it("includes rescoresUsed and rescoresLimit for the cost line (006 FR-004a)", async () => {
+      const user = await makeUser();
+      await chargeAnalysis(user.sub, "free", "rescore");
+      const res = await account(makeRequest(user.token), makeContext());
+      expect(res.jsonBody).toMatchObject({
+        usage: { rescoresUsed: 1, rescoresLimit: FREE_RESCORES_PER_MONTH },
+      });
     });
 
     it("premium, renewing: usage uses the premium limit and subscription shows renewsAt", async () => {
