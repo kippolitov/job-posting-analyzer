@@ -216,8 +216,58 @@ describe("SavedTab", () => {
       screen.getAllByRole("link").map((el) => el.textContent);
     expect(titles()).toEqual(["New Role", "Old Role"]);
 
-    await userEvent.click(screen.getByRole("button", { name: /Sorted by date saved/ }));
+    await userEvent.selectOptions(screen.getByLabelText("Sort by"), "Saved (oldest)");
     expect(titles()).toEqual(["Old Role", "New Role"]);
+  });
+
+  describe("sort and filter by fit (006 FR-028)", () => {
+    const fp = "f".repeat(64);
+    const saveRole = (title: string, fit: JobAnalysis["fit"]) =>
+      jobStorage.save(
+        makeJob({
+          canonicalUrl: `https://a.example/${title}`,
+          analysis: { ...analysis, title, fit },
+        })
+      );
+    const titles = () =>
+      screen
+        .getAllByRole("link", { name: /^Open posting/ })
+        .map((el) => el.textContent);
+
+    beforeEach(async () => {
+      await saveRole("Mid", { score: 70, rationale: "r", profileFingerprint: fp });
+      await saveRole("Unscored", null);
+      await saveRole("Top", { score: 90, rationale: "r", profileFingerprint: fp });
+      await saveRole("Stale", { score: 50, rationale: "r", profileFingerprint: "o".repeat(64) });
+    });
+
+    it("Fit (highest) and Fit (lowest) put unscored jobs last", async () => {
+      render(<SavedTab />);
+      await screen.findByText("Top");
+      await userEvent.selectOptions(screen.getByLabelText("Sort by"), "Fit (highest)");
+      expect(titles()).toEqual(["Top", "Mid", "Stale", "Unscored"]);
+      await userEvent.selectOptions(screen.getByLabelText("Sort by"), "Fit (lowest)");
+      expect(titles()).toEqual(["Stale", "Mid", "Top", "Unscored"]);
+    });
+
+    it("filters by verdict, and an unrated fit matches none", async () => {
+      await saveRole("Legacy", { score: 95, rationale: "r" });
+      render(<SavedTab />);
+      await screen.findByText("Top");
+      await userEvent.selectOptions(screen.getByLabelText("Filter by verdict"), "Strong match");
+      expect(titles()).toEqual(["Top"]);
+      await userEvent.selectOptions(screen.getByLabelText("Filter by verdict"), "Stretch");
+      expect(titles()).toEqual(["Stale"]);
+    });
+
+    it("keeps the out-of-date marker on a sorted row", async () => {
+      const { setProfile } = await import("../../services/profileStorage");
+      await setProfile({ text: "Principal engineer", dealbreakers: [] });
+      render(<SavedTab />);
+      await screen.findByText("Stale");
+      await userEvent.selectOptions(screen.getByLabelText("Sort by"), "Fit (lowest)");
+      expect((await screen.findAllByText(/older profile|May be out of date/)).length).toBeGreaterThan(0);
+    });
   });
 
   it("exports the library as a JSON download", async () => {

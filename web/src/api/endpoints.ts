@@ -1,4 +1,10 @@
-import { profileToPromptText, type Preferences, type ScoringProfile } from "shared/types/profile";
+import {
+  confirmedSkillLabel,
+  NO_PROFILE_FOR_SKILL,
+  profileToPromptText,
+  type Preferences,
+  type ScoringProfile,
+} from "shared/types/profile";
 import type { JobAnalysisResponse, JobStatus } from "shared/types/job";
 import { ApiError, apiFetch } from "./apiClient";
 import type {
@@ -44,8 +50,18 @@ export async function saveProfile(payload: {
  * fingerprint.
  */
 export async function confirmSkill(label: string): Promise<ProfilePayload> {
-  const res = await apiFetch("/profile/confirmed-skills", { method: "POST", body: { label } });
-  return (await res.json()) as ProfilePayload;
+  try {
+    const res = await apiFetch("/profile/confirmed-skills", {
+      method: "POST",
+      body: { label: confirmedSkillLabel(label) },
+    });
+    return (await res.json()) as ProfilePayload;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      throw new ApiError(404, "SERVICE_ERROR", NO_PROFILE_FOR_SKILL, false);
+    }
+    throw err;
+  }
 }
 
 /**

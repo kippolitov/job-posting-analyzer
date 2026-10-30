@@ -351,6 +351,32 @@ describe("jobExtractionOrchestrator", () => {
       expect(system).toContain("0-39: major mismatch");
     });
 
+    it("tells the model to treat the Confirmed skills section as evidence (006 US5)", async () => {
+      const mockCreate = await mockCreateWith(fixture("with-fit"));
+      await orchestrateJobAnalysis(withProfile);
+      const [params] = mockCreate.mock.calls[0] as [
+        { messages: { role: string; content: string }[] },
+      ];
+      const system = params.messages.find((m) => m.role === "system")!.content;
+      expect(system).toContain('"Confirmed skills:" section');
+      expect(system).toContain("goes in fit.matching, never fit.missing");
+    });
+
+    it("the user message carries confirmed skills when the client sends profileData (006 US5)", () => {
+      const messages = fitCallMessages({
+        ...baseRequest,
+        profileData: {
+          text: "Principal .NET engineer",
+          dealbreakers: ["No crypto"],
+          confirmedSkills: ["Terraform", "Experience with DB2"],
+        },
+      });
+      const user = messages.find((m) => m.role === "user")!.content;
+      expect(user).toContain("Confirmed skills:\n- Terraform\n- Experience with DB2");
+      // Dealbreakers still stay out of the fit call (SC-002).
+      expect(user).not.toContain("No crypto");
+    });
+
     it("omits the rubric when no profile was provided", async () => {
       const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
       await orchestrateJobAnalysis(baseRequest);

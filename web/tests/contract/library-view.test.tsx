@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, it, expect } from "vitest";
+import { clearCompareSelection } from "@/lib/compareStore";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "@/App";
 import type { SavedJobPayload } from "@/api/types";
@@ -203,5 +204,98 @@ describe("library rows show the shared verdict (006 US2)", () => {
     expect(screen.getByLabelText("Unrated, fit 72 out of 100")).toHaveTextContent(
       "Unrated — rescore for a verdict"
     );
+  });
+});
+
+describe("library timeline (006 FR-029, FR-030)", () => {
+  const api = installFakeApi();
+  beforeEach(clearCompareSelection);
+  const at = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+  const entry = (title: string, daysAgo: number, score: number | null, status: "interested" | "applied" = "interested"): SavedJobPayload => ({
+    ...fullJob,
+    canonicalUrl: `https://example.com/${title}`,
+    sourceUrl: `https://example.com/${title}`,
+    status,
+    savedAt: at(daysAgo),
+    analysis: {
+      ...fullJob.analysis,
+      title,
+      fit: score === null ? null : { score, rationale: "r", profileFingerprint: "f".repeat(64) },
+    },
+  });
+
+  it("date sort puts entries under level-3 day headings with their key facts", async () => {
+    seedSession();
+    api.setJobs([entry("Today role", 0, 90), entry("Old role", 40, 20)]);
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    await screen.findByRole("link", { name: "Today role" });
+    const headings = screen.getAllByRole("heading", { level: 3 });
+    expect(headings[0]).toHaveTextContent("Today");
+    expect(headings).toHaveLength(2);
+
+    const item = screen.getByRole("link", { name: "Today role" }).closest("li")!;
+    expect(item).toHaveTextContent("Acme Corp");
+    expect(within(item).getByLabelText("Strong match, fit 90 out of 100")).toBeInTheDocument();
+    expect(item).toHaveTextContent("USD 150,000 – 190,000/year");
+    expect(item).toHaveTextContent("Hybrid · 3 days in office");
+    expect(item).toHaveTextContent("Remote (US)");
+    expect(item).toHaveTextContent("senior");
+    expect(item).toHaveTextContent("interested");
+    expect(item).toHaveTextContent("example.com");
+  });
+
+  it("fit sort drops the headings and shows each save date", async () => {
+    seedSession();
+    api.setJobs([entry("Today role", 0, 90), entry("Old role", 40, 20)]);
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    await screen.findByRole("link", { name: "Today role" });
+    await userEvent.selectOptions(screen.getByLabelText("Sort"), "fit-asc");
+    expect(screen.queryAllByRole("heading", { level: 3 })).toHaveLength(0);
+    const links = screen.getAllByRole("link", { name: /role$/ });
+    expect(links.map((l) => l.textContent)).toEqual(["Old role", "Today role"]);
+    expect(screen.getAllByText(/^Saved [A-Z][a-z]{2} \d/)).toHaveLength(2);
+  });
+
+  it("a filter that empties a day hides its heading", async () => {
+    seedSession();
+    api.setJobs([entry("Today role", 0, 90, "applied"), entry("Old role", 40, 20)]);
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    await screen.findByRole("link", { name: "Today role" });
+    await userEvent.selectOptions(screen.getByLabelText("Status"), "applied");
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent("Today");
+  });
+
+  it("the verdict filter keeps only that verdict", async () => {
+    seedSession();
+    api.setJobs([entry("Today role", 0, 90), entry("Old role", 40, 20)]);
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    await screen.findByRole("link", { name: "Today role" });
+    await userEvent.selectOptions(screen.getByLabelText("Verdict"), "long-shot");
+    expect(screen.queryByRole("link", { name: "Today role" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Old role" })).toBeInTheDocument();
+  });
+
+  it("selection uses the per-entry checkbox and Compare waits for two", async () => {
+    seedSession();
+    api.setJobs([entry("Today role", 0, 90), entry("Old role", 40, 20)]);
+    window.history.pushState({}, "", "/library");
+    render(<App />);
+
+    await screen.findByRole("link", { name: "Today role" });
+    const compare = screen.getByRole("button", { name: "Compare" });
+    expect(compare).toBeDisabled();
+    await userEvent.click(screen.getByLabelText("Select Today role for comparison"));
+    expect(compare).toBeDisabled();
+    await userEvent.click(screen.getByLabelText("Select Old role for comparison"));
+    expect(compare).toBeEnabled();
   });
 });

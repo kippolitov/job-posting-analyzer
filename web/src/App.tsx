@@ -1,9 +1,8 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "@/auth/AuthProvider";
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Account } from "@/pages/Account";
-import { Compare } from "@/pages/Compare";
 import { Landing } from "@/pages/Landing";
 import { Library } from "@/pages/Library";
 import { PostingDetail } from "@/pages/PostingDetail";
@@ -22,7 +21,7 @@ export function App() {
             <Route element={<ProtectedRoute />}>
               <Route path="/library" element={<Library />} />
               <Route path="/library/:key" element={<PostingDetail />} />
-              <Route path="/compare" element={<Compare />} />
+              <Route path="/compare" element={<Navigate to="/library" replace />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/account" element={<Account />} />
               <Route path="/upload" element={<Upload />} />

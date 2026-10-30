@@ -1,6 +1,6 @@
 import type { SavedJobPayload } from "@/api/types";
 import type { Arrangement, JobStatus, Seniority } from "shared/types/job";
-import { freshness } from "shared/fitView";
+import { filterByVerdict, freshness, sortByFit, verdictLabel, type Verdict } from "shared/fitView";
 
 export type SortKey = "fit-desc" | "fit-asc" | "saved-desc" | "saved-asc";
 
@@ -15,6 +15,8 @@ export interface LibraryQuery {
   fitMax?: number;
   /** Hide every posting not scored against the current profile (FR-008). */
   currentProfileOnly?: boolean;
+  /** FR-028: only postings whose fit has this verdict; never matches an unrated fit. */
+  verdict?: Exclude<Verdict, "unrated">;
   sort: SortKey;
 }
 
@@ -38,7 +40,7 @@ export function applyLibraryQuery(
   /** `undefined` = not known yet, `null` = no profile; only used by `currentProfileOnly`. */
   currentFingerprint?: string | null
 ): SavedJobPayload[] {
-  const filtered = jobs.filter((job) => {
+  const matching = jobs.filter((job) => {
     if (!matchesText(job, query.text)) return false;
     if (
       query.currentProfileOnly &&
@@ -57,28 +59,23 @@ export function applyLibraryQuery(
     }
     return true;
   });
+  const filtered = query.verdict ? filterByVerdict(matching, query.verdict) : matching;
 
-  const sorted = [...filtered];
   switch (query.sort) {
     case "fit-desc":
-      sorted.sort((a, b) => (fitScore(b) ?? -1) - (fitScore(a) ?? -1));
-      break;
+      return sortByFit(filtered, "highest");
     case "fit-asc":
-      sorted.sort((a, b) => (fitScore(a) ?? -1) - (fitScore(b) ?? -1));
-      break;
+      return sortByFit(filtered, "lowest");
     case "saved-asc":
-      sorted.sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt));
-      break;
+      return [...filtered].sort((a, b) => Date.parse(a.savedAt) - Date.parse(b.savedAt));
     case "saved-desc":
     default:
-      sorted.sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
-      break;
+      return [...filtered].sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
   }
-  return sorted;
 }
 
 export interface FilterChip {
-  key: "status" | "arrangement" | "seniority" | "fit" | "currentProfileOnly";
+  key: "status" | "arrangement" | "seniority" | "fit" | "verdict" | "currentProfileOnly";
   label: string;
 }
 
@@ -92,6 +89,9 @@ export function activeFilterSummary(query: LibraryQuery): FilterChip[] {
   if (query.seniority) chips.push({ key: "seniority", label: `Seniority: ${query.seniority}` });
   if (query.fitMin !== undefined || query.fitMax !== undefined) {
     chips.push({ key: "fit", label: `Fit: ${query.fitMin ?? 0}–${query.fitMax ?? 100}` });
+  }
+  if (query.verdict) {
+    chips.push({ key: "verdict", label: `Verdict: ${verdictLabel(query.verdict)}` });
   }
   if (query.currentProfileOnly) {
     chips.push({ key: "currentProfileOnly", label: "Current profile only" });

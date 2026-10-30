@@ -15,6 +15,7 @@ import {
   SPONSORSHIP_LINE,
   dealbreakerLinesFromPrompt,
   preferenceLines,
+  profileToPromptText,
 } from "../../../shared/types/profile";
 import { applyPreferences } from "./applyPreferences";
 
@@ -161,6 +162,7 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
       "- fit.strengths: what makes this specific role a strong choice for this candidate (e.g. seniority alignment, domain overlap, growth direction).",
       "- fit.weaknesses: risks or downsides of this role for this candidate (e.g. skill gaps to close, seniority mismatch, unstated arrangement, below-preference salary).",
       "- Every item in fit.matching, fit.missing and fit.desired has a label, a postingQuote and a profileQuote. postingQuote is the shortest verbatim span of the posting that states the requirement; profileQuote is the shortest verbatim span of the candidate profile that covers it. Copy both exactly, never paraphrase. profileQuote is null for fit.missing and fit.desired items, and either quote is null when no span supports the item.",
+      "- A \"Confirmed skills:\" section in the profile lists skills the candidate states they have. Treat each line there as evidence: a requirement it covers goes in fit.matching, never fit.missing or fit.desired, with that line as its profileQuote, and the score reflects it.",
       "- Base every item on the posting and profile text only; never invent skills or requirements.",
       "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead."
     );
@@ -176,7 +178,13 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
  * fallback). The fingerprint still covers the full profile.
  */
 function profileWithoutDealbreakers(req: AnalyzeJobRequest): string | undefined {
-  if (req.profileData) return req.profileData.text || undefined;
+  if (req.profileData) {
+    // Dealbreakers and preferences are judged elsewhere; confirmed skills are
+    // evidence about the candidate, so they stay with the résumé text.
+    const { text, confirmedSkills } = req.profileData;
+    if (!text) return undefined;
+    return profileToPromptText({ text, dealbreakers: [], confirmedSkills });
+  }
   const full = resolveScoringProfile(req);
   if (!full || dealbreakerLinesFromPrompt(full).length === 0) return full;
   const at = full.lastIndexOf("\n\nDealbreakers:\n");

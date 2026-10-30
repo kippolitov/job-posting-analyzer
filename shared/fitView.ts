@@ -197,3 +197,79 @@ export function scoredByLabel(analysis: {
 export function previewMissing(fit: Fit | NormalizedFit, n = 3): string[] {
   return (fit.missing ?? []).slice(0, n);
 }
+
+interface FitBearing {
+  analysis: { fit?: Fit | null };
+}
+
+/**
+ * FR-028: orders by fit number, unscored jobs last in both directions. An
+ * out-of-date or unrated fit still sorts by its number; the marker, not the
+ * order, says it is stale. Stable, and never mutates its input.
+ */
+export function sortByFit<T extends FitBearing>(
+  jobs: readonly T[],
+  direction: "highest" | "lowest"
+): T[] {
+  const sign = direction === "highest" ? -1 : 1;
+  return [...jobs].sort((a, b) => {
+    const fa = a.analysis.fit;
+    const fb = b.analysis.fit;
+    if (!fa || !fb) return fa ? -1 : fb ? 1 : 0;
+    return sign * (fa.score - fb.score);
+  });
+}
+
+/** FR-028: an unrated fit (and an unscored job) matches no verdict. */
+export function filterByVerdict<T extends FitBearing>(
+  jobs: readonly T[],
+  verdict: Exclude<Verdict, "unrated">
+): T[] {
+  return jobs.filter((job) => {
+    const fit = normalizeFit(job.analysis.fit);
+    return fit !== null && verdictFor(fit) === verdict;
+  });
+}
+
+export type RequirementCellState = "matched" | "missing" | "nice-to-have" | "not-asked";
+
+export interface RequirementRow {
+  label: string;
+  /** One cell per input fit, in input order. */
+  cells: RequirementCellState[];
+}
+
+/**
+ * FR-031: the requirement-by-posting table. Labels that differ only in case
+ * or surrounding space are one row, shown with the first spelling seen. Rows
+ * run by how many postings ask, then alphabetically.
+ */
+export function mergeRequirementRows(
+  fits: readonly (Fit | null | undefined)[]
+): RequirementRow[] {
+  const rows = new Map<string, RequirementRow>();
+  const keyOf = (label: string) => label.trim().toLowerCase();
+  const mark = (index: number, labels: string[], state: RequirementCellState) => {
+    for (const label of labels) {
+      const key = keyOf(label);
+      if (!key) continue;
+      let row = rows.get(key);
+      if (!row) {
+        row = { label: label.trim(), cells: fits.map(() => "not-asked") };
+        rows.set(key, row);
+      }
+      if (row.cells[index] === "not-asked") row.cells[index] = state;
+    }
+  };
+  fits.forEach((raw, index) => {
+    const fit = normalizeFit(raw);
+    if (!fit) return;
+    mark(index, fit.matching, "matched");
+    mark(index, fit.missing, "missing");
+    mark(index, fit.desired, "nice-to-have");
+  });
+  const asked = (row: RequirementRow) => row.cells.filter((c) => c !== "not-asked").length;
+  return [...rows.values()].sort(
+    (a, b) => asked(b) - asked(a) || a.label.localeCompare(b.label, "en", { sensitivity: "base" })
+  );
+}

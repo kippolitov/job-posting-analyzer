@@ -9,6 +9,7 @@ import type {
   RescoreSurface,
 } from "./fitView";
 import type { EvidenceItem } from "./types/job";
+import type { RequirementCellState } from "./fitView";
 
 /**
  * Shared test table for `shared/fitView.ts` (contracts/fit-view.md, research
@@ -338,4 +339,90 @@ export const EVIDENCE_CASES: [
     "Azure",
     null,
   ],
+];
+
+/** A job as the sort and filter helpers see it: just an id and an analysis. */
+interface FitJob {
+  id: string;
+  analysis: { fit?: Fit | null };
+}
+const fitJob = (id: string, fit: Fit | null | undefined): FitJob => ({
+  id,
+  analysis: { fit },
+});
+const SORT_JOBS: FitJob[] = [
+  fitJob("a-70", verdictFit(70)),
+  fitJob("none", null),
+  fitJob("b-90", verdictFit(90)),
+  fitJob("old-50", verdictFit(50, {}, "b".repeat(64))),
+  fitJob("unrated-80", verdictFit(80, {}, null)),
+  fitJob("absent", undefined),
+  fitJob("c-70", verdictFit(70)),
+];
+
+/** `sortByFit(jobs, direction)` → ids. Unscored last in both; ties keep input order. */
+export const SORT_CASES: [string, "highest" | "lowest", string[]][] = [
+  ["highest first, unscored last", "highest", ["b-90", "unrated-80", "a-70", "c-70", "old-50", "none", "absent"]],
+  ["lowest first, unscored still last", "lowest", ["old-50", "a-70", "c-70", "unrated-80", "b-90", "none", "absent"]],
+];
+export const SORT_INPUT = SORT_JOBS;
+
+/** `filterByVerdict(jobs, verdict)` → ids. Unrated fits match no verdict. */
+export const FILTER_CASES: [string, Exclude<Verdict, "unrated">, string[]][] = [
+  ["strong match", "strong", ["b-90", "fl-85"]],
+  ["worth a shot", "worth-a-shot", ["a-70", "c-70"]],
+  ["stretch", "stretch", ["old-50"]],
+  ["long shot", "long-shot", ["fl-10"]],
+  ["dealbreaker", "dealbreaker", ["fl-dealbreaker"]],
+];
+export const FILTER_INPUT: FitJob[] = [
+  ...SORT_JOBS,
+  fitJob("fl-85", verdictFit(85)),
+  fitJob("fl-10", verdictFit(10)),
+  fitJob("fl-dealbreaker", verdictFit(95, { dealbreakersViolated: ["x"] })),
+];
+
+/** `mergeRequirementRows(fits)`: [name, fits, expected rows]. */
+export const MERGE_CASES: [
+  string,
+  (Fit | null | undefined)[],
+  { label: string; cells: RequirementCellState[] }[],
+][] = [
+  [
+    "merges case and whitespace variants, keeping the first spelling",
+    [
+      verdictFit(70, { missing: ["Kubernetes"] }),
+      verdictFit(70, { matching: ["kubernetes "] }),
+      verdictFit(70, { desired: [" KUBERNETES"] }),
+    ],
+    [{ label: "Kubernetes", cells: ["missing", "matched", "nice-to-have"] }],
+  ],
+  [
+    "a posting that never mentions a requirement is not-asked",
+    [verdictFit(70, { missing: ["Go"] }), verdictFit(70, { matching: ["Rust"] })],
+    [
+      { label: "Go", cells: ["missing", "not-asked"] },
+      { label: "Rust", cells: ["not-asked", "matched"] },
+    ],
+  ],
+  [
+    "rows run by how many postings ask, then alphabetically",
+    [
+      verdictFit(70, { matching: ["Zig", "Azure"], missing: ["Go"] }),
+      verdictFit(70, { matching: ["Azure"], desired: ["Zig"] }),
+      verdictFit(70, { missing: ["Azure", "Bash"] }),
+    ],
+    [
+      { label: "Azure", cells: ["matched", "matched", "missing"] },
+      { label: "Zig", cells: ["matched", "nice-to-have", "not-asked"] },
+      { label: "Bash", cells: ["not-asked", "not-asked", "missing"] },
+      { label: "Go", cells: ["missing", "not-asked", "not-asked"] },
+    ],
+  ],
+  [
+    "legacy and missing fits contribute not-asked cells",
+    [null, undefined, { score: 50, rationale: "r" }, verdictFit(70, { matching: ["Azure"] })],
+    [{ label: "Azure", cells: ["not-asked", "not-asked", "not-asked", "matched"] }],
+  ],
+  ["no postings, no rows", [], []],
 ];

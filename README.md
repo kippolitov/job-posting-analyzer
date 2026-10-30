@@ -17,11 +17,11 @@ A companion **web app** (hosted on Azure Static Web Apps) signs in with the same
 | Surface | Capability |
 |---|---|
 | **Analyze** | One click extracts work arrangement, salary, seniority, and tech stack from any job page — with evidence quotes and confidence levels |
-| **Fit score** | 0–100 match against your candidate profile, with a detailed breakdown of matching skills, gaps, and strengths/weaknesses of the role for you |
+| **Fit score** | 0–100 match against your candidate profile, shown with a verdict (Strong match, Worth a shot, Stretch, Long shot, Dealbreaker), the quotes behind each matched or missing requirement, and a breakdown of gaps and strengths/weaknesses. Violated dealbreakers are listed beside the score and never lower it. Scores marked **out of date** were made against an older profile; **Rescore** updates them. Confirm a missing skill with "I have this" |
 | **Candidate profile** | Paste your résumé / background (up to 20,000 chars) on the options page; stored per account and included in every analysis |
-| **Saved library** | Save postings with status and notes; deduplicated by canonicalized URL; export and import as JSON; soft cap of 1,000 with prune-at-cap |
+| **Saved library** | Sort and filter by fit and verdict; save postings with status and notes; deduplicated by canonicalized URL; export and import as JSON; soft cap of 1,000 with prune-at-cap |
 | **Account sync** | Google sign-in via `chrome.identity`; data saved before sign-in is offered a one-time migration into the account |
-| **Web companion app** | Sign in on the web with the same Google account to browse/search/filter/sort/compare your library, edit your profile, and analyze a job posting from an uploaded `.docx`/`.pdf` |
+| **Web companion app** | Sign in on the web with the same Google account to browse your library as a timeline by save day, search/filter/sort it, compare postings requirement by requirement in a dialog, edit your profile, and analyze a job posting from an uploaded `.docx`/`.pdf` |
 | **Resilient extraction** | Waits for a hydrating page to finish rendering before reading it, scores containers instead of guessing three fixed selectors, and never gets permanently stuck: paste the posting text directly, hand-pick or select the right part of the page when extraction gets it wrong, and — once corrected — that site is always analyzed correctly from then on |
 
 ---
@@ -67,6 +67,7 @@ Every feature lives in `specs/`:
 - **[`003-freemium-premium-tier`](specs/003-freemium-premium-tier/)** — self-serve signup, free-tier metering, Premium subscription via Paddle (checkout, webhooks, customer portal), legacy-allowlist migration
 - **[`004-web-companion-app`](specs/004-web-companion-app/)** — the `web/` SPA (shared library/profile/account views, search/filter/sort/compare), document-upload analysis (`POST /api/analyze-document`), and the two-line backend auth delta (`aud` set + CORS allowlist) that lets it call the same API as the extension
 - **[`005-resilient-extraction`](specs/005-resilient-extraction/)** — readiness-aware extraction for hydrating SPAs, a text-density/link-density container scorer, structured-data (JSON-LD + microdata) harvesting, a paste-text escape hatch, and hand-scoped regions (pointer pick or selection) with per-site learned corrections
+- **[`006-profile-match-ux`](specs/006-profile-match-ux/)** — trustworthy, actionable profile match: out-of-date markers and Rescore, verdicts with evidence quotes, résumé import and structured preferences, "I have this" skills, fit triage in the Saved tab, and the web library timeline with a Compare dialog
 
 Each feature carries its full paper trail: `spec.md` (user stories and acceptance scenarios), `plan.md` (stack and architecture decisions), `tasks.md` (dependency-ordered tickets), plus `research.md`, `data-model.md`, API `contracts/`, and a `quickstart.md`. Every decision is auditable because it's in a file — not buried in a chat log.
 
