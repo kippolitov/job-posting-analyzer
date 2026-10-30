@@ -1,5 +1,7 @@
 # PR2 handoff: where implementation stopped
 
+> **Update 2026-10-30 (T088 in progress)**: read section 7 ("T088 state") first. The gate checks and the old-extension compatibility smoke pass. Left: the web half of the smoke, QG-3 review, and the PR (ask before pushing or opening it).
+
 > **Update 2026-10-29 (T087 done, gate PASSES)**: after attempt 3 the judge was reworked (per-dealbreaker checks by number, three-way verdict, reading rules), and the product owner approved new metrics: SC-004 per-run agreement; SC-002 identical fit input plus ≥ 75% recall; SC-008 0 trap false plus ≤ 2% misreadings. The final run (`eval-runs/pr2.json`) passes on both configurations; see the eval-models.md "Final run" section and spec.md Clarifications. Left: T088 (lint/tests/coverage, perf, compatibility smoke, QG-3 review, PR; ask before pushing or opening the PR). Section 6 below is history.
 
 > **Update 2026-10-29 (T087 eval, gate FAILED)**: T060/T078 are done and every free gate
@@ -274,3 +276,61 @@ Ideas not yet tried, roughly by promise:
 Do not open the PR until the user decides; they previously approved opening it, but the task
 (T087) says stop and report when SC-004 or independence is below 90%. The recommended fallback if
 the metric can't be met: open PR2 as not-ready-to-merge, ship US1 (freshness/rescore) separately.
+
+## 7. T088 state (2026-10-30)
+
+Branch `006-freshness-verdict`, not pushed, no PR. Commits since `e351db2` are split so each
+`test:` commit comes before its `feat:` commit (each test commit was checked red, then green).
+The unsplit history is kept on local branch `006-freshness-verdict-presplit` (same final tree).
+Delete it once the PR is open.
+
+**Done:**
+
+- **T087**: gate passes under targets the user approved (spec.md Clarifications; eval-models.md
+  "Final run"). Raw run: `eval-runs/pr2.json`.
+- **Lint**: functions, extension and web are clean. `functions/.eslintrc.cjs` now ignores `coverage/`.
+- **Tests**: functions unit 411 and integration 111, extension 472, web 123.
+- **Coverage**: at least 80% on every module T088 lists. `shared/fitView.ts`: 100% lines.
+- **Perf (QG-4)**: matches the T001 baseline. Analyze path p95 2.5–2.8 ms (baseline 2.79). Under
+  parallel integration files it measured 111–134 ms from Azurite contention alone, not code
+  (`main` measured 3.1 ms sequentially). `test:integration` and `coverage` now use
+  `--fileParallelism=false`; CI and CD run `test:integration`, so this matters there too.
+- **auth.test.ts**: the two signup tests now use a unique `sub`. The fixed default sub let them
+  exhaust one shared monthly allowance in a persistent Azurite (429 after 50 runs).
+- **Compatibility smoke, extension half**: the published v0.0.36 extension, built with
+  `npm run build:e2e` against a local host on :7072 running this branch (`REQUIRE_AUTH=false`),
+  passed 5/5. That covers v0.0.36's own `jobAnalyzer`, `savedJobs` and `migration` E2E plus
+  [`compat-smoke/pr2-old-extension.spec.ts`](./compat-smoke/pr2-old-extension.spec.ts):
+  - an old options-page save keeps `preferences` and `confirmedSkills`;
+  - an old analyze and save stores a PR2-shaped fit (`dealbreakersViolated`, `profileFingerprint`);
+  - the fit renders after a reload, with no page errors.
+- **Compatibility gap found and fixed (user-approved)**: v0.0.36 ignores `dealbreakersViolated`,
+  so a violating posting showed a plain high score. Requests without `profileData` now get
+  "Violates your dealbreaker(s): …" appended to the rationale (commit `63d7b10`; contract
+  analyze-api §5; research R8 "Superseded" step 5). The smoke asserts the note is shown.
+  The v0.0.36 options page still says "capped at a fit score of 20". Only an extension release
+  fixes that.
+
+**Left:**
+
+1. **Web half of the smoke**: open the web library and posting detail for the saved posting,
+   against the same backend.
+2. **QG-3 review request** to the user: score header, dealbreaker banner, cost line.
+3. **PR description**: eval-models.md sign-off, the four spec changes in Clarifications, the
+   legacy rationale note, and the perf/CI change. Then push and open PR2. Ask first.
+
+**Running the smoke again:**
+
+- Start a fresh Azurite (`npx azurite-table --location .azurite`).
+- In a worktree of this branch: `npm run build`, then
+  `REQUIRE_AUTH=false func start --port 7072`.
+- In a worktree at `v0.0.36`: point `extension/.env.local` at :7072, run
+  `npm run build:e2e`, copy the spec into `tests/e2e/`, then
+  `E2E=1 E2E_HEADLESS=1 npx playwright test --project=e2e`.
+- Wait until `curl localhost:7072/api/profile` returns HTTP 200 before the first test. A test
+  started earlier fails with "Could not reach the analysis service" (cold start).
+
+**Not cleaned up**: a `func start` on :7071, started at 17:42 on 2026-10-29 from `functions/`
+by an earlier session, is still running on old code. This session was not allowed to stop it.
+Stop it by hand if you don't need it.
+
