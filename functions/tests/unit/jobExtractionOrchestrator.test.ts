@@ -607,9 +607,14 @@ describe("jobExtractionOrchestrator", () => {
       dealbreakers: ["No fully on-site roles"],
     };
 
-    const judged = (violations: { dealbreaker: string; quote: string }[]): string =>
-      JSON.stringify({ violations });
+    type Check = { number: number; postingSays: string; verdict: string };
+    const judged = (checks: Check[]): string => JSON.stringify({ checks });
     const onsiteQuote = "This role is fully on-site at our Dallas office";
+    const violated = (number: number, postingSays = onsiteQuote): Check => ({
+      number,
+      postingSays,
+      verdict: "violated",
+    });
 
     async function calls(req: AnalyzeJobRequest, judge: string) {
       const mockCreate = await mockCreateWith(fixture("dealbreaker-onsite"), judge);
@@ -627,10 +632,7 @@ describe("jobExtractionOrchestrator", () => {
     }
 
     it("keeps the user's exact wording and leaves the score at 72", async () => {
-      await mockCreateWith(
-        fixture("dealbreaker-onsite"),
-        judged([{ dealbreaker: "no fully on-site roles", quote: onsiteQuote }])
-      );
+      await mockCreateWith(fixture("dealbreaker-onsite"), judged([violated(1)]));
       const result = await orchestrateJobAnalysis(onsiteRequest({ profileData }));
       expect(result.fit?.dealbreakersViolated).toEqual(["No fully on-site roles"]);
       expect(result.fit?.score).toBe(72);
@@ -639,37 +641,42 @@ describe("jobExtractionOrchestrator", () => {
     it("drops a violation whose quote is not in the posting", async () => {
       const { result } = await calls(
         onsiteRequest({ profileData }),
-        judged([{ dealbreaker: "No fully on-site roles", quote: "Five days in Paris" }])
+        judged([violated(1, "Five days in Paris")])
       );
       expect(result.fit?.dealbreakersViolated).toEqual([]);
       expect(result.fit?.score).toBe(72);
     });
 
-    it("maps a paraphrase by containment and keeps an unmatched entry with one warning", async () => {
+    it("reports only violated checks, by number, and warns about an unknown number", async () => {
       await mockCreateWith(
         fixture("dealbreaker-onsite"),
         judged([
-          { dealbreaker: "no on-site", quote: onsiteQuote },
-          { dealbreaker: "Must sponsor visas", quote: "build C# and .NET services" },
+          violated(1),
+          { number: 2, postingSays: "", verdict: "not stated" },
+          { number: 3, postingSays: "build C# and .NET services", verdict: "compatible" },
+          violated(7),
         ])
       );
       const warn = vi.fn();
       const result = await orchestrateJobAnalysis(
         onsiteRequest({
-          profileData: { ...profileData, dealbreakers: ["No on-site roles", "Remote only"] },
+          profileData: {
+            ...profileData,
+            dealbreakers: ["No on-site roles", "Remote only", "Must use .NET"],
+          },
         }),
         "free",
         warn
       );
-      expect(result.fit?.dealbreakersViolated).toEqual(["No on-site roles", "Must sponsor visas"]);
-      const unmatched = warn.mock.calls.filter(([m]) => String(m).includes("Must sponsor visas"));
-      expect(unmatched).toHaveLength(1);
+      expect(result.fit?.dealbreakersViolated).toEqual(["No on-site roles"]);
+      const unknown = warn.mock.calls.filter(([m]) => String(m).includes("dealbreaker 7"));
+      expect(unknown).toHaveLength(1);
     });
 
     it("recovers dealbreaker lines from a legacy profile string and hides them from the fit call", async () => {
       const { result, fit, check } = await calls(
         onsiteRequest({ profile: "Senior .NET engineer\n\nDealbreakers:\n- No on-site work" }),
-        judged([{ dealbreaker: "No on-site work", quote: onsiteQuote }])
+        judged([violated(1)])
       );
       expect(result.fit?.dealbreakersViolated).toEqual(["No on-site work"]);
       expect(fit.messages[1].content).toContain("Senior .NET engineer");
@@ -691,8 +698,14 @@ describe("jobExtractionOrchestrator", () => {
       expect(fit.messages[0].content).toContain("never change the score");
       expect(check?.response_format.json_schema.name).toBe("dealbreaker_check");
       expect(check?.messages[0].content).toContain("VERBATIM substring of the posting");
-      expect(check?.messages[1].content).toContain("1. No fully on-site roles");
-      expect(check?.messages[1].content).not.toContain("Candidate profile");
+      expect(check?.messages[0].content).toContain("Silence is never a violation");
+      const checkUser = check?.messages[1].content ?? "";
+      expect(checkUser).toContain("1. No fully on-site roles");
+      expect(checkUser).not.toContain("Candidate profile");
+      // The list follows the posting, so a long posting doesn't bury it.
+      expect(checkUser.indexOf("Page content:")).toBeLessThan(
+        checkUser.indexOf("1. No fully on-site roles")
+      );
     });
 
     it("makes one call when the profile has no dealbreakers", async () => {
