@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   bandFor,
   costPerAnalysis,
+  dealbreakerChecks,
+  dealbreakerRecall,
   falseDealbreakers,
   fitInputIndependence,
   identicalVerdictShare,
@@ -11,6 +13,7 @@ import {
   pairKey,
   reportedViolations,
   scoreIndependence,
+  splitFalseDealbreakers,
   truncations,
   verdictStability,
   type PairLabel,
@@ -268,6 +271,68 @@ describe("falseDealbreakers / missedDealbreakers", () => {
     const fit = { score: 70, rationale: "x", dealbreakersViolated: [ONSITE] };
     const results = [result("silent", "backend", fit), result("silent", "backend", fit)];
     expect(falseDealbreakers(results, pairs).count).toBe(2);
+  });
+});
+
+describe("dealbreaker targets (approved 2026-10-29)", () => {
+  const REMOTE = "Remote only";
+  const SALARY = "Minimum salary 120000 USD per year";
+  const facts = { [ONSITE]: "arrangement", [REMOTE]: "arrangement", [SALARY]: "salary" };
+  const labels: PairLabel[] = [
+    { posting: "onsite", profile: "backend", violations: [ONSITE], unstatedFacts: [] },
+    // States an arrangement (hybrid) but no salary.
+    { posting: "hybrid", profile: "frontend", violations: [REMOTE], unstatedFacts: ["salary"] },
+  ];
+  const fit = (dealbreakersViolated: string[]) => ({ score: 50, rationale: "x", dealbreakersViolated });
+
+  describe("splitFalseDealbreakers", () => {
+    it("calls a false report a trap when its fact is one the posting does not state (SC-008)", () => {
+      const results = [result("hybrid", "frontend", fit([REMOTE, SALARY]), [REMOTE, SALARY])];
+      const { trap, stated } = splitFalseDealbreakers(results, labels, facts);
+      expect(trap.count).toBe(1);
+      expect(trap.details[0]).toContain(SALARY);
+      expect(stated.count).toBe(0);
+    });
+
+    it("calls a false report on a stated fact a misreading", () => {
+      const results = [result("onsite", "backend", fit([ONSITE, REMOTE]), [ONSITE, REMOTE])];
+      const { trap, stated } = splitFalseDealbreakers(results, labels, facts);
+      expect(trap.count).toBe(0);
+      expect(stated.count).toBe(1);
+    });
+
+    it("counts a line with no known fact as a trap, the stricter reading", () => {
+      const results = [result("hybrid", "frontend", fit(["No startups"]), ["No startups"])];
+      expect(splitFalseDealbreakers(results, labels, facts).trap.count).toBe(1);
+    });
+  });
+
+  describe("dealbreakerChecks", () => {
+    it("counts every dealbreaker line sent with a scored, labelled result", () => {
+      const results = [
+        result("onsite", "backend", fit([]), [ONSITE]),
+        result("hybrid", "frontend", fit([]), [REMOTE, SALARY]),
+        result("hybrid", "frontend", null, [REMOTE, SALARY]),
+        result("unlabelled", "backend", fit([]), [ONSITE]),
+      ];
+      expect(dealbreakerChecks(results, labels)).toBe(3);
+    });
+  });
+
+  describe("dealbreakerRecall (SC-002)", () => {
+    it("is the share of labelled violations reported, over every run", () => {
+      const results = [
+        result("onsite", "backend", fit([ONSITE])),
+        result("onsite", "backend", fit([])),
+        result("hybrid", "frontend", fit([REMOTE]), [REMOTE, SALARY]),
+        result("hybrid", "frontend", null, [REMOTE, SALARY]),
+      ];
+      expect(dealbreakerRecall(results, labels)).toBe(0.5);
+    });
+
+    it("is NaN with no labelled violations", () => {
+      expect(dealbreakerRecall([result("silent", "backend", fit([]))], pairs)).toBeNaN();
+    });
   });
 });
 
