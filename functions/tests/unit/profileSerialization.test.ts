@@ -56,3 +56,69 @@ describe("dealbreakerLinesFromPrompt", () => {
     expect(dealbreakerLinesFromPrompt(text)).toEqual(["Remote only"]);
   });
 });
+
+describe("Preferences section (PR4, data-model.md §3)", () => {
+  const base = { text: "Senior engineer", dealbreakers: [] as string[] };
+
+  it("renders each preference exactly as the data model shows", () => {
+    expect(
+      profileToPromptText({
+        ...base,
+        preferences: {
+          arrangements: ["remote", "hybrid"],
+          maxOfficeDays: 2,
+          minSalary: { amount: 120000, currency: "USD", period: "year" },
+          seniority: { min: "senior", max: "staff" },
+          locations: ["EU timezones only"],
+          needsSponsorship: true,
+        },
+      })
+    ).toBe(
+      [
+        "Senior engineer",
+        "",
+        "Preferences:",
+        "- Work arrangement: remote or hybrid",
+        "- Office days: at most 2 per week",
+        "- Minimum salary: 120000 USD per year",
+        "- Seniority: senior to staff",
+        "- Locations or timezones: EU timezones only",
+        "- Work authorization: needs visa sponsorship",
+      ].join("\n")
+    );
+  });
+
+  it("puts Preferences after Dealbreakers", () => {
+    expect(
+      profileToPromptText({
+        text: "CV",
+        dealbreakers: ["No crypto"],
+        preferences: { arrangements: ["remote"] },
+      })
+    ).toBe("CV\n\nDealbreakers:\n- No crypto\n\nPreferences:\n- Work arrangement: remote");
+  });
+
+  it("renders half-open seniority ranges and an office-day limit of 0", () => {
+    const text = profileToPromptText({
+      ...base,
+      preferences: { seniority: { min: "senior" }, maxOfficeDays: 0 },
+    });
+    expect(text).toContain("- Office days: at most 0 per week");
+    expect(text).toContain("- Seniority: senior or above");
+    expect(
+      profileToPromptText({ ...base, preferences: { seniority: { max: "mid" } } })
+    ).toContain("- Seniority: mid or below");
+  });
+
+  it("is omitted when preferences are absent, null or empty", () => {
+    for (const preferences of [undefined, null, {}]) {
+      expect(profileToPromptText({ ...base, preferences })).toBe("Senior engineer");
+    }
+  });
+
+  it("lists multiple locations with semicolons", () => {
+    expect(
+      profileToPromptText({ ...base, preferences: { locations: ["Berlin", "EU timezones"] } })
+    ).toContain("- Locations or timezones: Berlin; EU timezones");
+  });
+});

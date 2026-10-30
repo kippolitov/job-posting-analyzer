@@ -164,6 +164,48 @@ describe("profileRepository", () => {
       expect(JSON.parse((row.fingerprintHistory as string | undefined) ?? "[]")).toEqual([]);
     });
 
+    it("writes schemaVersion 2 (PR4)", async () => {
+      const sub = uniqueSub();
+      await putProfile(sub, { text: "v1", dealbreakers: [] });
+      expect((await readRow(sub)).schemaVersion).toBe(2);
+    });
+
+    it("reads a version-1 row as having no preferences", async () => {
+      const sub = uniqueSub();
+      const client = await ensureTable("Profiles");
+      await client.createEntity({
+        partitionKey: sub,
+        rowKey: "profile",
+        text: "old",
+        dealbreakers: "[]",
+        updatedAt: new Date().toISOString(),
+        schemaVersion: 1,
+      });
+      const loaded = await getProfile(sub);
+      expect(loaded?.text).toBe("old");
+      expect(loaded).not.toHaveProperty("preferences");
+    });
+
+    it("includes preferences in the fingerprint", async () => {
+      const sub = uniqueSub();
+      const plain = await putProfile(sub, { text: "CV", dealbreakers: [] });
+      const withPrefs = await putProfile(sub, {
+        text: "CV",
+        dealbreakers: [],
+        preferences: { arrangements: ["remote"] },
+      });
+      expect(withPrefs.fingerprint).not.toBe(plain.fingerprint);
+      expect(withPrefs.fingerprint).toBe(
+        profileFingerprint(
+          profileToPromptText({
+            text: "CV",
+            dealbreakers: [],
+            preferences: { arrangements: ["remote"] },
+          })
+        )
+      );
+    });
+
     it("retries a PUT that loses an ETag race and keeps both changes", async () => {
       const sub = uniqueSub();
       await putProfile(sub, { text: "v1", dealbreakers: [] });
