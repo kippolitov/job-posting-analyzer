@@ -15,6 +15,7 @@ import {
   SPONSORSHIP_LINE,
   dealbreakerLinesFromPrompt,
   preferenceLines,
+  profileToPromptText,
 } from "../../../shared/types/profile";
 import { applyPreferences } from "./applyPreferences";
 
@@ -177,7 +178,13 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
  * fallback). The fingerprint still covers the full profile.
  */
 function profileWithoutDealbreakers(req: AnalyzeJobRequest): string | undefined {
-  if (req.profileData) return req.profileData.text || undefined;
+  if (req.profileData) {
+    // Dealbreakers and preferences are judged elsewhere; confirmed skills are
+    // evidence about the candidate, so they stay with the résumé text.
+    const { text, confirmedSkills } = req.profileData;
+    if (!text) return undefined;
+    return profileToPromptText({ text, dealbreakers: [], confirmedSkills });
+  }
   const full = resolveScoringProfile(req);
   if (!full || dealbreakerLinesFromPrompt(full).length === 0) return full;
   const at = full.lastIndexOf("\n\nDealbreakers:\n");
