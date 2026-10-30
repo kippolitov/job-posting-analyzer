@@ -338,9 +338,24 @@ function ChipSection({
                 aria-expanded={open}
                 aria-controls={open ? regionId : undefined}
                 onClick={() => setOpenLabel(open ? null : item)}
-                className={`${chip} underline decoration-dotted underline-offset-2`}
+                className={`${chip} inline-flex items-center underline decoration-dotted underline-offset-2`}
               >
                 {item}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className={`ml-0.5 inline-block transition-transform ${open ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
               </button>
               {open && (
                 <div id={regionId} className="mt-1 space-y-1">

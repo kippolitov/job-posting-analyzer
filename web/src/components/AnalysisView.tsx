@@ -46,9 +46,24 @@ function FitList({
                 aria-expanded={open}
                 aria-controls={open ? regionId : undefined}
                 onClick={() => setOpenLabel(open ? null : item)}
-                className="underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-white"
+                className="inline-flex items-center underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-white"
               >
                 {item}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className={`ml-0.5 inline-block transition-transform ${open ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
               </button>
               {open && (
                 <div id={regionId} className="mt-1 mb-2 flex flex-col gap-1.5">
