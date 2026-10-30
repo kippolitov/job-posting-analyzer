@@ -240,6 +240,20 @@ not a violation. Raw output: [`eval-runs/pr2.json`](./eval-runs/pr2.json); attem
 The quote requirement cut false positives but made the model skip real violations (missed
 5 → 18 free, 7 → 16 Premium). Verdict stability and score independence did not improve.
 
+Attempt 3 (same day) is the R8 fallback: the fit call no longer sees the profile's dealbreakers,
+and a separate call (same deployment, run in parallel) judges them and must quote the posting.
+Raw output: [`eval-runs/pr2.json`](./eval-runs/pr2.json); attempt 2 is
+[`eval-runs/pr2-attempt2.json`](./eval-runs/pr2-attempt2.json). **Gate still failed.**
+
+| Configuration (attempt 3) | False dealbreakers | Missed | Score independence | Verdict stability | p50 / p95 latency |
+|---|---|---|---|---|---|
+| free `gpt-6-luna`, `none` | 18 | 11 | 83.3% | 79.5% | 3.9 s / 10.4 s |
+| Premium `gpt-6-luna-premium`, `low` | 10 | 20 | 75.0% | 63.6% | 5.2 s / 22.0 s |
+
+With dealbreakers out of the fit call, the with/without pair gets identical input, so the
+remaining score-independence gap is pure run-to-run score noise near band edges, the same
+noise that limits verdict stability. Prompt and call changes did not reduce it.
+
 Premium cost is not computed because `modelPrices.json` has no `gpt-6-luna-premium` entry.
 Per research R8, SC-004 and score independence below 90% mean stop and report before merging.
 

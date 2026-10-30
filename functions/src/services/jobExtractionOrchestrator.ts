@@ -96,8 +96,6 @@ const JOB_ANALYSIS_SCHEMA = {
         "desired",
         "strengths",
         "weaknesses",
-        "dealbreakersViolated",
-        "dealbreakerQuotes",
       ],
       properties: {
         score: { type: "integer", minimum: 0, maximum: 100 },
@@ -107,20 +105,6 @@ const JOB_ANALYSIS_SCHEMA = {
         desired: { type: "array", items: { type: "string" }, maxItems: 10 },
         strengths: { type: "array", items: { type: "string" }, maxItems: 5 },
         weaknesses: { type: "array", items: { type: "string" }, maxItems: 5 },
-        dealbreakersViolated: { type: "array", items: { type: "string" }, maxItems: 10 },
-        dealbreakerQuotes: {
-          type: "array",
-          maxItems: 10,
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["dealbreaker", "quote"],
-            properties: {
-              dealbreaker: { type: "string" },
-              quote: { type: "string" },
-            },
-          },
-        },
       },
     },
   },
@@ -149,15 +133,13 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   if (hasProfile) {
     lines.push(
       "Fit scoring (a candidate profile is provided):",
-      "- fit.score is 0-100 and measures only how well the posting matches the candidate's skills, experience and seniority; do not lower it for dealbreakers. Score against this rubric: 85-100: all required skills covered and seniority aligned; 65-84: minor gaps; 40-64: significant gaps or a level mismatch; 0-39: major mismatch. fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
+      "- fit.score is 0-100 and measures only how well the posting matches the candidate's skills, experience and seniority; dealbreakers are judged separately and never change the score. Score against this rubric: 85-100: all required skills covered and seniority aligned; 65-84: minor gaps; 40-64: significant gaps or a level mismatch; 0-39: major mismatch. fit.rationale is two to three sentences summarizing the match, drawing on the posting as a whole (not just its opening paragraph).",
       "- fit.matching: the required responsibilities and skills from the posting that the candidate's profile clearly covers (short phrases, most important first).",
       "- fit.missing: required responsibilities and skills from the posting that the profile shows no evidence of.",
       "- fit.desired: nice-to-have / preferred qualifications from the posting that the profile does not cover.",
       "- fit.strengths: what makes this specific role a strong choice for this candidate (e.g. seniority alignment, domain overlap, growth direction).",
       "- fit.weaknesses: risks or downsides of this role for this candidate (e.g. skill gaps to close, seniority mismatch, unstated arrangement, below-preference salary).",
       "- Base every item on the posting and profile text only; never invent skills or requirements.",
-      "- fit.dealbreakersViolated: check each dealbreaker in the profile one at a time against the posting. A dealbreaker is violated ONLY when the posting states something that directly contradicts it (for example the dealbreaker says \"Remote only\" and the posting says the role is hybrid or on-site; or it sets a minimum salary and the posting states a maximum below it). Silence, vagueness, or a requirement the posting merely does not mention is NOT a violation. When a violation is certain, copy the dealbreaker exactly as written in the profile into dealbreakersViolated and also name it in the rationale. Leave it empty when none is certainly violated.",
-      "- fit.dealbreakerQuotes: for every entry in dealbreakersViolated add {dealbreaker, quote}: the same dealbreaker text and a VERBATIM substring of the posting that contradicts it, copied exactly. If you cannot quote such a passage, the dealbreaker is not violated: remove it from dealbreakersViolated. Empty when dealbreakersViolated is empty.",
       "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead."
     );
   } else {
@@ -166,9 +148,26 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
   return lines.join("\n");
 }
 
+/**
+ * The profile text the fit call sees: no dealbreaker section, so dealbreakers
+ * cannot move the score (SC-002) and are judged by their own call (research R8
+ * fallback). The fingerprint still covers the full profile.
+ */
+function profileWithoutDealbreakers(req: AnalyzeJobRequest): string | undefined {
+  if (req.profileData) return req.profileData.text || undefined;
+  const full = resolveScoringProfile(req);
+  if (!full || dealbreakerLinesFromPrompt(full).length === 0) return full;
+  const at = full.lastIndexOf("\n\nDealbreakers:\n");
+  return at === -1 ? full : full.slice(0, at);
+}
+
+function dealbreakerLinesFor(req: AnalyzeJobRequest): string[] {
+  return req.profileData?.dealbreakers ?? dealbreakerLinesFromPrompt(req.profile ?? "");
+}
+
 function buildUserMessage(req: AnalyzeJobRequest): string {
   const parts: string[] = [];
-  const profile = resolveScoringProfile(req);
+  const profile = profileWithoutDealbreakers(req);
   if (profile) {
     parts.push(`Candidate profile:\n${profile}`);
   }
@@ -233,43 +232,38 @@ function enforceConsistency(
   return result;
 }
 
-/**
- * Drops model-reported violations that carry no verbatim posting quote
- * (the model returned a dealbreaker it could not back up). Payloads with no
- * `dealbreakerQuotes` field at all (recorded fixtures from before the field)
- * pass through unchanged. The quotes field never reaches the response.
- */
-function requireDealbreakerQuotes(
-  payload: JobAnalysisPayload,
-  req: AnalyzeJobRequest,
-  warn: (message: string) => void
-): JobAnalysisPayload {
-  if (!payload.fit) return payload;
-  const { dealbreakerQuotes, ...fit } = payload.fit as typeof payload.fit & {
-    dealbreakerQuotes?: { dealbreaker: string; quote: string }[];
-  };
-  if (!dealbreakerQuotes) return { ...payload, fit };
-  const haystack = normalizeWhitespace(
+const DEALBREAKER_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["violations"],
+  properties: {
+    violations: {
+      type: "array",
+      maxItems: 10,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["dealbreaker", "quote"],
+        properties: {
+          dealbreaker: { type: "string" },
+          quote: { type: "string" },
+        },
+      },
+    },
+  },
+} as const;
+
+const DEALBREAKER_PROMPT = [
+  "You check a job posting against a candidate's dealbreakers. You do not score fit.",
+  "Go through the numbered dealbreakers one at a time. A dealbreaker is violated ONLY when the posting states something that directly contradicts it (for example the dealbreaker says \"Remote only\" and the posting says the team is hybrid or on-site; or it sets a minimum salary and the posting states a range whose maximum is below it, in the same currency).",
+  "Silence, vagueness, a different currency, or a requirement the posting merely does not mention is NOT a violation.",
+  "For each violated dealbreaker return it copied exactly as written, and a VERBATIM substring of the posting that contradicts it. If you cannot quote such a passage, it is not violated. Return an empty list when none is violated.",
+].join("\n");
+
+function postingHaystack(req: AnalyzeJobRequest): string {
+  return normalizeWhitespace(
     `${JSON.stringify(req.extract.jsonLd)} ${JSON.stringify(req.extract.structuredSources ?? [])} ${req.extract.title} ${req.extract.mainText}`
   ).toLowerCase();
-  const backed = (entry: string): boolean => {
-    const key = normalizeDealbreaker(entry);
-    return dealbreakerQuotes.some((q) => {
-      const quote = normalizeWhitespace(q.quote).toLowerCase();
-      const named = normalizeDealbreaker(q.dealbreaker);
-      return (
-        quote.length > 0 &&
-        haystack.includes(quote) &&
-        (named === key || named.includes(key) || key.includes(named))
-      );
-    });
-  };
-  const kept = (fit.dealbreakersViolated ?? []).filter((entry) => {
-    if (backed(entry)) return true;
-    warn(`dealbreakersViolated entry "${entry}" has no verbatim posting quote; dropping it`);
-    return false;
-  });
-  return { ...payload, fit: { ...fit, dealbreakersViolated: kept } };
 }
 
 function normalizeDealbreaker(text: string): string {
@@ -384,7 +378,67 @@ export async function orchestrateJobAnalysis(
     return isJobAnalysisPayload(parsed) ? parsed : null;
   };
 
-  let payload = await complete(1);
+  // Dealbreakers get their own call, run alongside the fit call (research R8
+  // fallback): the fit call never sees them, so they cannot move the score.
+  const lines = resolveScoringProfile(req) ? dealbreakerLinesFor(req) : [];
+  const judge = async (): Promise<string[]> => {
+    if (lines.length === 0) return [];
+    try {
+      const startedAt = Date.now();
+      const completion = await client.chat.completions.create({
+        model: deployment,
+        messages: [
+          { role: "system" as const, content: DEALBREAKER_PROMPT },
+          {
+            role: "user" as const,
+            content: `Dealbreakers:\n${lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}\n\n${buildUserMessage({ ...req, profile: undefined, profileData: undefined })}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "dealbreaker_check",
+            strict: true,
+            schema: DEALBREAKER_SCHEMA as unknown as Record<string, unknown>,
+          },
+        },
+        ...(temperature !== undefined ? { temperature } : {}),
+        ...(reasoningEffort !== undefined ? { reasoning_effort: reasoningEffort } : {}),
+        max_completion_tokens: 1000,
+      });
+      observe?.({
+        deployment,
+        promptTokens: completion.usage?.prompt_tokens ?? 0,
+        completionTokens: completion.usage?.completion_tokens ?? 0,
+        reasoningTokens: completion.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+        cachedTokens: completion.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+        latencyMs: Date.now() - startedAt,
+        attempt: 1,
+        finishReason: completion.choices[0]?.finish_reason ?? null,
+      });
+      const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "") as {
+        violations?: { dealbreaker?: string; quote?: string }[];
+      };
+      const haystack = postingHaystack(req);
+      const kept: string[] = [];
+      for (const v of parsed.violations ?? []) {
+        const quote = normalizeWhitespace(v.quote ?? "").toLowerCase();
+        if (quote.length > 0 && haystack.includes(quote) && v.dealbreaker) {
+          kept.push(v.dealbreaker);
+        } else {
+          warn(`dealbreaker "${v.dealbreaker}" has no verbatim posting quote; dropping it`);
+        }
+      }
+      return kept;
+    } catch (error) {
+      warn(`dealbreaker check failed (${error instanceof Error ? error.message : "unknown"}); reporting none`);
+      return [];
+    }
+  };
+  const firstAttempt = complete(1);
+  const judged = judge();
+
+  let payload = await firstAttempt;
   if (!payload) {
     warn("job analysis output failed to parse; retrying with repair instruction");
     payload = await complete(
@@ -398,12 +452,11 @@ export async function orchestrateJobAnalysis(
 
   payload = validateEvidence(payload, req, warn);
   payload = enforceConsistency(payload, req);
-  payload = requireDealbreakerQuotes(payload, req, warn);
-  payload = resolveDealbreakers(
-    payload,
-    req.profileData?.dealbreakers ?? dealbreakerLinesFromPrompt(req.profile ?? ""),
-    warn
-  );
+  const violated = await judged;
+  if (payload.fit) {
+    payload = { ...payload, fit: { ...payload.fit, dealbreakersViolated: violated } };
+  }
+  payload = resolveDealbreakers(payload, lines, warn);
   const profileFingerprint = fingerprintForRequest(req);
   if (payload.fit && profileFingerprint) {
     payload = { ...payload, fit: { ...payload.fit, profileFingerprint } };
