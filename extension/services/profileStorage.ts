@@ -1,5 +1,9 @@
 import type { CandidateProfile } from "../types/job";
-import type { Preferences } from "../../shared/types/profile";
+import {
+  confirmedSkillLabel,
+  NO_PROFILE_FOR_SKILL,
+  type Preferences,
+} from "../../shared/types/profile";
 import { ApiError, apiFetch } from "./api/apiClient";
 
 // Sized for a full pasted resume (a dense multi-page resume is ~15k chars).
@@ -97,8 +101,11 @@ export async function setProfile(input: {
 export async function confirmSkill(label: string): Promise<CandidateProfile> {
   const response = await apiFetch("/profile/confirmed-skills", {
     method: "POST",
-    body: { label },
+    body: { label: confirmedSkillLabel(label) },
   });
+  if (response.status === 404) {
+    throw new ApiError(404, "SERVICE_ERROR", NO_PROFILE_FOR_SKILL, false);
+  }
   if (!response.ok) await throwUnexpected(response);
   const saved = (await response.json()) as CandidateProfile;
   await writeCachedFingerprint(saved.fingerprint ?? null);

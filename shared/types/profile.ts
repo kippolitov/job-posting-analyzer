@@ -104,6 +104,25 @@ export function profileCapLength(text: string, confirmedSkills: string[] | undef
   return text.length + (section ? section.length + 2 : 0);
 }
 
+/** The server rejects a confirmed skill longer than this (contracts/profile-api.md §4a). */
+export const CONFIRMED_SKILL_MAX = 100;
+
+/**
+ * What "I have this" sends for a requirement. Requirement lines from a posting
+ * can run past the limit, so shorten at a word boundary rather than fail.
+ */
+export function confirmedSkillLabel(label: string): string {
+  const text = label.trim();
+  if (text.length <= CONFIRMED_SKILL_MAX) return text;
+  const cut = text.slice(0, CONFIRMED_SKILL_MAX - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > 40 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/** Shown when "I have this" finds no stored profile to add the skill to. */
+export const NO_PROFILE_FOR_SKILL =
+  "Save a profile first (My profile), then you can confirm skills.";
+
 /** Trim, drop empties and dedupe case-insensitively, keeping the first spelling. */
 export function normalizeConfirmedSkills(skills: string[]): string[] {
   const seen = new Set<string>();
