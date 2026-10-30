@@ -36,10 +36,14 @@ export default defineBackground({
     // open, because the contextMenus onClicked handler carries its own
     // activeTab grant — unlike everything else here, which depends on the
     // toolbar-click grant.
-    chrome.contextMenus.create({
-      id: ANALYZE_SELECTION_MENU_ID,
-      title: "Analyze selection",
-      contexts: ["selection"],
+    // Chrome keeps menu items across service-worker restarts, so clear first
+    // or every restart logs "duplicate id" in the extension's error list.
+    chrome.contextMenus.removeAll(() => {
+      chrome.contextMenus.create({
+        id: ANALYZE_SELECTION_MENU_ID,
+        title: "Analyze selection",
+        contexts: ["selection"],
+      });
     });
     chrome.contextMenus.onClicked.addListener((info, tab) => {
       if (info.menuItemId !== ANALYZE_SELECTION_MENU_ID || tab?.id === undefined) return;
