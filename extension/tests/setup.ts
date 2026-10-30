@@ -63,7 +63,7 @@ const chromeMock = {
   contextMenus: {
     create: vi.fn(),
     remove: vi.fn(),
-    removeAll: vi.fn(),
+    removeAll: vi.fn((callback?: () => void) => callback?.()),
     onClicked: { addListener: vi.fn(), removeListener: vi.fn() },
   },
   identity: {
