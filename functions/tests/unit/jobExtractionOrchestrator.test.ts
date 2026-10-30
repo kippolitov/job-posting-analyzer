@@ -709,6 +709,42 @@ describe("jobExtractionOrchestrator", () => {
       );
     });
 
+    describe("rationale note for pre-PR2 extensions (no profileData)", () => {
+      const fixtureRationale = (
+        JSON.parse(fixture("dealbreaker-onsite")) as { fit: { rationale: string } }
+      ).fit.rationale;
+      const legacy = "Senior .NET engineer\n\nDealbreakers:\n- No on-site work\n- Remote only";
+
+      it("appends the violated lines to the rationale and leaves the score alone", async () => {
+        const { result } = await calls(
+          onsiteRequest({ profile: legacy }),
+          judged([violated(1), violated(2)])
+        );
+        expect(result.fit?.rationale).toBe(
+          `${fixtureRationale} Violates your dealbreakers: No on-site work; Remote only.`
+        );
+        expect(result.fit?.score).toBe(72);
+        expect(result.fit?.dealbreakersViolated).toEqual(["No on-site work", "Remote only"]);
+      });
+
+      it("uses the singular for one violation", async () => {
+        const { result } = await calls(onsiteRequest({ profile: legacy }), judged([violated(1)]));
+        expect(result.fit?.rationale).toBe(
+          `${fixtureRationale} Violates your dealbreaker: No on-site work.`
+        );
+      });
+
+      it("adds nothing without a violation", async () => {
+        const { result } = await calls(onsiteRequest({ profile: legacy }), judged([]));
+        expect(result.fit?.rationale).toBe(fixtureRationale);
+      });
+
+      it("adds nothing for a client that sends profileData, which shows the banner", async () => {
+        const { result } = await calls(onsiteRequest({ profileData }), judged([violated(1)]));
+        expect(result.fit?.rationale).toBe(fixtureRationale);
+      });
+    });
+
     it("builds the same fit-call messages with and without dealbreakers (SC-002)", () => {
       const without = fitCallMessages(onsiteRequest({ profile: "Senior .NET engineer" }));
       expect(
