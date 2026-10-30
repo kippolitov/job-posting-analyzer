@@ -483,7 +483,7 @@ These are silent failures, not crashes. They were found in existing code during 
   - `perf.test.ts` against the T001 baseline;
   - the compatibility smoke (rule 3), including an **old-extension profile save that must not erase anything** and old-extension rendering of a PR2-shaped saved fit.
   Request QG-3 review of the score header, banner and cost line, then open PR2 (US1 + US2).
-  *2026-10-30: lint, tests, coverage, perf and the extension half of the compatibility smoke are done; left are the web half, QG-3 and the PR. See handoff-pr2.md section 7.*
+  *2026-10-30: lint, tests, coverage, perf and and both halves of the compatibility smoke are done; left are QG-3 and the PR. See handoff-pr2.md section 7.*
 
 **Checkpoint**: PR2 is shippable. Out-of-date, dealbreaker and verdict UI works on both surfaces, and old extensions keep working.
 

@@ -311,12 +311,14 @@ Delete it once the PR is open.
   The v0.0.36 options page still says "capped at a fit score of 20". Only an extension release
   fixes that.
 
+- **Compatibility smoke, web half (2026-10-30)**: passed. A PR2-shaped posting analyzed and saved
+  through the real backend on :7071 (violating dealbreaker, fit 85) renders in the web library and
+  detail with the dealbreaker banner, the "85 Dealbreaker" header and "Scored on Free", no page errors.
+
 **Left:**
 
-1. **Web half of the smoke**: open the web library and posting detail for the saved posting,
-   against the same backend.
-2. **QG-3 review request** to the user: score header, dealbreaker banner, cost line.
-3. **PR description**: eval-models.md sign-off, the four spec changes in Clarifications, the
+1. **QG-3 review request** to the user: score header, dealbreaker banner, cost line.
+2. **PR description**: eval-models.md sign-off, the four spec changes in Clarifications, the
    legacy rationale note, and the perf/CI change. Then push and open PR2. Ask first.
 
 **Running the smoke again:**
