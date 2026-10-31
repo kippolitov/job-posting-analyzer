@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RegionList } from "../../components/JobPanel/RegionList";
 import { pickerService } from "../../services/pickerService";
@@ -117,5 +117,20 @@ describe("RegionList (FR-024a, FR-024b, SC-011)", () => {
       await screen.findByText(/no regions were found/i)
     ).toBeInTheDocument();
     expect(screen.getByText(/analyze selection/i)).toBeInTheDocument();
+  });
+
+  // A click on a row must commit THAT row. The mouse path normally hovers
+  // first (re-rendering the active index), so a tap or a fast click, which
+  // has no prior hover, used to commit the previously active region.
+  it("commits the clicked region even when no hover preceded the click", async () => {
+    const onCommit = vi.fn();
+    render(<RegionList tabId={7} onCommit={onCommit} onCancel={vi.fn()} />);
+    const second = await screen.findByRole("option", { name: /Article/ });
+
+    fireEvent.click(second);
+
+    await vi.waitFor(() => expect(onCommit).toHaveBeenCalled());
+    expect(mockedPicker.resolveCandidateText).toHaveBeenCalledWith(7, "article.body");
+    expect(onCommit).toHaveBeenCalledWith({ text: "resolved text", selector: "article.body" });
   });
 });

@@ -57,9 +57,12 @@ export function RegionList({ tabId, onCommit, onCancel }: RegionListProps) {
     setActiveIndex((prev) => (prev + delta + candidates.length) % candidates.length);
   };
 
-  const commit = async (): Promise<void> => {
+  // `index` lets a click commit its own row: setActiveIndex has not applied
+  // yet inside the same handler, so reading activeIndex would commit the
+  // previously active region.
+  const commit = async (index: number = activeIndex): Promise<void> => {
     if (!candidates || candidates.length === 0) return;
-    const candidate = candidates[activeIndex];
+    const candidate = candidates[index];
     setCommitting(true);
     setError(null);
     const outcome = await pickerService.resolveCandidateText(tabId, candidate.selector);
@@ -154,7 +157,7 @@ export function RegionList({ tabId, onCommit, onCancel }: RegionListProps) {
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => {
                   setActiveIndex(index);
-                  void commit();
+                  void commit(index);
                 }}
                 className={`cursor-pointer rounded-lg border p-2 text-xs ${
                   index === activeIndex

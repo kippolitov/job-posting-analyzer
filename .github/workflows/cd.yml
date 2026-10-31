@@ -292,11 +292,118 @@ jobs:
           app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
           package: functions/
 
+  # ── Extension e2e (release gate) ──────────────────────────────────────────
+  # Drives the built extension in headless Chromium against a local Functions
+  # host (auth enforcement off, Azurite storage) and a real Azure OpenAI
+  # deployment, so it needs the E2E_AZURE_OPENAI_* secrets and spends a few
+  # model calls. It runs only when a release will follow, under the same
+  # condition as version-and-tag, so a [skip release] merge pays nothing.
+  extension-e2e:
+    name: Extension E2E
+    runs-on: ubuntu-latest
+    needs: [extension-ci, functions-ci]
+    if: "github.event_name == 'workflow_dispatch' || (!contains(github.event.head_commit.message, 'chore: bump version') && !contains(github.event.head_commit.message, '[skip release]'))"
+    permissions:
+      contents: read
+    env:
+      E2E_PORT: '7071'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: |
+            extension/package-lock.json
+            functions/package-lock.json
+
+      - name: Require the model secrets
+        env:
+          E2E_AZURE_OPENAI_ENDPOINT: ${{ secrets.E2E_AZURE_OPENAI_ENDPOINT }}
+          E2E_AZURE_OPENAI_API_KEY: ${{ secrets.E2E_AZURE_OPENAI_API_KEY }}
+          E2E_AZURE_OPENAI_DEPLOYMENT: ${{ secrets.E2E_AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          for name in E2E_AZURE_OPENAI_ENDPOINT E2E_AZURE_OPENAI_API_KEY E2E_AZURE_OPENAI_DEPLOYMENT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository secret $name is not set; the extension e2e needs a model deployment."
+              exit 1
+            fi
+          done
+
+      - name: Install Functions dependencies and build
+        run: npm ci && npm run build
+        working-directory: functions
+
+      - name: Install Azurite and Functions Core Tools
+        run: npm install --global azurite azure-functions-core-tools@4 --unsafe-perm true
+
+      - name: Start Azurite
+        run: azurite --silent --location "$RUNNER_TEMP/azurite" &
+
+      # No local.settings.json in CI: the host reads these from the environment.
+      # REQUIRE_AUTH=false is what lets the stubbed sign-in tokens through.
+      - name: Start the Functions host
+        working-directory: functions
+        env:
+          REQUIRE_AUTH: 'false'
+          FUNCTIONS_WORKER_RUNTIME: node
+          AzureWebJobsStorage: UseDevelopmentStorage=true
+          GOOGLE_OAUTH_CLIENT_ID: ci-e2e-not-used
+          ALLOWED_ORIGINS: '*'
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.E2E_AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.E2E_AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ secrets.E2E_AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          func start --port "$E2E_PORT" > "$RUNNER_TEMP/func.log" 2>&1 &
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://localhost:$E2E_PORT/api/analyze-job" -H 'content-type: application/json' -d '{}' || true)
+            if [ "$code" != "000" ]; then echo "Functions host is up ($code)"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::Functions host did not start"
+          cat "$RUNNER_TEMP/func.log"
+          exit 1
+
+      - name: Install extension dependencies
+        run: npm ci
+        working-directory: extension
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: extension
+
+      - name: Build the e2e extension
+        env:
+          WXT_AZURE_FUNCTION_URL: http://localhost:${{ env.E2E_PORT }}/api/analyze-job
+          WXT_API_BASE_URL: http://localhost:${{ env.E2E_PORT }}/api
+          WXT_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.WXT_GOOGLE_OAUTH_CLIENT_ID }}
+          WXT_WEB_APP_URL: ${{ secrets.WXT_WEB_APP_URL }}
+        run: npm run build:e2e
+        working-directory: extension
+
+      - name: Run the e2e tests
+        env:
+          E2E: '1'
+          E2E_HEADLESS: '1'
+        run: npm run test:e2e
+        working-directory: extension
+
+      - name: Upload traces and host log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-e2e-failure
+          path: |
+            extension/test-results/
+            ${{ runner.temp }}/func.log
+          retention-days: 7
+
   # ── Auto version bump + tag (triggers release.yml) ───────────────────────
   version-and-tag:
     name: Version and Tag
     runs-on: ubuntu-latest
-    needs: [extension-ci, functions-ci, web-ci]
+    needs: [extension-ci, functions-ci, web-ci, extension-e2e]
     # [skip release] in the commit/PR title lets a merge (e.g. a fixture-only
     # or doc-only fix) land on main without bumping the version, tagging, or
     # triggering release.yml's Chrome Web Store submission.
