@@ -29,6 +29,7 @@ The single new backend endpoint. Extracts text from an uploaded document server-
    - metering outage → `503 SERVICE_ERROR`.
 5. **Analyze** — cap extracted text at `MAIN_TEXT_CAP` (40,000), build the synthetic `AnalyzeJobRequest` (research R8), call `orchestrateJobAnalysis(req, tier, warn)`.
    - schema failure after repair retry → `502 SCHEMA_PARSE_FAILED`, **and** `refundOnSystemFailure(sub, tier)` (best-effort).
+   - model timeout → `504 MODEL_TIMEOUT`, **and** `refundOnSystemFailure(sub, tier)` (best-effort).
    - other ≥ 500 → `500 SERVICE_ERROR` + `refundOnSystemFailure`.
 6. **Respond** `200` with the analysis, source metadata, and `usage` echo. Uploaded bytes are discarded (never persisted).
 
@@ -76,6 +77,7 @@ The single new backend endpoint. Extracts text from an uploaded document server-
 | 422 | `FILE_NO_TEXT` | Image-only / no extractable text. | No |
 | 429 | `USAGE_LIMIT_REACHED` | Monthly cap reached (post-validation). | No (blocked) |
 | 502 | `SCHEMA_PARSE_FAILED` | Model output unusable after repair. | Refunded (best-effort) |
+| 504 | `MODEL_TIMEOUT` | The model did not answer within its time budget (20 s per attempt, 42 s overall, under the host's 50 s limit). | Refunded (best-effort) |
 | 503 | `SERVICE_ERROR` | Metering unavailable. | No |
 | 500 | `SERVICE_ERROR` | Orchestrator/system failure. | Refunded (best-effort) |
 
