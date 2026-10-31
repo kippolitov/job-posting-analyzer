@@ -1,17 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "fs";
 import path from "path";
+import { APIConnectionTimeoutError, APIUserAbortError } from "openai";
 import {
   fitCallMessages,
   orchestrateJobAnalysis,
   JobSchemaError,
+  ModelTimeoutError,
+  MODEL_CALL_TIMEOUT_MS,
   type ModelUsage,
 } from "../../src/services/jobExtractionOrchestrator";
 import { ModelConfigError } from "../../src/services/modelConfig";
 import type { AnalyzeJobRequest } from "../../src/models/job";
 import { fingerprintForRequest } from "../../src/services/profileFingerprint";
 
-vi.mock("openai", () => ({
+vi.mock("openai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("openai")>()),
   AzureOpenAI: vi.fn().mockImplementation(() => ({
     chat: { completions: { create: vi.fn() } },
   })),
@@ -1020,6 +1024,47 @@ describe("jobExtractionOrchestrator", () => {
       const result = await orchestrateJobAnalysis(evidenceRequest("Different text with no arrangement words."));
       expect(result.arrangement).toBe("unspecified");
       expect(result.fit?.evidence?.matching?.every((e) => e.postingQuote === null)).toBe(true);
+    });
+  });
+
+  describe("model call time budget", () => {
+    it("builds the client with a per-attempt timeout and a single SDK retry", async () => {
+      const { AzureOpenAI } = await import("openai");
+      await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+
+      expect(AzureOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ timeout: MODEL_CALL_TIMEOUT_MS, maxRetries: 1 })
+      );
+    });
+
+    it("bounds every model call with an overall deadline signal", async () => {
+      const mockCreate = await mockCreateWith(fixture("explicit-hybrid"));
+      await orchestrateJobAnalysis(baseRequest);
+
+      const [, options] = mockCreate.mock.calls[0] as [unknown, { signal?: unknown }];
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it("turns a timed-out model call into a ModelTimeoutError", async () => {
+      await mockCreateWith(new APIConnectionTimeoutError());
+      await expect(orchestrateJobAnalysis(baseRequest)).rejects.toBeInstanceOf(
+        ModelTimeoutError
+      );
+    });
+
+    it("turns an exhausted overall deadline into a ModelTimeoutError", async () => {
+      await mockCreateWith(new APIUserAbortError());
+      await expect(orchestrateJobAnalysis(baseRequest)).rejects.toBeInstanceOf(
+        ModelTimeoutError
+      );
+    });
+
+    it("leaves other model errors untouched", async () => {
+      await mockCreateWith(new Error("boom"));
+      await expect(orchestrateJobAnalysis(baseRequest)).rejects.not.toBeInstanceOf(
+        ModelTimeoutError
+      );
     });
   });
 });

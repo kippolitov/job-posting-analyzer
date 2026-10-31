@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { HttpRequest, InvocationContext } from "@azure/functions";
 import { analyzeDocumentHandler } from "../../src/analyze-document/index";
-import { orchestrateJobAnalysis } from "../../src/services/jobExtractionOrchestrator";
-import { chargeAnalysis } from "../../src/services/meteringService";
+import {
+  orchestrateJobAnalysis,
+  ModelTimeoutError,
+} from "../../src/services/jobExtractionOrchestrator";
+import { chargeAnalysis, refundCharge } from "../../src/services/meteringService";
 import { sha256Hex } from "../../src/services/savedJobsRepository";
 import { pasteIdentity } from "../../../shared/pasteIdentity";
 
@@ -101,6 +104,16 @@ describe("analyze-document text part", () => {
     expect(res.status).toBe(413);
     expect(res.jsonBody).toMatchObject({ error: { code: "TEXT_TOO_LONG" } });
     expect(chargeAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("answers a model timeout with 504 MODEL_TIMEOUT and refunds the charge", async () => {
+    vi.mocked(orchestrateJobAnalysis).mockRejectedValue(new ModelTimeoutError("model stalled"));
+    const res = await analyzeDocumentHandler(request({ text: POSTING }), context(), user);
+    expect(res.status).toBe(504);
+    expect(res.jsonBody).toMatchObject({
+      error: { code: "MODEL_TIMEOUT", message: expect.stringMatching(/took too long.*try again/i) },
+    });
+    expect(refundCharge).toHaveBeenCalledWith(user.sub, user.tier, "analysis");
   });
 
   it("analyzes a valid paste the way the extension's paste flow does", async () => {

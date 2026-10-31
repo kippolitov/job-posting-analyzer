@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { HttpRequest, InvocationContext } from "@azure/functions";
 import { analyzeJobHandler } from "../../src/analyze-job/index";
 import { withAuth } from "../../src/services/auth";
-import { JobSchemaError } from "../../src/services/jobExtractionOrchestrator";
+import { JobSchemaError, ModelTimeoutError } from "../../src/services/jobExtractionOrchestrator";
 import {
   orchestrateJobAnalysis,
   type ModelUsage,
@@ -257,6 +257,15 @@ describe("analyze-job handler", () => {
     expect(res.jsonBody).toMatchObject({ error: { code: "SCHEMA_PARSE_FAILED" } });
   });
 
+  it("maps ModelTimeoutError to 504 MODEL_TIMEOUT with a retry message", async () => {
+    vi.mocked(orchestrateJobAnalysis).mockRejectedValue(new ModelTimeoutError("model stalled"));
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), testUser);
+    expect(res.status).toBe(504);
+    expect(res.jsonBody).toMatchObject({
+      error: { code: "MODEL_TIMEOUT", message: expect.stringMatching(/took too long.*try again/i) },
+    });
+  });
+
   it("maps unexpected orchestrator errors to 500 SERVICE_ERROR", async () => {
     vi.mocked(orchestrateJobAnalysis).mockRejectedValue(new Error("boom"));
     const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), testUser);
@@ -350,6 +359,17 @@ describe("analyze-job metering (moved from withUsageMetering, 006 §4)", () => {
     const sub = uniqueSub();
     await seedUsage(sub, 5, MONTHLY_ANALYSES.free);
     await analyzeJobHandler(makeRequest(validBody), makeContext(), { ...testUser, sub });
+    await vi.waitFor(async () => {
+      expect((await readUsage(sub)).count).toBe(5);
+    });
+  });
+
+  it("refunds the increment when the model times out (the handler, not the host, ends the call)", async () => {
+    vi.mocked(orchestrateJobAnalysis).mockRejectedValue(new ModelTimeoutError("model stalled"));
+    const sub = uniqueSub();
+    await seedUsage(sub, 5, MONTHLY_ANALYSES.free);
+    const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), { ...testUser, sub });
+    expect(res.status).toBe(504);
     await vi.waitFor(async () => {
       expect((await readUsage(sub)).count).toBe(5);
     });
