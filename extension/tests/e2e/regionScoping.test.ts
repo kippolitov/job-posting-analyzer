@@ -108,7 +108,11 @@ test("scoping a different region on the same URL returns the scoped result, neve
     await expect(
       sidePanel.getByText("Remote Support Specialist").first()
     ).toBeVisible({ timeout: 60_000 });
-    await expect(sidePanel.getByText(/fully remote/i).first()).toBeVisible();
+    // The region option above also matches the title text, so it does not
+    // prove the scoped result arrived: wait for the result itself.
+    await expect(sidePanel.getByText(/fully remote/i).first()).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(sidePanel.getByText("Senior Backend Engineer")).toHaveCount(0);
 
     // A fresh, bypassed analysis is not the cached one.
