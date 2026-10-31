@@ -25,6 +25,16 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.37] - 2026-10-31
+
+- Scores now show a plain verdict (Strong match, Worth a shot, Stretch, Long shot, Dealbreaker) with the quotes from the posting and your profile behind each matched or missing skill.
+- A score made against an older profile is marked, and one click rescores it. Violated dealbreakers are listed beside the score and no longer lower it.
+- Import a résumé from a PDF or Word file, set structured preferences (work arrangement, office days, minimum salary, seniority, locations, visa sponsorship), and click "I have this" on a missing skill to add it to your profile.
+- The Saved tab sorts by fit and filters by verdict. The web Library is a timeline grouped by save day, and Compare is a requirement-by-posting table in a dialog.
+- The Options page opens in its own tab, so the profile editor is fully visible and resizable.
+- When a dealbreaker can't be checked because the posting doesn't say, the score now lists it as "Unverified" under weaknesses.
+- Fixed a harmless "duplicate id" error that showed in the extension's error list after the browser restarted its background worker.
+
 ## [0.0.36] - 2026-07-28
 
 - The free-tier deployment (gpt-4o-mini) was producing noticeably thinner analyses than premium (gpt-5.4-nano) when listing techStack and summarizing fit -- confirmed it's a model-capability gap, not truncated input: both tiers get identical prompts and the full posting text.
