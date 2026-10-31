@@ -262,7 +262,7 @@ describe("analyze-job handler", () => {
     const res = await analyzeJobHandler(makeRequest(validBody), makeContext(), testUser);
     expect(res.status).toBe(504);
     expect(res.jsonBody).toMatchObject({
-      error: { code: "MODEL_TIMEOUT", message: expect.stringMatching(/took too long.*try again/i) },
+      error: { code: "MODEL_TIMEOUT", message: expect.stringMatching(/took too long.*try again/i) as string },
     });
   });
 

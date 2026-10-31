@@ -111,7 +111,7 @@ describe("analyze-document text part", () => {
     const res = await analyzeDocumentHandler(request({ text: POSTING }), context(), user);
     expect(res.status).toBe(504);
     expect(res.jsonBody).toMatchObject({
-      error: { code: "MODEL_TIMEOUT", message: expect.stringMatching(/took too long.*try again/i) },
+      error: { code: "MODEL_TIMEOUT", message: expect.stringMatching(/took too long.*try again/i) as string },
     });
     expect(refundCharge).toHaveBeenCalledWith(user.sub, user.tier, "analysis");
   });

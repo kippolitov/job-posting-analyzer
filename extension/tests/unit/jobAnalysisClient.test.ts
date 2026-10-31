@@ -240,17 +240,14 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
       () =>
         new Promise((resolve) =>
           setTimeout(
-            () =>
-              resolve(
-                new Response(JSON.stringify({ isJobPosting: true, title: "t" }), { status: 200 })
-              ),
+            () => resolve(new Response(JSON.stringify(analysis), { status: 200 })),
             45_000
           )
         )
     );
 
     const promise = postJobAnalysis({ extract });
-    const assertion = expect(promise).resolves.toBeDefined();
+    const assertion = expect(promise).resolves.toMatchObject({ analysis: { title: "Senior Backend Engineer" } });
     await vi.advanceTimersByTimeAsync(45_000);
     await assertion;
   });
