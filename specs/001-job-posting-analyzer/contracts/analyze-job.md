@@ -117,6 +117,7 @@ Typed error body in all non-200 cases:
 | 401 | — | Bad/missing function key | Config error banner |
 | 413 | `EXTRACT_TOO_LARGE` | `mainText` > 40,000 chars | Should not occur (extractor caps at 40,000 — defense-in-depth only); surfaced as generic error + Retry |
 | 502 | `SCHEMA_PARSE_FAILED` | Model output failed schema after one repair retry | Error banner + Retry; client still renders JSON-LD-derived fields |
+| 504 | `MODEL_TIMEOUT` | The model did not answer within its time budget (20 s per attempt, 42 s overall, under the host's 50 s limit). The charge is refunded (best-effort). | Error banner + Retry |
 | 504 | `UPSTREAM_TIMEOUT` | Model call exceeded 30 s | Error banner + Retry; JSON-LD-derived fields rendered |
 
 Client timeout: 30 s (matches existing `analysisClient` convention).

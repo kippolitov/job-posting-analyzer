@@ -24,6 +24,7 @@ import { corsHeaders, errorResponse, requestOrigin } from "../services/http";
 import {
   orchestrateJobAnalysis,
   JobSchemaError,
+  ModelTimeoutError,
 } from "../services/jobExtractionOrchestrator";
 import {
   chargeForAnalysis,
@@ -184,6 +185,15 @@ export async function analyzeDocumentHandler(
     };
   } catch (err) {
     refundAfterFailure(user, charge, context);
+    if (err instanceof ModelTimeoutError) {
+      context.error("analyze-document model timeout:", err.message);
+      return errorResponse(
+        504,
+        "MODEL_TIMEOUT",
+        "The analysis took too long. Please try again.",
+        origin
+      );
+    }
     if (err instanceof JobSchemaError) {
       context.error("analyze-document schema failure:", err.message);
       return errorResponse(

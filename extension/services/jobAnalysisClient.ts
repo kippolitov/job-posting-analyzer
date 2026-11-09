@@ -16,7 +16,10 @@ import {
 declare const WXT_AZURE_FUNCTION_URL: string;
 declare const WXT_AZURE_FUNCTION_KEY: string;
 
-const TIMEOUT_MS = 30_000;
+// An analysis can run until the server's own limit (50 s, functions/host.json
+// functionTimeout), so wait past it: the server's answer, a result or a 504,
+// must be the one the panel shows.
+const TIMEOUT_MS = 55_000;
 
 export interface JobAnalysisRequest {
   extract: PageExtract;
@@ -198,7 +201,10 @@ function mapHttpError(status: number): JobPanelError {
       false
     );
   }
-  if (status === 502 || status === 500 || status === 503 || status === 504) {
+  if (status === 504) {
+    return makeJobError("service-error", "The analysis took too long.", "Try again.", true);
+  }
+  if (status === 502 || status === 500 || status === 503) {
     return makeJobError(
       "service-error",
       "The analysis service encountered an error.",

@@ -3,6 +3,13 @@ import { promptSilent } from "@/auth/googleIdentity";
 
 const TIMEOUT_MS = 30_000;
 
+/**
+ * An analysis can legitimately run until the server's own limit (50 s,
+ * functions/host.json functionTimeout), so the client waits past it: the
+ * server's answer, a result or a 504, must be the one the user sees.
+ */
+export const ANALYZE_TIMEOUT_MS = 55_000;
+
 export type ApiErrorCode =
   | "NOT_CONFIGURED"
   | "NETWORK_ERROR"
@@ -47,6 +54,8 @@ export interface ApiRequestInit {
   body?: unknown;
   /** Raw body (e.g. FormData for multipart uploads) — bypasses JSON encoding. */
   rawBody?: BodyInit;
+  /** Overrides the default 30 s wait for this call. */
+  timeoutMs?: number;
 }
 
 function apiBaseUrl(): string {
@@ -176,7 +185,7 @@ async function attempt(
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(
       () => reject(new ApiError(0, "NETWORK_ERROR", "The service timed out. Try again.", true)),
-      TIMEOUT_MS
+      init.timeoutMs ?? TIMEOUT_MS
     );
   });
   const headers: Record<string, string> = idToken ? { Authorization: `Bearer ${idToken}` } : {};
