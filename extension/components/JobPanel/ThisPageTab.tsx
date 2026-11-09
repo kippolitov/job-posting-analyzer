@@ -10,6 +10,10 @@ import { useLiveFingerprint, useRescoreCostLine } from "./useFreshness";
 import { confirmSkill } from "../../services/profileStorage";
 import { freshness, rescoreAction, scoredByLabel } from "../../../shared/fitView";
 import { UsageExhausted } from "../UsageExhausted";
+import { PageAccessPrompt } from "./PageAccessPrompt";
+
+/** Whether the panel can read the current tab (see jobFlow's checkPageAccess). */
+export type PageAccessState = "unknown" | "granted" | "needs-click";
 
 export type JobViewStatus = "idle" | "analyzing" | "ready" | "error";
 
@@ -38,6 +42,8 @@ export interface JobView {
 interface ThisPageTabProps {
   tabId: number | null;
   view: JobView;
+  /** Drives the idle state: "needs-click" shows where to click instead of a button that cannot work. */
+  pageAccess?: PageAccessState;
   saveError?: string | null;
   onAnalyze: () => void;
   onCancel: () => void;
@@ -49,7 +55,7 @@ interface ThisPageTabProps {
   onExport?: () => void;
   onPruneArchived?: () => void;
   onUpgrade?: () => void;
-  /** Opens the paste composer (spec FR-017e) — the sole remedy on a no-access page. */
+  /** Opens the paste composer (spec FR-017e) — the fallback when the page can't be read. */
   onOpenPaste?: () => void;
   /** A region was committed via the picker or the panel's keyboard list (spec FR-026). */
   onRegionCommitted?: (result: { text: string; selector: string }) => void;
@@ -58,6 +64,7 @@ interface ThisPageTabProps {
 export function ThisPageTab({
   tabId,
   view,
+  pageAccess = "unknown",
   saveError,
   onAnalyze,
   onCancel,
@@ -72,12 +79,11 @@ export function ThisPageTab({
   onRegionCommitted,
 }: ThisPageTabProps) {
   // FR-023: reachable from a failed extraction AND from a successful-but-
-  // wrong one. FR-036a: both scoping mechanisms need page access, so on a
-  // no-access page the control is shown disabled with a stated reason
-  // rather than hidden or present-and-broken.
+  // wrong one. Both scoping mechanisms need page access, so they are not
+  // offered while the panel is asking for it (PageAccessPrompt) — one click
+  // on the toolbar icon makes them work.
   const [regionScopingOpen, setRegionScopingOpen] = useState(false);
   const regionButtonRef = useRef<HTMLButtonElement>(null);
-  const noAccess = view.status === "error" && view.error?.code === "no-access";
 
   const liveFingerprint = useLiveFingerprint(view.currentProfileFingerprint);
   // "I have this" changes the profile here, so the new fingerprint applies at
@@ -126,6 +132,13 @@ export function ThisPageTab({
     );
   }
 
+  // Without an activeTab grant an in-panel button can never start an
+  // analysis (Chrome grants it only for a toolbar-icon click or its
+  // shortcut), so the idle state shows where to click instead.
+  if (view.status === "idle" && pageAccess === "needs-click") {
+    return <PageAccessPrompt variant="needs-click" onOpenPaste={onOpenPaste} />;
+  }
+
   if (view.status === "idle") {
     return (
       <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
@@ -165,6 +178,15 @@ export function ThisPageTab({
     );
   }
 
+  if (view.status === "error" && view.error?.code === "page-access") {
+    return (
+      <PageAccessPrompt
+        variant={view.error.pageAccess ?? "needs-click"}
+        onOpenPaste={onOpenPaste}
+      />
+    );
+  }
+
   if (view.status === "error" && view.error) {
     // The exhausted state is a designed card, never the generic error
     // banner (FR-009/SC-003) — saved jobs/profile/history are unaffected,
@@ -185,10 +207,9 @@ export function ThisPageTab({
     // outlined button — it needs the user to choose something); a paste
     // shortcut is the quietest action — a plain-text link, not a button —
     // since paste is the remedy for pages the other actions cannot fix (a
-    // login wall, a bot check, a no-access page), not a first response to
-    // an ordinary parsing miss.
-    const showScopingAndPaste =
-      view.error.code === "thin-content" || view.error.code === "no-access";
+    // login wall, a bot check), not a first response to an ordinary parsing
+    // miss. Unreadable pages never reach here — see PageAccessPrompt above.
+    const showScopingAndPaste = view.error.code === "thin-content";
 
     return (
       <div className="space-y-4 p-4">
@@ -212,8 +233,6 @@ export function ThisPageTab({
               <button
                 ref={regionButtonRef}
                 onClick={() => setRegionScopingOpen(true)}
-                disabled={noAccess}
-                aria-describedby={noAccess ? "region-disabled-reason" : undefined}
                 className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
               >
                 Analyze a region
@@ -228,15 +247,6 @@ export function ThisPageTab({
               </button>
             )}
           </div>
-          {noAccess && (
-            <p
-              id="region-disabled-reason"
-              className="mt-2 text-xs text-red-600/80 dark:text-red-400/80"
-            >
-              The extension can&apos;t read this page, so regions can&apos;t be
-              analyzed here. Paste the text instead.
-            </p>
-          )}
         </div>
         {view.fallback && (
           <section aria-label="Fields extracted from page data">

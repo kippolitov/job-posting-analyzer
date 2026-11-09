@@ -16,6 +16,7 @@ import { getProfile, profileToPromptText, toScoringProfile } from "./profileStor
 import type { JobAnalysisRequest } from "./jobAnalysisClient";
 import { MessageType } from "../types/messages";
 import type {
+  PageAccessResponse,
   AnalyzeJobPageMessage,
   AnalyzePastedTextMessage,
   AnalyzeScopedRegionMessage,
@@ -41,6 +42,14 @@ import type {
  */
 const MAX_TRACKED_TABS = 5;
 let recentContentTabs: number[] = [];
+
+/**
+ * The tab the most recent toolbar click (or its keyboard shortcut) targeted,
+ * until that tab navigates. If page access still fails there, the click did
+ * not help — the page is one Chrome never lets extensions read — so the panel
+ * must not ask for another click.
+ */
+let justGrantedTabId: number | null = null;
 
 /**
  * Last successfully extracted URL per tab, kept in session storage so it
@@ -103,7 +112,10 @@ export function trackContentTabs(
       changeInfo.status === "loading" || changeInfo.url !== undefined;
     // A navigation invalidates the tab's remembered URL even in a background
     // tab — whatever was analyzed there no longer describes the page.
-    if (navigated) void forgetTabUrl(tabId);
+    if (navigated) {
+      void forgetTabUrl(tabId);
+      if (tabId === justGrantedTabId) justGrantedTabId = null;
+    }
     if (!tab.active) return;
     void rememberTab(tabId, navigated ? broadcast : undefined, "navigation");
   });
@@ -147,6 +159,7 @@ export function handleActionClick(
   broadcast: (message: ExtensionMessage) => void
 ): void {
   if (tab.id === undefined) return;
+  justGrantedTabId = tab.id;
   recentContentTabs = [
     tab.id,
     ...recentContentTabs.filter((id) => id !== tab.id),
@@ -156,6 +169,46 @@ export function handleActionClick(
     tabId: tab.id,
     trigger: "action-click",
   });
+}
+
+/**
+ * Whether the panel can read `tabId` right now. Without the "tabs" permission
+ * a tab's URL is only visible under an activeTab (or host) grant, so its
+ * presence is a side-effect-free stand-in for "extraction would succeed" —
+ * nothing is injected and nothing is read from the page.
+ */
+export async function checkPageAccess(
+  tabId: number
+): Promise<PageAccessResponse> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return { access: tab.url ? "granted" : "needs-click" };
+  } catch {
+    return { access: "needs-click" };
+  }
+}
+
+function pageAccessError(tabId: number): JobPanelError {
+  if (tabId === justGrantedTabId) {
+    return {
+      code: "page-access",
+      pageAccess: "restricted",
+      message: "This page can't be analyzed.",
+      action:
+        "Chrome doesn't let extensions read its own pages, like chrome:// " +
+        "pages and the Web Store. Open a job posting, or paste its text.",
+      retryable: false,
+    };
+  }
+  return {
+    code: "page-access",
+    pageAccess: "needs-click",
+    message: "Click the Job Posting Analyzer icon to analyze this page.",
+    action:
+      "Chrome only lets an extension read a page after you click its icon " +
+      "in the toolbar. The analysis starts right after.",
+    retryable: false,
+  };
 }
 
 /**
@@ -372,15 +425,7 @@ export async function analyzeJobPage(
     if (message.cachedOnly) return; // Silent probe: leave the panel as-is.
     broadcast({
       type: MessageType.JOB_ANALYSIS_ERROR,
-      error: {
-        code: "no-access",
-        message: "The extension doesn't have permission to read this page.",
-        action:
-          "Click the extension icon in the Chrome toolbar to grant access " +
-          "and re-run the analysis. Chrome's own pages and the Web Store " +
-          "can't be analyzed.",
-        retryable: false,
-      },
+      error: pageAccessError(message.tabId),
       fallback: null,
       canonicalUrl: null,
       sourceUrl: null,
@@ -705,13 +750,7 @@ export async function analyzeScopedRegion(
   } catch {
     broadcast({
       type: MessageType.JOB_ANALYSIS_ERROR,
-      error: {
-        code: "no-access",
-        message: "The extension doesn't have permission to read this page.",
-        action:
-          "Click the extension icon in the Chrome toolbar to grant access and re-run the analysis.",
-        retryable: false,
-      },
+      error: pageAccessError(message.tabId),
       fallback: null,
       canonicalUrl: null,
       sourceUrl: null,

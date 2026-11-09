@@ -4,13 +4,19 @@ import {
   analyzePastedText,
   analyzeScopedRegion,
   cancelAnalysis,
+  checkPageAccess,
   handleActionClick,
   resolveActiveTab,
   trackContentTabs,
 } from "../services/jobFlow";
 import { readLiveSelection } from "../services/selectionService";
+import { clearActionHint, listenForActionHints } from "../services/actionHint";
 import { MessageType } from "../types/messages";
-import type { ActiveTabResponse, ExtensionMessage } from "../types/messages";
+import type {
+  ActiveTabResponse,
+  ExtensionMessage,
+  PageAccessResponse,
+} from "../types/messages";
 
 const ANALYZE_SELECTION_MENU_ID = "analyze-selection";
 
@@ -28,9 +34,11 @@ export default defineBackground({
       if (tab.windowId !== undefined) {
         void chrome.sidePanel.open({ windowId: tab.windowId });
       }
+      if (tab.id !== undefined) clearActionHint(tab.id);
       handleActionClick(tab, broadcastToSidePanel);
     });
     trackContentTabs(broadcastToSidePanel);
+    listenForActionHints();
 
     // "Analyze selection" (spec FR-023a): works without the panel already
     // open, because the contextMenus onClicked handler carries its own
@@ -97,6 +105,12 @@ export default defineBackground({
           // the only reliable way to keep the panel from analyzing itself.
           void resolveActiveTab(sender.tab?.id ?? null).then(
             (response: ActiveTabResponse) => sendResponse(response)
+          );
+          return true; // async response
+        }
+        if (message.type === MessageType.GET_PAGE_ACCESS) {
+          void checkPageAccess(message.tabId).then(
+            (response: PageAccessResponse) => sendResponse(response)
           );
           return true; // async response
         }
