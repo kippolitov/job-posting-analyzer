@@ -25,6 +25,10 @@ unusual merge) rather than guessing.
 
 <!-- new entries are inserted below this line by cd.yml on every merge to main -->
 
+## [0.0.38] - 2026-11-09
+
+- Guide users to grant page access instead of showing a permission error
+
 ## [0.0.37] - 2026-10-31
 
 - Scores now show a plain verdict (Strong match, Worth a shot, Stretch, Long shot, Dealbreaker) with the quotes from the posting and your profile behind each matched or missing skill.
