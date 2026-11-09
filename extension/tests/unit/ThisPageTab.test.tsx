@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThisPageTab } from "../../components/JobPanel/ThisPageTab";
-import type { JobView } from "../../components/JobPanel/ThisPageTab";
+import type { JobView, PageAccessState } from "../../components/JobPanel/ThisPageTab";
 import type { JobAnalysis } from "../../types/job";
 import { fetchAccount } from "../../services/accountService";
 import { confirmSkill } from "../../services/profileStorage";
@@ -55,12 +55,13 @@ function renderTab(
   view: JobView,
   handlers?: Partial<
     Record<"onAnalyze" | "onCancel" | "onForceAnalyze" | "onOpenPaste", () => void>
-  >
+  > & { pageAccess?: PageAccessState }
 ) {
   return render(
     <ThisPageTab
       tabId={1}
       view={view}
+      pageAccess={handlers?.pageAccess}
       onAnalyze={handlers?.onAnalyze ?? noop}
       onCancel={handlers?.onCancel ?? noop}
       onForceAnalyze={handlers?.onForceAnalyze ?? noop}
@@ -170,7 +171,7 @@ describe("ThisPageTab", () => {
     expect(onOpenPaste).toHaveBeenCalled();
   });
 
-  it("a no-access error (no Retry) still offers the paste shortcut — it is the sole remedy (FR-017e, FR-036a)", () => {
+  it("an unreadable page shows where to click, not an error, and keeps paste as the fallback (FR-017e)", async () => {
     const onOpenPaste = vi.fn();
     renderTab(
       {
@@ -178,16 +179,71 @@ describe("ThisPageTab", () => {
         status: "error",
         analysis: null,
         error: {
-          code: "no-access",
-          message: "The extension doesn't have permission to read this page.",
-          action: "Click the extension icon to grant access.",
+          code: "page-access",
+          pageAccess: "needs-click",
+          message: "Click the Job Posting Analyzer icon to analyze this page.",
+          action: "Chrome only lets an extension read a page after you click its icon.",
           retryable: false,
         },
       },
       { onOpenPaste }
     );
+    expect(
+      screen.getByRole("heading", { name: "Click the extension icon to analyze this page" })
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Paste text instead" })).toBeInTheDocument();
+    // Region scoping needs page access too — it is not offered here.
+    expect(screen.queryByRole("button", { name: "Analyze a region" })).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Paste the posting text instead" })
+    );
+    expect(onOpenPaste).toHaveBeenCalled();
+  });
+
+  it("idle without page access shows the click prompt instead of a button that cannot work", () => {
+    renderTab({ ...baseView, status: "idle", analysis: null }, { pageAccess: "needs-click" });
+    expect(screen.queryByRole("button", { name: "Analyze this page" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Click the extension icon to analyze this page" })
+    ).toBeInTheDocument();
+  });
+
+  it("idle with page access keeps the Analyze button", () => {
+    renderTab({ ...baseView, status: "idle", analysis: null }, { pageAccess: "granted" });
+    expect(screen.getByRole("button", { name: "Analyze this page" })).toBeInTheDocument();
+  });
+
+  it("explains how to reach an unpinned icon, and shows the bound shortcut", async () => {
+    vi.mocked(chrome.action.getUserSettings).mockResolvedValueOnce({ isOnToolbar: false });
+    vi.mocked(chrome.commands.getAll).mockResolvedValueOnce([
+      { name: "_execute_action", shortcut: "⌥⇧J", description: "" },
+    ]);
+    renderTab({ ...baseView, status: "idle", analysis: null }, { pageAccess: "needs-click" });
+    expect(await screen.findByText(/Extensions icon in the toolbar/)).toBeInTheDocument();
+    expect(await screen.findByText("⌥⇧J")).toBeInTheDocument();
+  });
+
+  it("a restricted page says it can't be analyzed and offers paste, without asking for a click", async () => {
+    const onOpenPaste = vi.fn();
+    renderTab(
+      {
+        ...baseView,
+        status: "error",
+        analysis: null,
+        error: {
+          code: "page-access",
+          pageAccess: "restricted",
+          message: "This page can't be analyzed.",
+          action: "Chrome doesn't let extensions read its own pages.",
+          retryable: false,
+        },
+      },
+      { onOpenPaste }
+    );
+    expect(screen.getByText("This page can't be analyzed")).toBeInTheDocument();
+    expect(screen.queryByText(/Click the extension icon/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Paste text" }));
+    expect(onOpenPaste).toHaveBeenCalled();
   });
 
   it("offers 'Analyze a region' as a secondary action alongside Retry and paste (FR-007b, T090)", () => {
@@ -205,26 +261,6 @@ describe("ThisPageTab", () => {
     const region = screen.getByRole("button", { name: "Analyze a region" });
     expect(region).toBeEnabled();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-  });
-
-  it("disables both scoping affordances with a stated, cause-specific reason on a no-access page, pointing at paste (FR-036a, T064, T104)", () => {
-    renderTab({
-      ...baseView,
-      status: "error",
-      analysis: null,
-      error: {
-        code: "no-access",
-        message: "The extension doesn't have permission to read this page.",
-        action: "Click the extension icon to grant access.",
-        retryable: false,
-      },
-    });
-    const region = screen.getByRole("button", { name: "Analyze a region" });
-    expect(region).toBeDisabled();
-    expect(region).toHaveAttribute("aria-describedby", "region-disabled-reason");
-    const reason = document.getElementById("region-disabled-reason");
-    expect(reason).toHaveTextContent(/can't read this page/i);
-    expect(reason).toHaveTextContent(/paste/i);
   });
 
   it("opens the region list when 'Analyze a region' is clicked from an error state", async () => {

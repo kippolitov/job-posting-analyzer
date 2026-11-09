@@ -57,6 +57,7 @@ export type JobErrorCode =
   | "extract-too-large"
   | "thin-content"
   | "no-access"
+  | "page-access"
   | "usage-limit-reached"
   | "unknown";
 
@@ -79,4 +80,13 @@ export interface JobPanelError {
   retryable: boolean;
   /** Present only for code "usage-limit-reached" (FR-009 exhausted state). */
   usage?: UsageInfo;
+  /**
+   * Present only for code "page-access". "needs-click": Chrome has not granted
+   * page access yet — the toolbar icon (or its shortcut) grants it.
+   * "restricted": access was just granted and still failed, so this is a page
+   * Chrome never lets extensions read (chrome://, the Web Store).
+   */
+  pageAccess?: PageAccessBlock;
 }
+
+export type PageAccessBlock = "needs-click" | "restricted";

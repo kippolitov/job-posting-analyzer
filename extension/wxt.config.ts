@@ -41,6 +41,16 @@ export default defineConfig({
       default_path: "sidepanel.html",
     },
     action: {},
+    // The shortcut runs the toolbar action, so it grants activeTab exactly
+    // like an icon click — a keyboard path to page access (and the only one
+    // that works when the icon is not pinned). Users can rebind it at
+    // chrome://extensions/shortcuts; the panel shows whatever is bound.
+    commands: {
+      _execute_action: {
+        suggested_key: { default: "Alt+Shift+J", mac: "Alt+Shift+J" },
+        description: "Analyze the current page",
+      },
+    },
   },
   vite: () => ({
     server: {

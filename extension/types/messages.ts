@@ -2,6 +2,7 @@ import type { ExtractionStrategy, JobAnalysis, JobPanelError, SavedJob } from ".
 
 export const MessageType = {
   GET_ACTIVE_TAB: "GET_ACTIVE_TAB",
+  GET_PAGE_ACCESS: "GET_PAGE_ACCESS",
   ACTIVE_TAB_CHANGED: "ACTIVE_TAB_CHANGED",
   ANALYZE_JOB_PAGE: "ANALYZE_JOB_PAGE",
   CANCEL_ANALYSIS: "CANCEL_ANALYSIS",
@@ -22,6 +23,19 @@ export interface GetActiveTabMessage {
 
 export interface ActiveTabResponse {
   tabId: number | null;
+}
+
+/**
+ * Asks whether the panel can read `tabId` right now — i.e. whether an
+ * activeTab grant exists. Reads nothing from the page itself.
+ */
+export interface GetPageAccessMessage {
+  type: typeof MessageType.GET_PAGE_ACCESS;
+  tabId: number;
+}
+
+export interface PageAccessResponse {
+  access: "granted" | "needs-click";
 }
 
 /**
@@ -172,6 +186,7 @@ export interface PasteAnalysisErrorMessage {
 
 export type ExtensionMessage =
   | GetActiveTabMessage
+  | GetPageAccessMessage
   | ActiveTabChangedMessage
   | AnalyzeJobPageMessage
   | CancelAnalysisMessage
