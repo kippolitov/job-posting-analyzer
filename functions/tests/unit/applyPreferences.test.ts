@@ -58,6 +58,22 @@ describe("applyPreferences", () => {
   describe("arrangements", () => {
     const prefs: Preferences = { arrangements: ["remote"] };
 
+    it("accepts a posting that also offers a preferred arrangement (#30)", () => {
+      const r = run(
+        { arrangement: "hybrid", arrangementConfidence: "inferred", alsoOffers: ["remote"] },
+        prefs
+      );
+      expect(r.violated).toEqual([]);
+    });
+
+    it("still flags a posting whose extra options are not preferred (#30)", () => {
+      const r = run(
+        { arrangement: "onsite", arrangementConfidence: "explicit", alsoOffers: ["hybrid"] },
+        prefs
+      );
+      expect(r.violated).toContain("Arrangement: remote only");
+    });
+
     it("flags an on-site posting with explicit evidence and keeps the score", () => {
       const r = run({ arrangement: "onsite", arrangementConfidence: "explicit" }, prefs);
       expect(r.violated).toContain("Arrangement: remote only");
@@ -246,5 +262,64 @@ describe("applyPreferences", () => {
     });
     expect(out.fit!.weaknesses).toHaveLength(5);
     expect(out.fit!.weaknesses!.slice(0, 3).every((w) => w.startsWith("Unverified:"))).toBe(true);
+  });
+
+  describe("model-written Unverified notes (#31)", () => {
+    it("drops a model note about a fact the code already reports as unverified", () => {
+      const r = run(
+        {
+          salary: null,
+          fit: {
+            score: 77,
+            rationale: "Solid overlap.",
+            weaknesses: [
+              "Unverified: salary and benefits details are not provided in the posting.",
+              "Model weakness",
+            ],
+            dealbreakersViolated: [],
+          },
+        },
+        { minSalary: { amount: 150000, currency: "USD", period: "year" } }
+      );
+      expect(r.weaknesses.filter((w) => /^unverified/i.test(w))).toEqual([
+        "Unverified: salary not stated",
+      ]);
+      expect(r.weaknesses).toContain("Model weakness");
+    });
+
+    it("drops a repeated model note about the arrangement", () => {
+      const r = run(
+        {
+          arrangement: "unspecified",
+          arrangementConfidence: "none",
+          fit: {
+            score: 77,
+            rationale: "Solid overlap.",
+            weaknesses: ["Unverified: work arrangement is not stated in the posting"],
+            dealbreakersViolated: [],
+          },
+        },
+        { arrangements: ["remote"] }
+      );
+      expect(r.weaknesses.filter((w) => /^unverified/i.test(w))).toEqual([
+        "Unverified: arrangement not stated",
+      ]);
+    });
+
+    it("keeps a model note about something the code does not check", () => {
+      const r = run(
+        {
+          salary: null,
+          fit: {
+            score: 77,
+            rationale: "Solid overlap.",
+            weaknesses: ["Unverified: visa sponsorship"],
+            dealbreakersViolated: [],
+          },
+        },
+        { minSalary: { amount: 150000, currency: "USD", period: "year" } }
+      );
+      expect(r.weaknesses).toContain("Unverified: visa sponsorship");
+    });
   });
 });

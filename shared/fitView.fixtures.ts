@@ -398,6 +398,26 @@ export const MERGE_CASES: [
     [{ label: "Kubernetes", cells: ["missing", "matched", "nice-to-have"] }],
   ],
   [
+    "merges versions, filler words and common aliases of one requirement (#31)",
+    [
+      verdictFit(70, { matching: [".NET 8", "Azure", "Kubernetes experience"] }),
+      verdictFit(70, { matching: [".NET services", "Microsoft Azure", "Kubernetes"] }),
+    ],
+    [
+      { label: ".NET 8", cells: ["matched", "matched"] },
+      { label: "Azure", cells: ["matched", "matched"] },
+      { label: "Kubernetes experience", cells: ["matched", "matched"] },
+    ],
+  ],
+  [
+    "keeps different requirements apart (#31)",
+    [verdictFit(70, { matching: ["5+ years of Go"] }), verdictFit(70, { matching: ["Go"] })],
+    [
+      { label: "5+ years of Go", cells: ["matched", "not-asked"] },
+      { label: "Go", cells: ["not-asked", "matched"] },
+    ],
+  ],
+  [
     "a posting that never mentions a requirement is not-asked",
     [verdictFit(70, { missing: ["Go"] }), verdictFit(70, { matching: ["Rust"] })],
     [

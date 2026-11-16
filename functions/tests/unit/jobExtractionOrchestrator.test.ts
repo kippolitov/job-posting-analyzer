@@ -155,6 +155,45 @@ describe("jobExtractionOrchestrator", () => {
     expect(new Date(result.analyzedAt).toString()).not.toBe("Invalid Date");
   });
 
+  it("keeps only named technologies in the stack (#31)", async () => {
+    const payload = JSON.parse(fixture("explicit-hybrid")) as Record<string, unknown>;
+    payload.techStack = ["Kubernetes", "cloud", "Pipelines", "databases", "APIs", "Azure", "queues", "storage"];
+    await mockCreateWith(JSON.stringify(payload));
+    const result = await orchestrateJobAnalysis(baseRequest);
+    expect(result.techStack).toEqual(["Kubernetes", "Azure"]);
+  });
+
+  it("returns the other arrangements a posting offers (#30)", async () => {
+    const payload = JSON.parse(fixture("explicit-hybrid")) as Record<string, unknown>;
+    payload.alsoOffers = ["remote"];
+    await mockCreateWith(JSON.stringify(payload));
+    const result = await orchestrateJobAnalysis(baseRequest);
+    expect(result.alsoOffers).toEqual(["remote"]);
+  });
+
+  it("drops alsoOffers when the arrangement is unspecified or repeats the main one (#30)", async () => {
+    const payload = JSON.parse(fixture("explicit-hybrid")) as Record<string, unknown>;
+    payload.alsoOffers = ["hybrid", "remote", "remote"];
+    await mockCreateWith(JSON.stringify(payload));
+    const result = await orchestrateJobAnalysis(baseRequest);
+    expect(result.alsoOffers).toEqual(["remote"]);
+  });
+
+  it("system prompt covers several arrangements and scopes the Unverified note (#30, #31)", async () => {
+    const mockCreate = await mockCreateWith(fixture("with-fit"));
+    await orchestrateJobAnalysis({
+      ...baseRequest,
+      profile: "Senior backend engineer, 10 years of C#.",
+    });
+    const [params] = mockCreate.mock.calls[0] as [
+      { messages: { role: string; content: string }[] },
+    ];
+    const systemMsg = params.messages.find((m) => m.role === "system")!.content;
+    expect(systemMsg).toContain("alsoOffers");
+    expect(systemMsg).toMatch(/location list|open to remote/i);
+    expect(systemMsg).toMatch(/never for (a )?gaps? in the candidate/i);
+  });
+
   it("downgrades to unspecified when the evidence is not a substring of the input", async () => {
     await mockCreateWith(fixture("hallucinated-evidence"));
     const result = await orchestrateJobAnalysis(baseRequest);
