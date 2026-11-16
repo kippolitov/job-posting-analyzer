@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TabBar } from "../shared/TabBar";
 import { ThisPageTab } from "./ThisPageTab";
+import type { PageAccessState } from "./ThisPageTab";
+import { useActionHint } from "../../hooks/useActionHint";
 import { SavedTab } from "./SavedTab";
 import { PasteComposer } from "./PasteComposer";
 import type { JobView } from "./ThisPageTab";
@@ -9,7 +11,7 @@ import { jobStorage } from "../../services/jobStorage";
 import { excerptOf } from "../../lib/textExcerpt";
 import { startCheckout } from "../../services/accountService";
 import { MessageType } from "../../types/messages";
-import type { ExtensionMessage } from "../../types/messages";
+import type { ExtensionMessage, PageAccessResponse } from "../../types/messages";
 import type { SavedJob } from "../../types/job";
 
 const TABS = [
@@ -64,6 +66,7 @@ export function JobPanel({
   probeNonce = 0,
 }: JobPanelProps) {
   const [view, setView] = useState<JobView>(INITIAL_VIEW);
+  const [pageAccess, setPageAccess] = useState<PageAccessState>("unknown");
   const [activeTab, setActiveTab] = useState<string>("this-page");
   const [saveError, setSaveError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
@@ -193,6 +196,35 @@ export function JobPanel({
     pendingScopedRegionRef.current = null;
     setView(INITIAL_VIEW);
   }, [navigationId]);
+
+  // Can the panel read this tab right now? Asked again whenever the tab,
+  // the page, or the grant may have changed. The answer decides whether idle
+  // offers an "Analyze" button or shows where to click to grant access.
+  useEffect(() => {
+    if (tabId === null) return;
+    let current = true;
+    setPageAccess("unknown");
+    void Promise.resolve(
+      chrome.runtime.sendMessage({ type: MessageType.GET_PAGE_ACCESS, tabId })
+    )
+      .then((response: PageAccessResponse | undefined) => {
+        if (current && response?.access) setPageAccess(response.access);
+      })
+      .catch(() => {
+        // Background asleep — leave it unknown; idle falls back to the button.
+      });
+    return () => {
+      current = false;
+    };
+  }, [tabId, navigationId, analyzeNonce]);
+
+  // While the panel is asking for a toolbar click, mark the icon itself.
+  const awaitingClick =
+    (view.status === "idle" && pageAccess === "needs-click") ||
+    (view.status === "error" &&
+      view.error?.code === "page-access" &&
+      view.error.pageAccess !== "restricted");
+  useActionHint(awaitingClick ? tabId : null);
 
   // FR-026/FR-026a: re-runs analysis against a hand-picked region, bypassing
   // the cache (jobFlow.ts's analyzeScopedRegion always does). FR-007a/T095:
@@ -435,6 +467,7 @@ export function JobPanel({
                 <ThisPageTab
                   tabId={tabId}
                   view={view}
+                  pageAccess={pageAccess}
                   saveError={saveError}
                   onAnalyze={retryAnalysis}
                   onCancel={handleCancel}

@@ -5,6 +5,7 @@ describe("MessageType", () => {
   it("defines a stable string value for every message type", () => {
     expect(MessageType).toEqual({
       GET_ACTIVE_TAB: "GET_ACTIVE_TAB",
+      GET_PAGE_ACCESS: "GET_PAGE_ACCESS",
       ACTIVE_TAB_CHANGED: "ACTIVE_TAB_CHANGED",
       ANALYZE_JOB_PAGE: "ANALYZE_JOB_PAGE",
       CANCEL_ANALYSIS: "CANCEL_ANALYSIS",

@@ -44,6 +44,15 @@ const analysis: JobAnalysis = {
   analyzedAt: "2026-07-04T12:00:04Z",
 };
 
+/** Analysis requests only — the panel also asks the background about page access. */
+function analyzeCalls(): unknown[][] {
+  return vi
+    .mocked(chrome.runtime.sendMessage)
+    .mock.calls.filter(
+      ([m]) => (m as { type?: string })?.type !== MessageType.GET_PAGE_ACCESS
+    );
+}
+
 function dispatch(message: ExtensionMessage): void {
   const listeners = vi.mocked(chrome.runtime.onMessage.addListener).mock.calls;
   act(() => {
@@ -179,11 +188,11 @@ describe("JobPanel", () => {
 
   it("does not auto-analyze a tab that arrives after mount (no activeTab grant)", () => {
     const { rerender } = render(<JobPanel tabId={null} navigationId={0} />);
-    expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(analyzeCalls()).toHaveLength(0);
 
     // User switches to a content tab while the panel is already open.
     rerender(<JobPanel tabId={4} navigationId={1} />);
-    expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(analyzeCalls()).toHaveLength(0);
 
     // Manual analyze targets the new tab.
     return userEvent
@@ -203,12 +212,12 @@ describe("JobPanel", () => {
     const { rerender } = render(
       <JobPanel tabId={7} navigationId={0} analyzeNonce={0} />
     );
-    expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+    expect(analyzeCalls()).toHaveLength(1);
 
     // Analysis still in flight: the same click that opened the panel must
     // not double-trigger.
     rerender(<JobPanel tabId={7} navigationId={0} analyzeNonce={1} />);
-    expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+    expect(analyzeCalls()).toHaveLength(1);
 
     dispatch({
       type: MessageType.JOB_ANALYSIS_RESULT,
@@ -222,8 +231,44 @@ describe("JobPanel", () => {
 
     // A later click re-analyzes under its fresh grant.
     rerender(<JobPanel tabId={7} navigationId={0} analyzeNonce={2} />);
-    expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(2);
+    expect(analyzeCalls()).toHaveLength(2);
     expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("after a tab switch without page access, shows where to click and marks the toolbar icon", async () => {
+    const port = {
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+      onDisconnect: { addListener: vi.fn(), removeListener: vi.fn() },
+    };
+    vi.mocked(chrome.runtime.connect).mockReturnValueOnce(
+      port as unknown as chrome.runtime.Port
+    );
+    vi.mocked(chrome.runtime.sendMessage).mockImplementation((async (
+      m: { type?: string }
+    ) =>
+      m?.type === MessageType.GET_PAGE_ACCESS
+        ? { access: "needs-click" }
+        : undefined) as unknown as typeof chrome.runtime.sendMessage);
+
+    const { rerender, unmount } = render(<JobPanel tabId={null} navigationId={0} />);
+    rerender(<JobPanel tabId={4} navigationId={1} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Click the extension icon to analyze this page",
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Analyze this page" })).not.toBeInTheDocument();
+    expect(port.postMessage).toHaveBeenLastCalledWith({ tabId: 4 });
+
+    // Closing the panel drops the port, which clears the badge.
+    unmount();
+    expect(port.disconnect).toHaveBeenCalled();
+    vi.mocked(chrome.runtime.sendMessage).mockImplementation(
+      (() => undefined) as unknown as typeof chrome.runtime.sendMessage
+    );
   });
 
   it("has This Page and Saved tabs", async () => {

@@ -44,6 +44,17 @@ const chromeMock = {
   runtime: {
     sendMessage: vi.fn(),
     openOptionsPage: vi.fn(),
+    getManifest: vi.fn(() => ({ name: "Job Posting Analyzer" })),
+    connect: vi.fn(() => ({
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
+      onDisconnect: { addListener: vi.fn(), removeListener: vi.fn() },
+    })),
+    onConnect: {
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    },
     onMessage: {
       addListener: vi.fn(),
       removeListener: vi.fn(),
@@ -76,6 +87,14 @@ const chromeMock = {
   },
   action: {
     onClicked: { addListener: vi.fn(), removeListener: vi.fn() },
+    setBadgeText: vi.fn().mockResolvedValue(undefined),
+    setBadgeBackgroundColor: vi.fn().mockResolvedValue(undefined),
+    setBadgeTextColor: vi.fn().mockResolvedValue(undefined),
+    setTitle: vi.fn().mockResolvedValue(undefined),
+    getUserSettings: vi.fn().mockResolvedValue({ isOnToolbar: true }),
+  },
+  commands: {
+    getAll: vi.fn().mockResolvedValue([]),
   },
 };
 

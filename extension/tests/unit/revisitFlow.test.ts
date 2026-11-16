@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import { installMemoryStorage } from "./helpers/memoryStorage";
 import { installFakeStorageApi, TEST_API_BASE } from "./helpers/mswStorageServer";
-import { analyzeJobPage } from "../../services/jobFlow";
+import {
+  analyzeJobPage,
+  checkPageAccess,
+  handleActionClick,
+} from "../../services/jobFlow";
 import { jobStorage } from "../../services/jobStorage";
 import { setCached } from "../../services/jobAnalysisCache";
 import { postJobAnalysis } from "../../services/jobAnalysisClient";
@@ -114,9 +118,26 @@ describe("analyze flow — error paths", () => {
 
     expect(broadcasts[0]).toMatchObject({
       type: MessageType.JOB_ANALYSIS_ERROR,
-      error: { code: "no-access", retryable: false },
+      error: { code: "page-access", pageAccess: "needs-click", retryable: false },
     });
     expect(postJobAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("calls the page restricted when it is still unreadable right after a toolbar click", async () => {
+    const broadcasts: ExtensionMessage[] = [];
+    vi.mocked(chrome.scripting.executeScript).mockRejectedValue(
+      new Error("Cannot access a chrome:// URL")
+    );
+    handleActionClick({ id: 8, windowId: 1 } as chrome.tabs.Tab, () => {});
+    await analyzeJobPage(
+      { type: MessageType.ANALYZE_JOB_PAGE, tabId: 8 },
+      (m) => broadcasts.push(m)
+    );
+
+    expect(broadcasts[0]).toMatchObject({
+      type: MessageType.JOB_ANALYSIS_ERROR,
+      error: { code: "page-access", pageAccess: "restricted" },
+    });
   });
 
   it("skips the backend for thin pages with no JSON-LD", async () => {
@@ -460,5 +481,25 @@ describe("revisit flow — lookup order saved → cached → backend", () => {
     expect(Date.parse(stored!.updatedAt)).toBeGreaterThan(
       Date.parse("2026-07-01T00:00:00Z")
     );
+  });
+});
+
+describe("checkPageAccess", () => {
+  it("reports access when the tab's URL is readable (an activeTab grant exists)", async () => {
+    vi.mocked(chrome.tabs.get).mockResolvedValue({
+      id: 3,
+      url: "https://jobs.example.com/1",
+    } as chrome.tabs.Tab);
+    await expect(checkPageAccess(3)).resolves.toEqual({ access: "granted" });
+  });
+
+  it("asks for a click when the URL is hidden (no grant yet)", async () => {
+    vi.mocked(chrome.tabs.get).mockResolvedValue({ id: 3 } as chrome.tabs.Tab);
+    await expect(checkPageAccess(3)).resolves.toEqual({ access: "needs-click" });
+  });
+
+  it("asks for a click when the tab is gone", async () => {
+    vi.mocked(chrome.tabs.get).mockRejectedValue(new Error("No tab with id"));
+    await expect(checkPageAccess(3)).resolves.toEqual({ access: "needs-click" });
   });
 });
