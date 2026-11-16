@@ -119,3 +119,14 @@ describe("evidence disclosure on the web (006 FR-011/FR-013)", () => {
     expect(screen.getByText("Kubernetes")).toBeInTheDocument();
   });
 });
+
+describe("AnalysisView arrangement (#30)", () => {
+  it("names the other arrangements a posting offers", () => {
+    render(
+      <AnalysisView
+        analysis={{ ...analysis(null), arrangement: "hybrid", alsoOffers: ["remote"] }}
+      />
+    );
+    expect(screen.getByText("hybrid, also remote")).toBeInTheDocument();
+  });
+});

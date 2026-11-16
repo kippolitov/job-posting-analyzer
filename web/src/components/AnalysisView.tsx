@@ -163,7 +163,12 @@ export function AnalysisView({
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <div>
           <dt className="text-xs uppercase text-gray-500">Arrangement</dt>
-          <dd className="font-medium capitalize">{analysis.arrangement}</dd>
+          <dd className="font-medium capitalize">
+            {analysis.arrangement}
+            {analysis.alsoOffers && analysis.alsoOffers.length > 0
+              ? `, also ${analysis.alsoOffers.join(" and ")}`
+              : ""}
+          </dd>
           {analysis.arrangementConfidence !== "none" && (
             <dd className="text-xs text-gray-500">{analysis.arrangementConfidence}</dd>
           )}

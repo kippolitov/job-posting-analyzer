@@ -4,6 +4,7 @@ interface ArrangementBadgeProps {
   arrangement: Arrangement;
   daysInOffice: number | null;
   daysRemote: number | null;
+  alsoOffers?: Arrangement[];
 }
 
 const STYLES: Record<Arrangement, string> = {
@@ -26,6 +27,7 @@ export function ArrangementBadge({
   arrangement,
   daysInOffice,
   daysRemote,
+  alsoOffers = [],
 }: ArrangementBadgeProps) {
   let label = LABELS[arrangement];
   if (arrangement === "hybrid" && daysInOffice !== null) {
@@ -33,6 +35,10 @@ export function ArrangementBadge({
     if (daysRemote !== null) {
       label += ` / ${daysRemote} remote`;
     }
+  }
+
+  if (alsoOffers.length > 0) {
+    label += `, also ${alsoOffers.map((a) => LABELS[a].toLowerCase()).join(" and ")}`;
   }
 
   return (

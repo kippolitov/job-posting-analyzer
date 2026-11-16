@@ -154,6 +154,7 @@ export function SavedJobRow({
           arrangement={job.analysis.arrangement}
           daysInOffice={job.analysis.daysInOffice}
           daysRemote={job.analysis.daysRemote}
+          alsoOffers={job.analysis.alsoOffers}
         />
         <label className="sr-only" htmlFor={`status-${job.canonicalUrl}`}>
           Status for {title}
