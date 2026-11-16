@@ -1,4 +1,5 @@
-import { AzureOpenAI } from "openai";
+import { AzureOpenAI, APIConnectionTimeoutError, APIUserAbortError } from "openai";
+import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import type {
   AnalyzeJobRequest,
   EvidenceItem,
@@ -21,6 +22,28 @@ import { applyPreferences } from "./applyPreferences";
 
 /** Model output violated the schema even after the repair retry → HTTP 502. */
 export class JobSchemaError extends Error {}
+
+/**
+ * The model did not answer within its time budget. Raised inside the handler,
+ * so the handler can answer 504 and refund the charge; left to the host's
+ * 50 s function timeout, the worker is killed before either can happen.
+ */
+export class ModelTimeoutError extends Error {}
+
+/** Per attempt: normal analyses take 4-14 s. The SDK retries a timed-out attempt once. */
+export const MODEL_CALL_TIMEOUT_MS = 20_000;
+
+/**
+ * Overall limit for all model calls of one analysis, kept under host.json's
+ * functionTimeout (50 s) so this code, not the host, ends a stalled call.
+ */
+export const MODEL_DEADLINE_MS = 42_000;
+
+function asModelTimeout(err: unknown): unknown {
+  return err instanceof APIConnectionTimeoutError || err instanceof APIUserAbortError
+    ? new ModelTimeoutError("The model did not answer in time.")
+    : err;
+}
 
 /** Token counts for one completion call — never content (contracts/model-config.md). */
 export interface ModelUsage {
@@ -498,7 +521,22 @@ export async function orchestrateJobAnalysis(
     process.env
   );
 
-  const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion });
+  const client = new AzureOpenAI({
+    endpoint,
+    apiKey,
+    deployment,
+    apiVersion,
+    timeout: MODEL_CALL_TIMEOUT_MS,
+    maxRetries: 1,
+  });
+  const deadline = AbortSignal.timeout(MODEL_DEADLINE_MS);
+  const createCompletion = async (params: ChatCompletionCreateParamsNonStreaming) => {
+    try {
+      return await client.chat.completions.create(params, { signal: deadline });
+    } catch (err) {
+      throw asModelTimeout(err);
+    }
+  };
 
   const messages = fitCallMessages(req);
 
@@ -507,7 +545,7 @@ export async function orchestrateJobAnalysis(
     extraInstruction?: string
   ): Promise<ModelJobAnalysisPayload | null> => {
     const startedAt = Date.now();
-    const completion = await client.chat.completions.create({
+    const completion = await createCompletion({
       model: deployment,
       messages: extraInstruction
         ? [...messages, { role: "system" as const, content: extraInstruction }]
@@ -561,7 +599,7 @@ export async function orchestrateJobAnalysis(
     if (lines.length === 0) return { violated: [], unverified: [] };
     try {
       const startedAt = Date.now();
-      const completion = await client.chat.completions.create({
+      const completion = await createCompletion({
         model: deployment,
         messages: [
           { role: "system" as const, content: DEALBREAKER_PROMPT },

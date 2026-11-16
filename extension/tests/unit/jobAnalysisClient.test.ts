@@ -232,7 +232,27 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
     await expectJobError(postJobAnalysis({ extract }), "network-error", true);
   });
 
-  it("maps a 30s timeout abort to a retryable network-error", async () => {
+  // The server ends an analysis at 50 s (functions/host.json), so the client
+  // must wait past that: a slow analysis has to reach the panel.
+  it("still succeeds when the server answers after 45s", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(
+            () => resolve(new Response(JSON.stringify(analysis), { status: 200 })),
+            45_000
+          )
+        )
+    );
+
+    const promise = postJobAnalysis({ extract });
+    const assertion = expect(promise).resolves.toMatchObject({ analysis: { title: "Senior Backend Engineer" } });
+    await vi.advanceTimersByTimeAsync(45_000);
+    await assertion;
+  });
+
+  it("maps a 55s timeout abort to a retryable network-error", async () => {
     vi.useFakeTimers();
     vi.mocked(fetch).mockImplementation(
       (_url, init) =>
@@ -245,8 +265,23 @@ describe("jobAnalysisClient — postJobAnalysis", () => {
 
     const promise = postJobAnalysis({ extract });
     const assertion = expectJobError(promise, "network-error", true);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(55_000);
     await assertion;
+  });
+
+  it("explains a 504 as a model that took too long, and offers a retry", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: { code: "MODEL_TIMEOUT", message: "The analysis took too long. Please try again." } }),
+        { status: 504 }
+      )
+    );
+    const error = await postJobAnalysis({ extract }).catch((e) => e);
+    expect(error).toMatchObject({
+      code: "service-error",
+      message: "The analysis took too long.",
+      retryable: true,
+    });
   });
 
   it("maps 400 to a non-retryable unknown error", async () => {

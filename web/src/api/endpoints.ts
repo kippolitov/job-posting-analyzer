@@ -6,7 +6,7 @@ import {
   type ScoringProfile,
 } from "shared/types/profile";
 import type { JobAnalysisResponse, JobStatus } from "shared/types/job";
-import { ApiError, apiFetch } from "./apiClient";
+import { ANALYZE_TIMEOUT_MS, ApiError, apiFetch } from "./apiClient";
 import type {
   AccountPayload,
   CheckoutResult,
@@ -183,6 +183,10 @@ export async function analyzeDocument(
     form.set("rescore", "true");
     if (params.priorFingerprint) form.set("priorFingerprint", params.priorFingerprint);
   }
-  const res = await apiFetch("/analyze-document", { method: "POST", rawBody: form });
+  const res = await apiFetch("/analyze-document", {
+    method: "POST",
+    rawBody: form,
+    timeoutMs: ANALYZE_TIMEOUT_MS,
+  });
   return (await res.json()) as DocumentAnalysisResult;
 }

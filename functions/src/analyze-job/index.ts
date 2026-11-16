@@ -15,6 +15,7 @@ import {
 import {
   orchestrateJobAnalysis,
   JobSchemaError,
+  ModelTimeoutError,
 } from "../services/jobExtractionOrchestrator";
 import {
   chargeForAnalysis,
@@ -108,6 +109,15 @@ export async function analyzeJobHandler(
     };
   } catch (err) {
     refundAfterFailure(user, charge, context);
+    if (err instanceof ModelTimeoutError) {
+      context.error("analyze-job model timeout:", err.message);
+      return httpErrorResponse(
+        504,
+        "MODEL_TIMEOUT",
+        "The analysis took too long. Please try again.",
+        origin
+      );
+    }
     if (err instanceof JobSchemaError) {
       context.error("analyze-job schema failure:", err.message);
       return httpErrorResponse(
