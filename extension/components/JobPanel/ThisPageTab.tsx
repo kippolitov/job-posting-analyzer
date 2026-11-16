@@ -446,6 +446,7 @@ export function AnalysisFields({ analysis }: { analysis: Partial<JobAnalysis> })
               arrangement={analysis.arrangement}
               daysInOffice={analysis.daysInOffice ?? null}
               daysRemote={analysis.daysRemote ?? null}
+              alsoOffers={analysis.alsoOffers}
             />
             {analysis.arrangement !== "unspecified" &&
               analysis.arrangementConfidence &&

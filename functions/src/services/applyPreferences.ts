@@ -36,8 +36,24 @@ export function applyPreferences(
     ...existing,
     ...violations.filter((v) => !existing.includes(v)),
   ];
-  const weaknesses = [...unverified, ...(payload.fit.weaknesses ?? [])].slice(0, WEAKNESSES_MAX);
+  const covered = unverified.map(topicOf);
+  const modelWeaknesses = (payload.fit.weaknesses ?? []).filter(
+    (w) => !/^unverified/i.test(w) || !covered.some((topic) => topic?.test(w))
+  );
+  const weaknesses = [...unverified, ...modelWeaknesses].slice(0, WEAKNESSES_MAX);
   return { ...payload, fit: { ...payload.fit, dealbreakersViolated, weaknesses } };
+}
+
+/** What each code-written "Unverified" note is about, to spot the model repeating it (#31). */
+const NOTE_TOPICS: [RegExp, RegExp][] = [
+  [/^Unverified: arrangement/, /arrangement|on-?site|remote|hybrid/i],
+  [/^Unverified: office days/, /office days|days in (the )?office/i],
+  [/^Unverified: salary/, /salary|compensation|pay\b/i],
+  [/^Unverified: seniority/, /seniority|level/i],
+];
+
+function topicOf(note: string): RegExp | undefined {
+  return NOTE_TOPICS.find(([prefix]) => prefix.test(note))?.[1];
 }
 
 function checkArrangement(
@@ -51,8 +67,9 @@ function checkArrangement(
     unverified.push("Unverified: arrangement not stated");
     return false;
   }
+  const offered = [payload.arrangement, ...(payload.alsoOffers ?? [])];
   if (
-    !arrangements.includes(payload.arrangement) &&
+    !offered.some((a) => arrangements.includes(a)) &&
     payload.arrangementConfidence !== "none"
   ) {
     violations.push(`Arrangement: ${arrangements.join(" or ")} only`);

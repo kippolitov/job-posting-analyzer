@@ -82,6 +82,7 @@ const JOB_ANALYSIS_SCHEMA = {
     "arrangement",
     "arrangementConfidence",
     "arrangementEvidence",
+    "alsoOffers",
     "daysInOffice",
     "daysRemote",
     "remoteRestrictions",
@@ -101,6 +102,13 @@ const JOB_ANALYSIS_SCHEMA = {
       type: ["string", "null"],
       description:
         "Verbatim quote from the posting; required when arrangement != unspecified",
+    },
+    alsoOffers: {
+      type: "array",
+      items: { enum: ["remote", "hybrid", "onsite"] },
+      maxItems: 2,
+      description:
+        "Other arrangements the posting also offers besides `arrangement`; empty when it offers only one",
     },
     daysInOffice: { type: ["integer", "null"], minimum: 0, maximum: 7 },
     daysRemote: { type: ["integer", "null"], minimum: 0, maximum: 7 },
@@ -164,6 +172,7 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
     "- NEVER invent a work arrangement or day counts. If the posting does not state or clearly imply the arrangement, answer arrangement=\"unspecified\" with arrangementConfidence=\"none\" and arrangementEvidence=null.",
     "- arrangementEvidence MUST be a verbatim substring of the provided content — copy it exactly, never paraphrase.",
     "- arrangementConfidence is \"explicit\" when the arrangement is stated outright, \"inferred\" when derived from indirect wording (inference still requires a verbatim evidence quote).",
+    "- A posting can offer more than one arrangement (a location list that includes \"Remote\", a line such as \"open to remote candidates\", a perks line about a hybrid office). Put the arrangement the posting presents for the role as `arrangement`, put every other arrangement it offers in `alsoOffers`, and use arrangementConfidence \"inferred\" when a location list or an \"open to\" sentence is the evidence. Postings with the same wording must get the same answer. alsoOffers is empty when only one arrangement is offered.",
     "- JSON-LD jobLocationType \"TELECOMMUTE\" means arrangement=\"remote\" with confidence \"explicit\".",
     "- daysInOffice/daysRemote: only for hybrid roles and only when stated or directly inferable, with the evidence quote covering them; otherwise null.",
     "- remoteRestrictions: geographic or timezone limits on remote work (e.g. \"US only\"), else null.",
@@ -187,7 +196,7 @@ function buildSystemPrompt(hasProfile: boolean, assumeJobPosting: boolean): stri
       "- Every item in fit.matching, fit.missing and fit.desired has a label, a postingQuote and a profileQuote. postingQuote is the shortest verbatim span of the posting that states the requirement; profileQuote is the shortest verbatim span of the candidate profile that covers it. Copy both exactly, never paraphrase. profileQuote is null for fit.missing and fit.desired items, and either quote is null when no span supports the item.",
       "- A \"Confirmed skills:\" section in the profile lists skills the candidate states they have. Treat each line there as evidence: a requirement it covers goes in fit.matching, never fit.missing or fit.desired, with that line as its profileQuote, and the score reflects it.",
       "- Base every item on the posting and profile text only; never invent skills or requirements.",
-      "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead."
+      "- a fact the posting does not state is not a violation; list it as \"Unverified: …\" in fit.weaknesses instead. Use \"Unverified:\" only for a fact the posting leaves out that matters to the candidate's stated dealbreakers or preferences (salary, arrangement, office days, seniority, location); never for gaps in the candidate's profile (those belong in fit.missing or fit.weaknesses without the prefix), and never twice for the same fact."
     );
   } else {
     lines.push("No candidate profile was provided: set fit to null.");
@@ -343,11 +352,41 @@ function splitEvidence(
   return { ...rest, ...labels, evidence };
 }
 
+/** Categories, not technologies (#31); the prompt asks for names only, this is the backstop. */
+const GENERIC_TECH_WORDS = new Set([
+  "api",
+  "apis",
+  "cloud",
+  "database",
+  "databases",
+  "devops",
+  "pipeline",
+  "pipelines",
+  "queue",
+  "queues",
+  "storage",
+]);
+
+export function namedTechnologies(stack: string[]): string[] {
+  return stack.filter((entry) => !GENERIC_TECH_WORDS.has(entry.trim().toLowerCase()));
+}
+
+function otherArrangements(payload: ModelJobAnalysisPayload): JobAnalysisPayload["alsoOffers"] {
+  if (payload.arrangement === "unspecified") return [];
+  const seen = new Set<string>([payload.arrangement]);
+  return (payload.alsoOffers ?? []).filter((a) => !seen.has(a) && seen.add(a));
+}
+
 function toWirePayload(
-  payload: ModelJobAnalysisPayload,
+  rawPayload: ModelJobAnalysisPayload,
   req: AnalyzeJobRequest,
   warn: (message: string) => void
 ): JobAnalysisPayload {
+  const payload = {
+    ...rawPayload,
+    techStack: namedTechnologies(rawPayload.techStack),
+    alsoOffers: otherArrangements(rawPayload),
+  };
   if (!payload.fit) return { ...payload, fit: null };
   const postingText = normalizeWhitespace(
     `${JSON.stringify(req.extract.jsonLd)} ${JSON.stringify(req.extract.structuredSources ?? [])} ${req.extract.title} ${req.extract.mainText}`

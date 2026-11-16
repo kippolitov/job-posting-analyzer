@@ -244,11 +244,40 @@ export interface RequirementRow {
  * or surrounding space are one row, shown with the first spelling seen. Rows
  * run by how many postings ask, then alphabetically.
  */
+const REQUIREMENT_ALIASES: Record<string, string> = {
+  "microsoft azure": "azure",
+  "amazon web services": "aws",
+  "google cloud platform": "gcp",
+  "google cloud": "gcp",
+  k8s: "kubernetes",
+  postgres: "postgresql",
+  js: "javascript",
+  ts: "typescript",
+};
+const REQUIREMENT_FILLER = new Set(["experience", "skills", "knowledge", "services", "proficiency"]);
+
+/**
+ * Key for merging equivalent requirement labels (#31): case, whitespace, filler
+ * words ("Kubernetes experience"), a trailing version (".NET 8") and common
+ * aliases ("Microsoft Azure"). A label with a year count keeps its numbers.
+ */
+function requirementKey(label: string): string {
+  const lower = label.trim().toLowerCase().replace(/\s+/g, " ");
+  const alias = REQUIREMENT_ALIASES[lower];
+  if (alias) return alias;
+  const keepNumbers = /\byears?\b|\d\s*\+|\bof\b/.test(lower);
+  const words = lower
+    .split(" ")
+    .filter((w) => !REQUIREMENT_FILLER.has(w) && (keepNumbers || !/^v?\d+(\.\d+)*\+?$/.test(w)));
+  const key = words.join(" ");
+  return REQUIREMENT_ALIASES[key] ?? (key || lower);
+}
+
 export function mergeRequirementRows(
   fits: readonly (Fit | null | undefined)[]
 ): RequirementRow[] {
   const rows = new Map<string, RequirementRow>();
-  const keyOf = (label: string) => label.trim().toLowerCase();
+  const keyOf = requirementKey;
   const mark = (index: number, labels: string[], state: RequirementCellState) => {
     for (const label of labels) {
       const key = keyOf(label);

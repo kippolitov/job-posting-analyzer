@@ -186,6 +186,8 @@ export interface JobAnalysisPayload {
   arrangement: Arrangement;
   arrangementConfidence: ArrangementConfidence;
   arrangementEvidence: string | null;
+  /** Other arrangements the posting also offers (#30), e.g. a hybrid role that is also open to remote. */
+  alsoOffers?: Exclude<Arrangement, "unspecified">[];
   daysInOffice: number | null;
   daysRemote: number | null;
   remoteRestrictions: string | null;

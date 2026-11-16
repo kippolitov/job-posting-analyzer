@@ -25,6 +25,18 @@ describe("ArrangementBadge", () => {
     expect(screen.getByText("Hybrid · 3 days office / 2 remote")).toBeInTheDocument();
   });
 
+  it("names the other arrangements a posting offers (#30)", () => {
+    render(
+      <ArrangementBadge
+        arrangement="hybrid"
+        daysInOffice={null}
+        daysRemote={null}
+        alsoOffers={["remote"]}
+      />
+    );
+    expect(screen.getByText("Hybrid, also remote")).toBeInTheDocument();
+  });
+
   it("renders plain Hybrid when day counts are unknown", () => {
     render(<ArrangementBadge arrangement="hybrid" daysInOffice={null} daysRemote={null} />);
     expect(screen.getByText("Hybrid")).toBeInTheDocument();
